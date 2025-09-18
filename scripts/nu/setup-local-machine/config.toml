@@ -1,0 +1,101 @@
+[aliases]
+lg = 'lazygit'
+#alias k=kubectl
+#alias kx=kubectx
+lsl = 'eza --no-permissions --no-user --no-time --long'
+u = 'update'
+#alias ls='eza --no-permissions --no-user --no-time'
+#alias cat='bat --paging never --style plain'
+#alias fzfp='fzf --preview="bat --style numbers --color=always {}"'
+#alias d=docker
+#alias drmi='docker rmi $(docker images -aq) -f'
+#alias dclean='docker system prune -f && docker volume prune -f'
+#alias g=gcloud
+#alias pu=pulumi
+#alias p=pnpm
+#alias c=cargo
+#alias cdoc=cargo doc
+#alias cdoco=cargo doc --open
+#gs = "git status"
+#ga = "git add"
+#gc = "git commit -m"
+#gp = "git push"
+#projects = "cd ~/projects"
+#configs = "cd ~/configs-files"
+
+#[functions.knd]
+#description = "Switch kubectl namespace"
+#commands = [
+#    "if ! kubectl config current-context >/dev/null 2>&1; then echo 'No kubectl context set. Run: kubectl config use-context <context>'; return 1; fi",
+#    "kubectl config set-context --current --namespace={arg}"
+#]
+#args = ["namespace"]
+
+[functions.update]
+description = "Update system packages"
+commands = [
+    "brew bundle --file ~/dotconfig/brew/Brewfile",
+    "rustup update",
+    "gcloud components update",
+    "npm update -g",
+    "nu ~/dotconfig/scripts/nu/generate-shell-configs.nu"
+]
+
+[functions.local-dev]
+description = "Create a local dev envirement"
+commands = [
+    "nu ~/configs-files/scripts/generate-shell-configs.nu"
+]
+
+[functions.locals]
+description = "Create local kind cluster"
+commands = [
+    "kind create cluster"
+]
+
+[functions.nx-run]
+description = "Run Nx command on all projects"
+command = "bun nx run-many -t {arg} --parallel --max-parallel={arg} --prod"
+args = ["tastk", "cpu"]
+
+[functions.kc]
+description = "Create Kubernetes cluster"
+type = "complex"
+script = "~/configs-files/scripts/local/mod.nu"
+#
+#[functions.kd]
+#description = "Create Kubernetes cluster"
+#type = "complex"
+#script = "~/configs-files/scripts/kc-cluster.nu delete"
+#
+#[functions.build]
+#description = "Build nx monorepo project"
+#type = "complex"
+#script = "~/configs-files/scripts/nx.nu"
+#
+#[functions.local-cluster]
+#description = "Build nx monorepo project"
+#type = "complex"
+#script = "~/configs-files/scripts/nx.nu"
+#
+#[functions.generate-local-shells]
+#description = "Build nx monorepo project"
+#type = "complex"
+#script = "~/configs-files/scripts/generate-shell-configs.nu"
+
+
+[environment]
+EDITOR = "zed"
+BROWSER = "open"
+
+SHIT_TEXT = "omg"
+SHIT = true
+AI = "claude"
+
+PROJECT = "rust"
+TYPE = "be" # fe, devops, data
+GPROJECT = "playground-447016"
+GACOUNT = "krupnik.yuri@gmail.com"
+GREGION = "me-west1"
+CLOUD = "gcp"
+
