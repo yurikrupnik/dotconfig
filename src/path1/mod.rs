@@ -245,7 +245,7 @@ pub enum ComposeAction {
         #[arg(short, long)]
         file: Option<String>,
         #[arg(short, long)]
-        detatch: Option<String>,
+        detatch: Option<bool>,
     },
     Down {
         #[arg(short, long)]
@@ -261,9 +261,12 @@ pub async fn handle_compose(action: ComposeAction) -> anyhow::Result<()> {
     match action {
         ComposeAction::Up { file,detatch } => {
             // let start_time = Instant::now();
+            if !detatch.is_none() {
+                println!("have {detatch:?}");
+            };
             let compose_file = resolve_compose_file(file)?;
 
-            let result = run_docker_compose(&["up -d"], &compose_file).await;
+            let result = run_docker_compose(&["up"], &compose_file).await;
 
             // if let Some(collector) = get_telemetry_collector() {
             //     let duration = start_time.elapsed().as_millis() as u64;
