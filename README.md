@@ -8,7 +8,7 @@ A personal configuration files repository for managing dotfiles and system confi
 - `editors/` - Editor configurations (vim, vscode, etc.)
 - `terminals/` - Terminal emulator configurations
 - `git/` - Git configuration files
-- `scripts/` - Utility scripts for setup and management
+- `scripts/` - Utility nu scripts for setup and management
 
 ## Installation
 

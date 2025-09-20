@@ -1,14 +1,15 @@
 #!/usr/bin/env nu
 
 source local-dev/index.nu
+source setup-local-machine/index.nu
+
+def main [] {
+#     ls
+}
+# source setup-local-machine/
 # use local-dev/index.nu
 
 # Check if a kind cluster already exists
-export def cluster-exists [name: string] {
-  kind get clusters
-  | lines
-  | any { |it| $it == $name }
-}
 
 # def main [] {
 #     ls

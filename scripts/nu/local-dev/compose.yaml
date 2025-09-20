@@ -1,0 +1,37 @@
+services:
+  db:
+    image: "mongo"
+    ports:
+      - "27017:27017"
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
+  influxdb:
+    image: "influxdb:2.7"
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=password123
+      - DOCKER_INFLUXDB_INIT_ORG=dotconfig
+      - DOCKER_INFLUXDB_INIT_BUCKET=telemetry
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-auth-token
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+  grafana:
+    image: "grafana/grafana:latest"
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - influxdb
+
+volumes:
+  influxdb-data:
+  grafana-data:

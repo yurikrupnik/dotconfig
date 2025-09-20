@@ -6,6 +6,8 @@
 .Trashes
 ehthumbs.db
 Thumbs.db
+.env
+/target
 
 # Temporary files
 *.tmp

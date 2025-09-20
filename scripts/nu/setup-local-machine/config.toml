@@ -38,7 +38,8 @@ commands = [
     "rustup update",
     "gcloud components update",
     "npm update -g",
-    "nu ~/dotconfig/scripts/nu/generate-shell-configs.nu"
+    "nu ~/dotconfig/scripts/nu/index.nu shells generate"
+#    "nu ~/dotconfig/scripts/nu/generate-shell-configs.nu"
 ]
 
 [functions.local-dev]
@@ -93,9 +94,10 @@ SHIT = true
 AI = "claude"
 
 PROJECT = "rust"
-TYPE = "be" # fe, devops, data
-GPROJECT = "playground-447016"
-GACOUNT = "krupnik.yuri@gmail.com"
-GREGION = "me-west1"
+TYPE = "be" # fe, devops, data, cli, operator, ci - tekton
+CLOUD_GPROJECT = "playground-447016"
+CLOUD_GACOUNT = "krupnik.yuri@gmail.com"
+CLOUD_GREGION = "me-west1"
 CLOUD = "gcp"
+CONTAINER_REGISTRY = "docker.com/yurikrupnik"
 
