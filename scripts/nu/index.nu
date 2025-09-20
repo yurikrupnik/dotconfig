@@ -1,11 +1,9 @@
 #!/usr/bin/env nu
 
 source local-dev/index.nu
-source setup-local-machine/index.nu
+#source setup-local-machine/index.nu
 
-def main [] {
-#     ls
-}
+def main [] {}
 # source setup-local-machine/
 # use local-dev/index.nu
 
