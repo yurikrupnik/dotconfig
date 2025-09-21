@@ -1,7 +1,7 @@
 mod actions;
 mod model;
 
-pub struct Data<'a> {
-    name: &'a str,
-    das: String,
-}
+// pub struct Data<'a> {
+//     name: &'a str,
+//     das: String,
+// }

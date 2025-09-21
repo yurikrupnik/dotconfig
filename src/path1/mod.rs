@@ -6,7 +6,7 @@ use clap::Subcommand;
 //     api::{Api, ListParams, PostParams},
 //     Client,
 // };
-use serde::{Deserialize};
+// use serde::{Deserialize};
 // use crate::telemetry::{get_telemetry_collector, TelemetryEvent};
 // use chrono::Utc;
 // use std::time::Instant;
@@ -239,10 +239,10 @@ pub enum DashboardAction {
     List,
 }
 
-pub struct Das {
-    action: DashboardAction,
-    // func:,
-}
+// pub struct Das {
+//     action: DashboardAction,
+//     // func:,
+// }
 
 #[derive(Subcommand)]
 pub enum ComposeAction {
