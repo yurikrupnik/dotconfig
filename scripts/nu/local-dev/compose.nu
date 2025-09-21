@@ -19,20 +19,45 @@ def resolve_compose_files [
     if ($found_files | is-empty) {
       error make { msg: "No compose file found in current directory. Use --file to specify a custom path." }
     }
-    $found_files
+    # Return only the first file found (by precedence)
+    [($found_files | get 0)]
   }
 }
 
-# Docker compose up with optional file specification
-# Usage: compose up [--file path/to/compose.yaml] [additional docker compose args...]
-def 'main compose up' [
-  --file (-f): string  # Custom compose file path
-  ...rest              # Additional arguments passed to docker compose
+# Helper function to build docker compose arguments
+def build_docker_compose_args [
+  --file (-f): string,   # Custom compose file path
+  subcmd: string,        # Subcommand (up, down, etc.)
+  ...rest                # Additional arguments
 ] {
   let files = (resolve_compose_files --file $file)
   let file_args = ($files | reduce --fold [] { |file, acc| $acc ++ ["-f", $file] })
-  let args = ($file_args ++ ["up"] ++ $rest)
+  $file_args ++ [$subcmd] ++ $rest
+}
+
+# Helper function to build kompose arguments
+def build_kompose_args [
+  --file (-f): string,   # Custom compose file path
+  ...rest                # Additional arguments
+] {
+  let files = (resolve_compose_files --file $file)
+  let file_args = ($files | reduce --fold [] { |file, acc| $acc ++ ["-f", $file] })
+  $file_args ++ ["convert"] ++ $rest
+}
+
+# Docker compose up with optional file specification and arbitrary docker compose flags
+# Usage: compose up [--file path/to/compose.yaml] [--detach] [additional docker compose args...]
+# Examples:
+#   compose up --detach
+#   compose up --file custom.yml --detach --build --force-recreate
+#   compose up --scale web=3 --remove-orphans
+def 'main compose up' [
+  --file (-f): string   # Custom compose file path
+  ...rest               # Additional arguments passed to docker compose
+] {
+  let args = (build_docker_compose_args --file $file "up" ...$rest)
   print $args
+  print $rest
   docker compose ...$args
 }
 
@@ -42,9 +67,7 @@ def 'main compose down' [
   --file (-f): string  # Custom compose file path
   ...rest              # Additional arguments passed to docker compose
 ] {
-  let files = (resolve_compose_files --file $file)
-  let file_args = ($files | reduce --fold [] { |file, acc| $acc ++ ["-f", $file] })
-  let args = ($file_args ++ ["down"] ++ $rest)
+  let args = (build_docker_compose_args --file $file "down" ...$rest)
   docker compose ...$args
 }
 
@@ -58,8 +81,9 @@ def 'main kompose' [
   ...rest
 ] {
     # ~/projects/playground/manifests/dockers/compose.yaml
+    let args = (build_kompose_args --file $file ...$rest)
+    # Extract the first file for the --file flag
     let files = (resolve_compose_files --file $file)
-    let file_args = ($files | reduce --fold [] { |file, acc| $acc ++ ["-f", $file] })
-    let args = ($file_args ++ $rest)
-    kompose convert --file $file ...$args
+    let first_file = ($files | get 0)
+    kompose convert --file $first_file ...$rest
 }

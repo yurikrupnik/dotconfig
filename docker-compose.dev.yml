@@ -1,0 +1,92 @@
+#version: '3.8'
+
+services:
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
+  nushell:
+    image: ghcr.io/nushell/nushell:latest-alpine
+    command: ["-c", "ls; sleep 29sec"]
+  # Your Rust CLI application
+  dotconfig-cli:
+    build:
+      context: .
+      dockerfile: rust-cli.Dockerfile
+    container_name: dotconfig-cli
+    # Override the default command to run specific CLI commands
+    command: ["compose", "--help"]
+    # Mount docker socket if your CLI needs to interact with Docker
+#    volumes:
+#      - /var/run/docker.sock:/var/run/docker.sock:ro
+#      - ./:/workspace:ro
+#    working_dir: /workspace
+    # Only run when needed
+#    profiles:
+#      - cli
+
+  # Nu scripts runner
+#  nu-scripts:
+#    build:
+#      context: .
+#      dockerfile: Dockerfile.nu-scripts
+#    container_name: nu-scripts
+#    # Example: Run your compose script
+#    command: |
+#      nu -c "
+#        cd /app/scripts/nu/local-dev
+#        source compose.nu
+#        main compose up --help
+#      "
+#    # Mount docker socket and current directory for script access
+#    volumes:
+#      - /var/run/docker.sock:/var/run/docker.sock:ro
+#      - ./:/workspace:ro
+#    working_dir: /workspace
+#    # Uncomment if you want to keep it running
+#    # stdin_open: true
+#    # tty: true
+#
+#  # Example: Long-running Nu script service
+#  nu-monitor:
+#    build:
+#      context: .
+#      dockerfile: Dockerfile.nu-scripts
+#    container_name: nu-monitor
+#    command: |
+#      nu -c "
+#        loop {
+#          echo (date now | format date '%Y-%m-%d %H:%M:%S') 'Monitoring services...'
+#          sleep 30sec
+#        }
+#      "
+#    restart: unless-stopped
+#    profiles:
+#      - monitoring
+#
+#  # Example: Setup script runner
+#  setup-scripts:
+#    build:
+#      context: .
+#      dockerfile: Dockerfile.nu-scripts
+#    container_name: setup-scripts
+#    command: |
+#      nu -c "
+#        cd /app/scripts/nu/setup-local-machine
+#        echo 'Running setup scripts...'
+#        ls *.nu | each { |file| echo $'Available script: ($file.name)' }
+#      "
+#    volumes:
+#      - ./:/workspace:ro
+#    profiles:
+#      - setup
+
+# Optional: Networks for service communication
+#networks:
+#  dotconfig-net:
+#    driver: bridge
+#
+## Optional: Volumes for persistent data
+#volumes:
+#  script-cache:
+#    driver: local

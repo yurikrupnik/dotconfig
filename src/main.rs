@@ -48,6 +48,13 @@ struct Cli {
     debug: u8,
     #[arg(short='s', long)]
     dry_run: bool,
+    /// Override Postgres URL (falls back to env POSTGRES_URL)
+    #[arg(long, env = "POSTGRES_URL")]
+    pub postgres_url: Option<String>,
+
+    /// Override Redis URL (falls back to env REDIS_URL)
+    #[arg(long, env = "REDIS_URL")]
+    pub redis_url: Option<String>,
 }
 
 // use crates::cli::init_cli_app;

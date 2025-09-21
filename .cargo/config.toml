@@ -1,5 +1,12 @@
 [build]
 target-dir = 'dist/target'
+# Optional: use sccache if installed (uncomment to enable)
+# rustc-wrapper = "sccache"
+
+# Colors and UX
+[term]
+color = "auto"
+
 [env]
 RUST_LOG = "info"
 RUST_ENV = "development"
@@ -22,3 +29,25 @@ INFLUXDB_ORG_ID = "docs"
 # This will be relative to Cargo.toml
 # In deployed images, probably use absolute path.
 SERVICE_WEB_FOLDER = "web-folder/"
+
+# Common cargo aliases for consistency
+[alias]
+check-all = "check --workspace --all-targets"
+clippy-all = "clippy --workspace --all-targets -- -D warnings"
+fmt-all = "fmt --all"
+b = "build --workspace"
+t = "test --workspace --all-targets"
+r = "run"
+xbuild-gnu = "cross build --release --target aarch64-unknown-linux-gnu"
+xbuild-musl = "cross build --release --target aarch64-unknown-linux-musl"
+lol = "build"
+
+# WASI runner; adjust to your preferred runtime
+[target.wasm32-wasip1]
+runner = "wasmtime run --dir ."
+
+# Example local cross-linkers (disabled by default; cross handles these in its containers)
+# [target.aarch64-unknown-linux-gnu]
+# linker = "aarch64-linux-gnu-gcc"
+# [target.aarch64-unknown-linux-musl]
+# linker = "aarch64-linux-musl-gcc"

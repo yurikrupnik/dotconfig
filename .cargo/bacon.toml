@@ -54,16 +54,16 @@ command = [
 need_stdout = true
 analyzer = "nextest"
 
-[jobs.doc]
-command = ["cargo", "doc", "--no-deps"]
-need_stdout = false
-
-# If the doc compiles, then it opens in your browser and bacon switches
-# to the previous job
-[jobs.doc-open]
-command = ["cargo", "doc", "--no-deps", "--open"]
-need_stdout = false
-on_success = "back" # so that we don't open the browser at each change
+#[jobs.doc]
+#command = ["cargo", "doc", "--no-deps"]
+#need_stdout = false
+#
+## If the doc compiles, then it opens in your browser and bacon switches
+## to the previous job
+#[jobs.doc-open]
+#command = ["cargo", "doc", "--no-deps", "--open"]
+#need_stdout = false
+#on_success = "back" # so that we don't open the browser at each change
 
 # You can run your application and have the result displayed in bacon,
 # if it makes sense for this crate.
@@ -84,16 +84,20 @@ background = true
 # on every change (an alternative would be to use the 'F5' key manually in bacon).
 # If you often use this job, it makes sense to override the 'r' key by adding
 # a binding `r = job:run-long` at the end of this file .
-[jobs.run-long]
-command = [
-  "cargo", "run",
-  # put launch parameters for your program behind a `--` separator
-]
-need_stdout = true
-allow_warnings = true
-background = false
-on_change_strategy = "kill_then_restart"
+#[jobs.run-long]
+#command = [
+#  "cargo", "run",
+#  # put launch parameters for your program behind a `--` separator
+#]
+#need_stdout = true
+#allow_warnings = true
+#background = false
+#on_change_strategy = "kill_then_restart"
 
+#[jobs.modules]
+#command = ["cargo", "modules", "generate", "tree"]
+#need_stdout = true
+#allow_warnings = true
 # This parameterized job runs the example of your choice, as soon
 # as the code compiles.
 # Call it as
