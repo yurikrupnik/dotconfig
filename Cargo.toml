@@ -1,7 +1,10 @@
 [package]
-name = "dotconfig"
+name = "yuri-dotconfig"
 version = "0.1.0"
 edition = "2021"
+description = "Cli app"
+license = "MIT"
+repository = "https://github.com/yurikrupnik/dotconfig"
 
 [[bin]]
 name = "dotconfig"

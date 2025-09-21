@@ -31,6 +31,7 @@ test-rust:
 test-nu:
     nu scripts/nu/tests/resolve_compose_files_test.nu
 test: test-rust test-nu
+    cargo modules structure
     echo "All tests passed!"
 
 # Toolchain management
