@@ -8,6 +8,7 @@ brew "KusionStack/tap/kusion"
 
 tap "dapr/tap"
 brew "dapr/tap/dapr-cli"
+brew "carapace"
 brew "pgcli"
 brew "yazi"
 brew "ffmpeg"

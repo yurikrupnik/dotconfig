@@ -74,6 +74,7 @@ def 'main compose down' [
 def 'main docker prune' [] {
     docker system prune -af
     docker image prune -af
+    docker volume prune -af
 }
 
 def 'main kompose' [

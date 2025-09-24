@@ -16,9 +16,18 @@ COPY src/ ./src/
 # Build the release binary
 RUN cargo build --release --bin dotconfig
 
+#FROM busybox:1.36.1-static AS bb
+
+#FROM scratch
+#WORKDIR /
 # Runtime stage
-#FROM alpine:latest
-FROM scratch
+FROM alpine:latest
+#COPY --from=bb /bin/busybox /bin/busybox
+#RUN ["/bin/busybox","--install","-s","/bin"]
+#FROM alpine:3.20
+#FROM scratch
+#COPY --from=bb /bin/busybox /bin/busybox
+#RUN #apk add --no-cache coreutils procps
 #scratch
 
 # Install runtime dependencies

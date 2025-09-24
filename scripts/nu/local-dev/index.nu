@@ -1,5 +1,6 @@
 #!/usr/bin/env nu
 #
+# use shared/shared.nu
 source compose.nu
 source local-app.nu
 

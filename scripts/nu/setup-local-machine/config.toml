@@ -38,7 +38,7 @@ commands = [
     "rustup update",
     "gcloud components update",
     "npm update -g",
-    "nu ~/dotconfig/scripts/nu/index.nu shells generate"
+    "nu ~/dotconfig/scripts/nu/index.nu -h"
 #    "nu ~/dotconfig/scripts/nu/generate-shell-configs.nu"
 ]
 
@@ -100,4 +100,3 @@ CLOUD_GACOUNT = "krupnik.yuri@gmail.com"
 CLOUD_GREGION = "me-west1"
 CLOUD = "gcp"
 CONTAINER_REGISTRY = "docker.com/yurikrupnik"
-

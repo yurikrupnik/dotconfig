@@ -27,7 +27,8 @@ destroy-env: down rcli
 test-rust:
     cargo test --all
     cargo release
-    cargo audit
+    cargo audit --json
+    cargo check
 test-nu:
     nu scripts/nu/tests/resolve_compose_files_test.nu
 test: test-rust test-nu
@@ -52,7 +53,15 @@ setup-rust:
     ./.cargo/bin/rustup-bootstrap.sh
     just toolchain-install
     just toolchain-info
-
+cargo run:
+    cargo run --bin dotconfig shit do-it -n aris
+    cargo run --bin operator
 # CI-ready setup
 ci-rust-setup:
     just setup-rust
+# Create minimal cluster (no additional components)
+create-cluster-minimal name="minimal" providers="aws,gcp":
+    nu ~/dotconfig/scripts/nu/index.nu -h
+    nu ~/dotconfig/scripts/nu/index.nu kcl init --path scripts/kcl/stam
+    @echo "🔧 Creating minimal cluster: {{name}}"
+    @echo "🔧 Creating minimal cluster: {{providers}}"

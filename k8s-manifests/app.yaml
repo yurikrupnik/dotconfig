@@ -1,0 +1,67 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dotcoonfig-job
+spec:
+  schedule: "* * * * *" #	Run every minute
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: dotcoonfig
+              image: yurikrupnik/dotconfig
+              imagePullPolicy: IfNotPresent
+              args:
+                - -h
+#              command:
+#                - /bin/sh
+#                - -c
+#                - d!
+          restartPolicy: OnFailure
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dotconfig
+  labels:
+    app: dotconfig
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dotconfig
+  template:
+    metadata:
+      name: dotconfig
+      labels:
+        app: dotconfig
+    spec:
+      containers:
+        - name: dotconfig
+          image: yurikrupnik/dotconfig
+          imagePullPolicy: IfNotPresent
+#          command:
+#            - /dotconfig
+          args:
+            - shit
+            - do-it
+            - -n aris
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dotconfig
+spec:
+  selector:
+    app: dotconfig
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: NodePort
