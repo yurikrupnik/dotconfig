@@ -1,6 +1,6 @@
 import .functions as f
 
-resourceName = option("kind", required=True)
+resourceName = option("kind")
 
 assert resourceName[0].isupper(), "Error: kind parameter must start with a capital letter, recieved: '${resourceName}'"
 
@@ -27,7 +27,7 @@ schema Providers:
 
 # ls:Provider = ad[1]
 schema Shit:
-    kind: str = option("kind", required=True).capitalize()
+    kind: str = option("kind", default="Resource").capitalize()
     plural: str = f.pluralize(kind)
     provider: Provider = 'gcp'
     prs: Providers

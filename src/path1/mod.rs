@@ -273,9 +273,7 @@ pub async fn run_docker_compose_new(
     extra_args: &[String],
 ) -> anyhow::Result<()> {
     let mut cmd = Command::new("docker");
-    cmd.arg("compose")
-        .arg("-f").arg(compose_file)
-        .arg("up");
+    cmd.arg("compose").arg("-f").arg(compose_file).arg("up");
 
     if detach {
         cmd.arg("-d");
@@ -290,7 +288,12 @@ pub async fn run_docker_compose_new(
 }
 pub async fn handle_compose(action: ComposeAction) -> anyhow::Result<()> {
     match action {
-        ComposeAction::Up { file, detach, args, mam } => {
+        ComposeAction::Up {
+            file,
+            detach,
+            args,
+            mam,
+        } => {
             // let start_time = Instant::now();
             if detach {
                 println!("Running in detached mode {mam:?}");
@@ -593,7 +596,6 @@ mod tests {
             detach: true,
             mam: Some(true),
             args: vec!["--build".to_string()],
-
         })
         .await;
 

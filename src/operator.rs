@@ -1,4 +1,6 @@
-use k8s_openapi::{api::apps::v1::Deployment,api::core::v1::Node, apimachinery::pkg::api::resource::Quantity};
+use k8s_openapi::{
+    api::apps::v1::Deployment, api::core::v1::Node, apimachinery::pkg::api::resource::Quantity,
+};
 use kube::{api::ListParams, Api, ResourceExt};
 use serde::Deserialize;
 

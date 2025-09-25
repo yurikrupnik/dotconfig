@@ -6,7 +6,7 @@
 // use crate::path1::{handle_compose, handle_shit};
 // pub async fn init_cli_app() {
 //     let cli = Cli::parse();
-// 
+//
 //     match cli.command {
 //         Commands::Compose { action } => handle_compose(action)?,
 //         Commands::Shit { action } => handle_shit(action)?,

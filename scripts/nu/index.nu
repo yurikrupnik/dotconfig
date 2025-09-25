@@ -8,7 +8,7 @@ use local-dev/cluster.nu *
 # source setup-local-machine/index.nu
 # source shared/shared.nu
 use shared/shared.nu *
-# use local-dev/cluster.nu *
+use local-dev/cluster.nu *
 
 def main [] {}
 
@@ -66,7 +66,7 @@ export def "main list-brew-packages" [] {
 
 export def "main dev down" [
     --cloud: string = "local"
-    --cluster-name: string = "dev"
+    --cluster-name(-n): string = "dev"
 ] {
     _validate-provider $cloud
     match $cloud {
@@ -110,7 +110,7 @@ export def "main dev up" [
     }
     #print $in
     #print $"enable-ha: ($enable_ha)"
-    if $verbose { log info $"Using temp file)" } else { log info $"Not using temp file" }
+    # if $verbose { log info $"Using temp file)" } else { log info $"Not using temp file" }
     # _log INFO $"🚀 Creating Kubernetes development cluster (cloud=($cloud), name=($cluster-name), gitops=($gitops))"
 
      # if $dry_run {
@@ -138,15 +138,15 @@ export def "main dev up" [
           }
         },
         local: {||
-          # create $cluster_name
+          create $cluster_name
 
-          let tmp = (_tmpfile $"kind-config-($env.USER)")
-          if $verbose { log info $"Using temp file: ($tmp)" }
+          # let tmp = (_tmpfile $"kind-config-($env.USER)")
+          # if $verbose { log info $"Using temp file: ($tmp)" }
 
-          let kcl_response = kcl run ~/dotconfig/scripts/kcl/manager/be/kind-cluster.k -D workers=1 -D ingress=true -D name=$name | from yaml
-          let config = $kcl_response | get items.0
+          # let kcl_response = kcl run ~/dotconfig/scripts/kcl/manager/be/kind_cluster.k -D workers=1 -D ingress=true -D name=$name | from yaml
+          # let config = $kcl_response | get items.0
 
-          print $config
+          # print $config
         # #   # Fetch config with error handling
 #           let url = "https://raw.githubusercontent.com/yurikrupnik/gitops/main/cluster/cluster.yaml"
 #           let cfg = (do { http get $url } catch {|e|
@@ -198,38 +198,35 @@ export def "main dev up" [
 #         #   print $dry_run
 #         if $verbose { log error $"$config Using config file: ($config)" }
 #         if $verbose { log error $"$cfg Using cfg file: ($cfg)" }
-        log info $"Using config file: ($config)"
+        # log info $"Using config file: ($config)"
           if not $dry_run {
             # $cfg | save -f $tmp
             # $config | to yaml | save -f $tmp --force
-            $config | to yaml | save -f $tmp --force
-            $config | to yaml | save -f kind.yaml
-            mut cmd = ["kind" "create" "cluster" "--name" $cluster_name "--config" $tmp]
+            # $config | to yaml | save -f $tmp --force
+            # $config | to yaml | save -f kind.yaml
+            # mut cmd = ["kind" "create" "cluster" "--name" $cluster_name "--config" $tmp]
             # kind.yaml
             # if $k8s_version != "" {
             #   $cmd = ($cmd | append ["--image" $"kindest/node:($in.k8s_version)"])
             # }
-            if $verbose { log info $"Running: ([$cmd] | str join ' ')" }
+            # if $verbose { log info $"Running: ([$cmd] | str join ' ')" }
             # $cmd.0 | complete
             # create $cluster_name #--config $tmp
             # run kind create cluster --name $cluster_name --config $tmp
-            if (cluster-exists $cluster_name) {
-                log warning $"Kind cluster '($cluster_name)' already exists — skipping creation."
-            } else {
-                ^kind create cluster --name $cluster_name --config kind.yaml
-                if $env.LAST_EXIT_CODE != 0 {
-                  error make { msg: "Command failed" }
-                }
-                ^kubectl wait --for=condition=Ready nodes --all --timeout=180s
-                ^kubectl -n kube-system rollout status deploy/coredns --timeout=180s
-                ^kubectl cluster-info --context $"kind-($cluster_name)"
-
-                # DB
-                ^kubectl create namespace dbs
-                ^kompose convert --file ~/projects/playground/manifests/dockers/compose.yaml --namespace dbs --stdout | kubectl apply -f -;
-                # let s = kompose convert --file ~/projects/playground/manifests/dockers/compose.yaml --namespace dbs --stdout;
-                # print $"s: &(s)"
-            }
+            # if (cluster-exists $cluster_name) {
+            #     log warning $"Kind cluster '($cluster_name)' already exists — skipping creation."
+            # } else {
+            #     ^kind create cluster --name $cluster_name
+            #     # create $cluster_name
+            #     if $env.LAST_EXIT_CODE != 0 {
+            #       error make { msg: "Command failed" }
+            #     }
+            #     ^kubectl wait --for=condition=Ready nodes --all --timeout=180s
+            #     ^kubectl -n kube-system rollout status deploy/coredns --timeout=180s
+            #     ^kubectl cluster-info --context $"kind-($cluster_name)"
+            #     # let s = kompose convert --file ~/projects/playground/manifests/dockers/compose.yaml --namespace dbs --stdout;
+            #     # print $"s: &(s)"
+            # }
             # if $env.LAST_EXIT_CODE != 0 {
             #   error make { msg: "Command failed" }
             # }
@@ -238,23 +235,29 @@ export def "main dev up" [
             # run-external $cmd.0 ...($cmd | skip 1)
 
             # ^($cmd.0) $cmd.1..$cmd | complete
-            rm -f $tmp
+            # rm -f $tmp
+            #
+            # # DB
+            # ^kubectl create namespace dbs
+            # ^kompose convert --file ~/projects/playground/manifests/dockers/compose.yaml --namespace dbs --stdout | kubectl apply -f -;
           } else {
             log info $"Would create Kind cluster '($cluster_name)' with downloaded config"
           }
           do --ignore-errors {
+              ^kubectl create namespace dbs
+              ^kompose convert --file ~/projects/playground/manifests/dockers/compose.yaml --namespace dbs --stdout | kubectl apply -f -;
               # kubectl create namespace dbs;
               # ^kompose convert --file ~/projects/playground/manifests/dockers/compose.yaml --namespace dbs --stdout | kubectl apply -f -;
           }
 
-          ^helm repo update
+          # ^helm repo update
           let cmds = [
             # ["kompose" "convert" "--file" "~/a.yaml" "-n" "dbs" "--stdout" "|" "kubectl" "apply" "-f" "-"] # (see note)
             # ["kubectl" "apply" "-f" "b.yaml"]
             # ["kubectl" "get" "pods" "-A"]
             # ["helm", "upgrade", "--install", "kyverno", "kyverno/kyverno", "--namespace kyverno", "--create-namespace", "--wait"]
-            ["^helm repo add kyverno https://kyverno.github.io/kyverno"]
-            ["^helm repo add external-secrets-operator https://charts.external-secrets.io/"]
+            # ["^helm repo add kyverno https://kyverno.github.io/kyverno"]
+            # ["^helm repo add external-secrets-operator https://charts.external-secrets.io/"]
             # ["helm", "upgrade", "--install", "my-external-secrets", "external-secrets-operator/external-secrets"]
           ]
 
@@ -268,9 +271,9 @@ export def "main dev up" [
             # ["kompose" "convert" "--file" "~/a.yaml" "-n" "dbs" "--stdout" "|" "kubectl" "apply" "-f" "-"] # (see note)
             # ["kubectl" "apply" "-f" "b.yaml"]
             # ["kubectl" "get" "pods" "-A"]
-            ["helm", "upgrade", "--install", "kyverno", "kyverno/kyverno", "--namespace kyverno", "--create-namespace"]
-            # ["ls"]
-            ["helm", "upgrade", "--install", "my-external-secrets", "external-secrets-operator/external-secrets"]
+            # ["helm", "upgrade", "--install", "kyverno", "kyverno/kyverno", "--namespace kyverno", "--create-namespace"]
+            # # ["ls"]
+            # ["helm", "upgrade", "--install", "my-external-secrets", "external-secrets-operator/external-secrets"]
           ]
 
           let jobs = ($cmds
@@ -279,7 +282,9 @@ export def "main dev up" [
                 print $"c: ($c)"
                 { cmd: ($c | str join ' '), exit: $res.exit_code, out: $res.stdout, err: $res.stderr }
             })
-
+          # flux bootstrap github --token-auth --owner=yurikrupnik --repository=gitops --branch=main --path=clusters/first-cluster --personal --components-extra image-reflector-controller,image-automation-controller
+          # gh auth token | flux bootstrap github --token-auth --owner=yurikrupnik --repository=gitops-v2 --branch=main --path=clusters/second-cluster --personal --components-extra image-reflector-controller,image-automation-controller
+          gh auth token | flux bootstrap github --token-auth --owner=yurikrupnik --repository=gitops-v2 --branch=main --path=clusters/first-cluster --personal --components-extra image-reflector-controller,image-automation-controller
           #print $"jobs: ($jobs)"
           #print $"omg is all i want"
           #let aris1 = nu '-c ls  | get size'

@@ -1,7 +1,7 @@
-mod path1;
 mod crates;
+mod path1;
 
-use crates::{tracing::init_tracing};
+use crates::tracing::init_tracing;
 mod commands;
 // use commands::parse;
 // pub mod crates;
@@ -10,7 +10,9 @@ mod commands;
 use clap::{Parser, Subcommand};
 // use std::path::Path;
 // use std::process::Command;
-use path1::{ShitAction, ComposeAction, DashboardAction, handle_compose, handle_shit, handle_dashboard};
+use path1::{
+    handle_compose, handle_dashboard, handle_shit, ComposeAction, DashboardAction, ShitAction,
+};
 mod errors;
 // pub type Result<T> = core::result::Result<T, Errors>;
 
@@ -46,7 +48,7 @@ struct Cli {
     command: Commands,
     #[arg(short, long, action = clap::ArgAction::Count)]
     debug: u8,
-    #[arg(short='s', long)]
+    #[arg(short = 's', long)]
     dry_run: bool,
     /// Override Postgres URL (falls back to env POSTGRES_URL)
     #[arg(long, env = "POSTGRES_URL")]
@@ -68,9 +70,6 @@ struct Cli {
 //         // Commands::ClusterAction { action } => handle_cluster(action)?,
 //     }
 // }
-
-
-
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -115,9 +114,6 @@ mod test {
 //         // } // ClusterAction::Up { name, file }
 //     }
 // }
-
-
-
 
 // fn run_docker_compose(args: &[&str], compose_file: &str) -> anyhow::Result<()> {
 //     let mut cmd = Command::new("docker");
