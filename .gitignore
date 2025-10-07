@@ -9,6 +9,7 @@ Thumbs.db
 .env
 /target
 /dist
+/tmp
 # Temporary files
 *.tmp
 *.temp

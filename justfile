@@ -3,15 +3,20 @@
 default:
     just --list
 #    cargo run --bin dotconfig -- -h --debug
-# Up shits
-up:
-    nu ~/dotconfig/scripts/nu/index.nu compose up --file ~/projects/playground/manifests/dockers/compose.yaml
-down:
-    nu ~/dotconfig/scripts/nu/index.nu compose down --file ~/projects/playground/manifests/dockers/compose.yaml
-    docker compose -f docker-compose.dev.yml -f ~/projects/playground/manifests/dockers/compose.yaml up
+
+up *args='':
+  nu ~/dotconfig/scripts/nu/index.nu dev up {{args}}
+down *args='':
+    nu ~/dotconfig/scripts/nu/index.nu dev down {{args}}
 rcli:
     cargo run --bin dotconfig -- -h
     cargo run --bin dotconfig compose -h
+bun-ag:
+    bun add -g @anthropic-ai/claude-code @openai/codex
+    bun pm ls -g
+    bun update -g
+    bun run ~/.bun/bin/claude
+    bun run ~/.bun/bin/claude
 #com:up
 #    cargo run --bin dotconfig compose up -h
 #com:down

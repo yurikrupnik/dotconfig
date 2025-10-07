@@ -1,0 +1,11 @@
+providers:
+  google_secrets_manager:
+    kind: google_secretmanager
+    maps:
+      - id: secrets
+        path: projects/playground-447016
+        keys:
+          github-secret: GITHUB_TOKEN
+          app-secrets: APP_SECRETS
+          manager-secrets: MANAGER_SECRETS
+

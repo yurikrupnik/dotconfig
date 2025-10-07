@@ -1,4 +1,20 @@
 [dependencies]
+  [dependencies.crossplane]
+    name = "crossplane"
+    full_name = "crossplane_v2.0.2"
+    version = "v2.0.2"
+    sum = "j5Cx60fnvlWWp0wQ89JJ618Wyy03YGb7eiftPcvTtEo="
+    reg = "ghcr.io"
+    repo = "kcl-lang/crossplane"
+    oci_tag = "v2.0.2"
+  [dependencies.external-secrets]
+    name = "external-secrets"
+    full_name = "external-secrets_0.18.2"
+    version = "0.18.2"
+    sum = "GKneYUgJl+jFFWRI2NlOwPYVtDTYW/DRb6JHh1tNPqU="
+    reg = "ghcr.io"
+    repo = "kcl-lang/external-secrets"
+    oci_tag = "0.18.2"
   [dependencies.k8s]
     name = "k8s"
     full_name = "k8s_1.32.4"
@@ -7,3 +23,11 @@
     reg = "ghcr.io"
     repo = "kcl-lang/k8s"
     oci_tag = "1.32.4"
+  [dependencies.stam]
+    name = "stam"
+    full_name = "stam_0.0.7"
+    version = "0.0.7"
+    sum = "ABvFt7yUTukYisycbXvc78zanowMJbu0mvt3/hM5eDc="
+    reg = "docker.io"
+    repo = "yurikrupnik/kcl-stam"
+    oci_tag = "0.0.7"

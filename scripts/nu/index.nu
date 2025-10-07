@@ -8,7 +8,7 @@ use local-dev/cluster.nu *
 # source setup-local-machine/index.nu
 # source shared/shared.nu
 use shared/shared.nu *
-use local-dev/cluster.nu *
+# use local-dev/cluster.nu *
 
 def main [] {}
 
@@ -42,49 +42,26 @@ def "main logger" [
     # log warn "omg log type"
 }
 
-# List installed packages
-export def "main list-brew-packages" [] {
-    if not (command-exists "brew") {
-        return []
-    }
-
-    let formulas = (brew list --formula | lines | each { |name| {type: "formula", name: $name} })
-    let casks = (brew list --cask | lines | each { |name| {type: "cask", name: $name} })
-
-    $formulas | append $casks
-
-    # log info $"path: $(brewfile_path)"
-    # if not ($brewfile_path | path exists) {
-    #     log error $"❌ Brewfile not found at: ($brewfile_path)"
-    #     exit 1
-    # }
-    # let packages = (open $brewfile_path | lines | where ($it | str starts-with "brew ") | each { |line|
-    #     $line | str replace 'brew "' '' | str replace '"' ''
-    # })
-    # let os = (sys host | get name)
-}
-
 export def "main dev down" [
     --cloud: string = "local"
-    --cluster-name(-n): string = "dev"
+    --name(-n): string = "kind"
 ] {
     _validate-provider $cloud
     match $cloud {
       "aws"   => { _require-bin "nu"; _require-bin "aws" }
       # "gcp"   => { _require-bin "nu"; _require-bin "gcloud" }
       # "azure" => { _require-bin "nu"; _require-bin "az" }
-      "local" => { _require-bin "kind"; }
+      "local" => { _require-bin "kind"; delete_cluster $name; }
       _ => {}
     }
-    delete_cluster $cluster_name
 }
 
 export def "main dev up" [
     # --cluster: list<string> # do shit
     --cloud: string = "local"          # One of: aws, gcp, local, azure
-    --gitops: string = "flux"          # flux | argo | none (no install here; just pass-through for now)
-    --gcp-project: string = "playground-447016"
-    --cluster-name(-n): string = "kind"
+    # --gitops: string = "flux"          # flux | argo | none (no install here; just pass-through for now)
+    # --gcp-project: string = "playground-447016"
+    --name(-n): string = "kind"
     # --ingress(-i): bool = fa
     --k8s-version: string = ""         # Optional, e.g. "v1.30.0"
     --enable-ingress  # Whether to enable ingress for the kind provider
@@ -97,8 +74,8 @@ export def "main dev up" [
     # with-env {FOO: "bar"} { echo $env.FOO }
     # with-env {RUST_LOG: "bar"} { echo $env.RUST_LOG }
     # Common dependency checks
-    let local = pwd
-    print $"local: ($local)"
+    let local_dir = pwd | path basename
+    print $"local: ($local_dir)"
     match $cloud {
       "aws"   => { _require-bin "nu"; _require-bin "aws" }
       # "gcp"   => { _require-bin "nu"; _require-bin "gcloud" }
@@ -138,118 +115,95 @@ export def "main dev up" [
           }
         },
         local: {||
-          create $cluster_name
+          {
+              name: $name
+              verbose: $verbose
+          } | create
+          istioctl install --set profile=ambient --skip-confirmation
 
-          # let tmp = (_tmpfile $"kind-config-($env.USER)")
-          # if $verbose { log info $"Using temp file: ($tmp)" }
+          # let cmds = [
+          #     ["istioctl install --set profile=ambient --skip-confirmation"]
+          #   # ["kompose" "convert" "--file" "~/a.yaml" "-n" "dbs" "--stdout" "|" "kubectl" "apply" "-f" "-"] # (see note)
+          #   # ["kubectl" "apply" "-f" "b.yaml"]
+          #   # ["kubectl" "get" "pods" "-A"]
+          #   # ["helm", "upgrade", "--install", "kyverno", "kyverno/kyverno", "--namespace kyverno", "--create-namespace", "--wait"]
+          #   # ["^helm repo add kyverno https://kyverno.github.io/kyverno"]
+          #   # ["^helm repo add external-secrets-operator https://charts.external-secrets.io/"]
+          #   # ["helm", "upgrade", "--install", "my-external-secrets", "external-secrets-operator/external-secrets"]
+          # ]
 
-          # let kcl_response = kcl run ~/dotconfig/scripts/kcl/manager/be/kind_cluster.k -D workers=1 -D ingress=true -D name=$name | from yaml
-          # let config = $kcl_response | get items.0
+          # let jobs = ($cmds
+          #   | par-each {|c|
+          #       let res = (^($c.0) ...($c | skip 1)| complete)
+          #       print $"c: ($c)"
+          #       { cmd: ($c | str join ' '), exit: $res.exit_code, out: $res.stdout, err: $res.stderr }
+          #   })
+          # {name: "aris" verbose: $verbose}
 
-          # print $config
-        # #   # Fetch config with error handling
 #           let url = "https://raw.githubusercontent.com/yurikrupnik/gitops/main/cluster/cluster.yaml"
 #           let cfg = (do { http get $url } catch {|e|
 #             error make { msg: $"Failed to download cluster config from ($url): ($e.msg)" }
 #           })
-#           mut config = {
-#                 kind: "Cluster"
-#                 apiVersion: "kind.x-k8s.io/v1alpha4"
-#                 name: $cluster_name
-#                 nodes: [{
-#                     role: "control-plane"
-#                 }]
-#           }
-
-#           if $enable_ingress {
-#             $config = $config | merge {
-#                 nodes: [{
-#                     role: "control-plane"
-#                     kubeadmConfigPatches: [
-# 'kind: InitConfiguration
-# nodeRegistration:
-#     kubeletExtraArgs:
-#         node-labels: "ingress-ready=true"'
-#                     ]
-#                     extraPortMappings: [{
-#                         containerPort: 80
-#                         hostPort: 80
-#                         protocol: "TCP"
-#                     }, {
-#                         containerPort: 443
-#                         hostPort: 443
-#                         protocol: "TCP"
-#                     },
-#                     ]
-#                 }]
-#             }
-#         }
-#         if $enable_ha {
-#             $config = $config | update nodes ($config.nodes | append [
-#               { role: "worker" }
-#               { role: "worker" }
-#             ])
-#             log error $"$config: ($config)"
-#         }
-#         #let s = (kcl run scripts/kcl/manager/main.k -D workers=1 -D ingress=true -D name=ar)
-#         #let kcl_result = (kcl run scripts/kcl/manager/main.k -D workers=1 -D ingress=true -D name=ar).con
-#         #print $"kcl result: ($s)"
-#         #   print $cfg
-#         #   print $dry_run
-#         if $verbose { log error $"$config Using config file: ($config)" }
-#         if $verbose { log error $"$cfg Using cfg file: ($cfg)" }
-        # log info $"Using config file: ($config)"
-          if not $dry_run {
-            # $cfg | save -f $tmp
-            # $config | to yaml | save -f $tmp --force
-            # $config | to yaml | save -f $tmp --force
-            # $config | to yaml | save -f kind.yaml
-            # mut cmd = ["kind" "create" "cluster" "--name" $cluster_name "--config" $tmp]
-            # kind.yaml
-            # if $k8s_version != "" {
-            #   $cmd = ($cmd | append ["--image" $"kindest/node:($in.k8s_version)"])
-            # }
-            # if $verbose { log info $"Running: ([$cmd] | str join ' ')" }
-            # $cmd.0 | complete
-            # create $cluster_name #--config $tmp
-            # run kind create cluster --name $cluster_name --config $tmp
-            # if (cluster-exists $cluster_name) {
-            #     log warning $"Kind cluster '($cluster_name)' already exists — skipping creation."
-            # } else {
-            #     ^kind create cluster --name $cluster_name
-            #     # create $cluster_name
-            #     if $env.LAST_EXIT_CODE != 0 {
-            #       error make { msg: "Command failed" }
-            #     }
-            #     ^kubectl wait --for=condition=Ready nodes --all --timeout=180s
-            #     ^kubectl -n kube-system rollout status deploy/coredns --timeout=180s
-            #     ^kubectl cluster-info --context $"kind-($cluster_name)"
-            #     # let s = kompose convert --file ~/projects/playground/manifests/dockers/compose.yaml --namespace dbs --stdout;
-            #     # print $"s: &(s)"
-            # }
-            # if $env.LAST_EXIT_CODE != 0 {
-            #   error make { msg: "Command failed" }
-            # }
-            # kubectl cluster-info --context $"kind-($cluster_name)"
-            # log info $"command: ($cmd)"
-            # run-external $cmd.0 ...($cmd | skip 1)
-
-            # ^($cmd.0) $cmd.1..$cmd | complete
-            # rm -f $tmp
-            #
-            # # DB
-            # ^kubectl create namespace dbs
-            # ^kompose convert --file ~/projects/playground/manifests/dockers/compose.yaml --namespace dbs --stdout | kubectl apply -f -;
-          } else {
-            log info $"Would create Kind cluster '($cluster_name)' with downloaded config"
+            # let da = True
+          if (do --ignore-errors {kubectl get ns dbs --no-headers -o name | lines | length}) == 0 {
+            ^kubectl create namespace dbs
+            kompose convert --file ~/projects/playground/manifests/dockers/compose.yaml --namespace dbs --stdout | kubectl apply -f -
           }
-          do --ignore-errors {
-              ^kubectl create namespace dbs
-              ^kompose convert --file ~/projects/playground/manifests/dockers/compose.yaml --namespace dbs --stdout | kubectl apply -f -;
-              # kubectl create namespace dbs;
-              # ^kompose convert --file ~/projects/playground/manifests/dockers/compose.yaml --namespace dbs --stdout | kubectl apply -f -;
+          if (do --ignore-errors {kubectl -n flux-system get deployment source-controller -o name --no-headers | lines | length }) == 0 {
+            ^gh auth token | ^flux bootstrap github --token-auth --owner=yurikrupnik --repository=gitops-v2 --branch=main --path=clusters/manager-cluster --personal --components-extra image-reflector-controller,image-automation-controller | complete
+            sleep 1min
+          }
+          if (do --ignore-errors {kubectl get secret secret-puller --no-headers -o name | lines | length}) == 0 {
+            kubectl create secret generic secret-puller --from-file=creds=$"($env.HOME)/dotconfig/tmp/secret-puller.json" -n default
+            kubectl create secret generic secret-puller --from-file=creds=$"($env.HOME)/dotconfig/tmp/secret-puller.json" -n crossplane-system
+            kubectl create ns apps
+            kubectl create secret generic secret-puller --from-file=creds=$"($env.HOME)/dotconfig/tmp/secret-puller.json" -n apps
+            kubectl create secret generic 1pass-puller --from-file=creds=$"($env.HOME)/dotconfig/tmp/1pass-sa.txt" -n default
+
+          }
+          kubectl -n crossplane-system wait deployment crossplane --for=condition=Available --timeout=180s
+          kubectl -n external-secrets wait deployment external-secrets-webhook --for=condition=Available --timeout=180s
+          kubectl -n external-secrets wait deployment external-secrets-cert-controller --for=condition=Available --timeout=180s
+
+          # used by fluxcd in gitops-v2 github repo
+          if (do --ignore-errors {kubectl get secret gpc-docker-registry-secret --no-headers -o name | lines | length}) == 0 {
+              (
+                  kubectl create secret docker-registry gpc-docker-registry-secret
+                    --docker-server=europe-central2-docker.pkg.dev --docker-username=_json_key
+                    --docker-password="$(cat ./tmp/container-puller.json)"
+                    --docker-email=container-puller@sdp-demo-388112.iam.gserviceaccount.com
+              )
           }
 
+
+          # used by fluxcd in gitops-v2 github repo
+          if (do --ignore-errors {kubectl get secret ghcr-credentials -n flux-system --no-headers -o name | lines | length}) == 0 {
+              (
+                  kubectl create secret docker-registry ghcr-credentials --namespace flux-system
+                  --docker-server docker.io --docker-username yurikrupnik --docker-password WAG0jech7jes-clic
+              )
+          }
+          # (
+          #     kcl run ($env.HOME)/dotconfig/scripts/kcl/manager/main.k -D kind=Ars
+          #       --path_selector items | kubectl apply -f -
+          # )
+          #
+          #
+          # This is for crossplane
+          if (do --ignore-errors {kubectl get secret iac-secrets -n crossplane-system --no-headers -o name | lines | length}) == 0 {
+              # kubectl create secret generic iac-manager-gcp --from-file=creds=$"($env.HOME)/dotconfig/tmp/iac-manager.yaml" -n crossplane-system
+             kubectl apply -f ($env.HOME)/dotconfig/tmp/init.yaml
+          }
+
+          kubectl wait "provider.pkg.crossplane.io/upbound-provider-gcp-storage" --for=condition=Installed --timeout=180s
+          kubectl wait "provider.pkg.crossplane.io/upbound-provider-gcp-storage" --for=condition=Healthy --timeout=180s
+
+          # kubectl apply -f ($env.HOME)/dotconfig/tmp/temp.yaml # install bucket
+          # kubectl port-forward service/konoplane 27017:27017 -n crossplane-system &
+          #kcl run main.k -D kind=Ars --path_selector items | kubectl apply -f -
+          #kubectl apply -k ~/projects/playground/k8s/kustomize
+
+          # kubectl create configmap k6-load-test --from-file=tss.js
           # ^helm repo update
           let cmds = [
             # ["kompose" "convert" "--file" "~/a.yaml" "-n" "dbs" "--stdout" "|" "kubectl" "apply" "-f" "-"] # (see note)
@@ -261,67 +215,14 @@ export def "main dev up" [
             # ["helm", "upgrade", "--install", "my-external-secrets", "external-secrets-operator/external-secrets"]
           ]
 
-          let jobs = ($cmds
-            | par-each {|c|
-                let res = (^($c.0) ...($c | skip 1)| complete)
-                print $"c: ($c)"
-                { cmd: ($c | str join ' '), exit: $res.exit_code, out: $res.stdout, err: $res.stderr }
-            })
-          let cmds = [
-            # ["kompose" "convert" "--file" "~/a.yaml" "-n" "dbs" "--stdout" "|" "kubectl" "apply" "-f" "-"] # (see note)
-            # ["kubectl" "apply" "-f" "b.yaml"]
-            # ["kubectl" "get" "pods" "-A"]
-            # ["helm", "upgrade", "--install", "kyverno", "kyverno/kyverno", "--namespace kyverno", "--create-namespace"]
-            # # ["ls"]
-            # ["helm", "upgrade", "--install", "my-external-secrets", "external-secrets-operator/external-secrets"]
-          ]
 
-          let jobs = ($cmds
-            | par-each {|c|
-                let res = (^($c.0) ...($c | skip 1)| complete)
-                print $"c: ($c)"
-                { cmd: ($c | str join ' '), exit: $res.exit_code, out: $res.stdout, err: $res.stderr }
-            })
-          # flux bootstrap github --token-auth --owner=yurikrupnik --repository=gitops --branch=main --path=clusters/first-cluster --personal --components-extra image-reflector-controller,image-automation-controller
-          # gh auth token | flux bootstrap github --token-auth --owner=yurikrupnik --repository=gitops-v2 --branch=main --path=clusters/second-cluster --personal --components-extra image-reflector-controller,image-automation-controller
-          gh auth token | flux bootstrap github --token-auth --owner=yurikrupnik --repository=gitops-v2 --branch=main --path=clusters/first-cluster --personal --components-extra image-reflector-controller,image-automation-controller
-          #print $"jobs: ($jobs)"
-          #print $"omg is all i want"
-          #let aris1 = nu '-c ls  | get size'
-          #let kcl_result = kcl run
-          #^ls
-          #let aris = ls | to json
-          #log error $"omg is all i want ($aris)"
-          #log error $"omg is all i want aris1 ($aris1)"
-          # let data = kcl run ~/dotconfig/scripts/kcl/manager/main.k -D workers=1 -D ingress=true -D name=ar | from yaml
-          # let first_item = $data | get items.0
-          # print $first_item
-          # | par-each {|c|
-          #     # For pipelines, execute them as a block:
-          #     do --ignore-errors {
-          #       let res = (^($c.0) ...($c | skip 1) | complete)
-          #       { cmd: ($c | str join ' '), exit: $res.exit_code, out: $res.stdout, err: $res.stderr }
-          #       # ^kompose convert --file ~/a.yaml -n dbs --stdout | ^kubectl apply -f -
-          #     }
-          # }
-          # run-par [
-          #     ["docker", "ps"]
-          #     ["ls"]
-          # ]
-          # kubectl create namespace dbs
-          # kompose convert --file ~/projects/playground/manifests/dockers/compose.yaml --namespace dbs --stdout | kubectl apply -f -
-          # kubectl wait --for=condition=Availible --timeout=300s deployment/db --namespace dbs
-          # kubectl wait --for=condition=Availible --timeout=300s service/db --namespace dbs
-          # kubectl describe service/db --namespace dbs
-          # sleep 60sec
-          # kubectl port-forward service/db 27017:27017 -n dbs &
         }
       }
 
       # Inject "in" context for closures (Nu doesn’t bind outer vars automatically inside records)
        let ctx = {
-         gcp_project: $gcp_project
-         cluster_name: $cluster_name
+         # gcp_project: $gcp_project
+         cluster_name: $name
          k8s_version: $k8s_version
          dry_run: $dry_run
          verbose: $verbose
@@ -336,7 +237,7 @@ export def "main dev up" [
        # kompose convert --file ~/projects/playground/manifests/dockers/compose.yaml -n dbs --stdout | kubectl apply -f -
        # # ps -ef | grep port-forward
        # kubectl port-forward service/db 27017:27017 -n dbs &
-       log success "✅ Cluster flow finished."
+       log success $"✅ Cluster flow finished."
 }
 # source setup-local-machine/
 # use local-dev/index.nu

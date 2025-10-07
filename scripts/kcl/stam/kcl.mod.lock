@@ -1,4 +1,12 @@
 [dependencies]
+  [dependencies.external-secrets]
+    name = "external-secrets"
+    full_name = "external-secrets_0.18.2"
+    version = "0.18.2"
+    sum = "GKneYUgJl+jFFWRI2NlOwPYVtDTYW/DRb6JHh1tNPqU="
+    reg = "ghcr.io"
+    repo = "kcl-lang/external-secrets"
+    oci_tag = "0.18.2"
   [dependencies.k8s]
     name = "k8s"
     full_name = "k8s_1.32.4"

@@ -1,1 +1,4 @@
-The_first_kcl_program = 'Hello World!'
+import .cluster
+import .utils
+
+items = [cluster.Cluster {}]
