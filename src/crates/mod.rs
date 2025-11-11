@@ -1,4 +1,2 @@
-pub mod cli;
-mod cluster;
 pub mod tracing;
-// pub mod telemetry;
+pub mod code_graph;

@@ -1,6 +1,4 @@
 #!/usr/bin/env nu
 
-def local_test [] {
-    wrk
-    hey
-}
+def local_test []
+{wrk hey }

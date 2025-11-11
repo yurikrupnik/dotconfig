@@ -1,281 +1,246 @@
 #!/usr/bin/env nu
 
-def "apply_atlas" [] {
-    (
-        helm upgrade --install atlas-operator
-            oci://ghcr.io/ariga/charts/atlas-operator
-            --namespace atlas-operator --create-namespace
-            --wait
-    )
-
+use std log
+#nu -c 'source scripts/nu/setup-local-machine/mcp.nu; main apply mcp --enable-playwright'
+def load_config [config_path: string]: nothing -> record {
+    if not ($config_path | path exists) {
+        error make { msg: $"Config file not found: ($config_path)" }
+    }
+    open $config_path
 }
 
-# # Retrieves a container registry address
-# def "main get all_users" [] {
-#     if not ("./config.toml" | path exists) {
-#         print $"(ansi red)Error: config.toml file not found in current directory(ansi reset)"
-#         return null
-#     }
+def generate_zsh [config: record, output_dir: string] {
+    mkdir $output_dir
+    let output_file = $output_dir | path join "generated.zsh"
 
-#     let config = open ./config.toml
-#     let env_vars = $config.environment
-#     mut account_info = {}
+    mut content = "# Generated from config.toml\n\n"
 
-#     print $"(ansi yellow_bold)Retrieving cloud account information...(ansi reset)\n"
+    if "aliases" in $config {
+        $content = $content + "# Aliases\n"
+        for entry in ($config.aliases | transpose key value) {
+            $content = $content + $"alias ($entry.key)='($entry.value)'\n"
+        }
+        $content = $content + "\n"
+    }
 
-#     let cloud_provider = $env_vars.CLOUD?
+    if "functions" in $config {
+        $content = $content + "# Functions\n"
+        for entry in ($config.functions | transpose key value) {
+            let func = $entry.value
+            $content = $content + $"($entry.key)() {\n"
 
-#     # if $cloud_provider == "aws" or $cloud_provider == null {
-#     #     print $"(ansi blue)Checking AWS account...(ansi reset)"
-#     #     if (which aws | is-empty) {
-#     #         print $"  ❌ AWS CLI not installed"
-#     #         $account_info = ($account_info | upsert aws null)
-#     #     } else {
-#     #         try {
-#     #             let aws_identity = (aws sts get-caller-identity --output json | from json)
-#     #             $account_info = ($account_info | upsert aws {
-#     #                 account_id: $aws_identity.Account,
-#     #                 user_arn: $aws_identity.Arn,
-#     #                 user_id: $aws_identity.UserId,
-#     #                 region: ($env_vars.CLOUD_AREGION? | default "us-east-1")
-#     #             })
-#     #             print $"  ✅ AWS Account: ($aws_identity.Account)"
-#     #             print $"  ✅ AWS Region: ($account_info.aws.region)"
-#     #         } catch {
-#     #             print $"  ❌ AWS CLI not configured or not available"
-#     #             $account_info = ($account_info | upsert aws null)
-#     #         }
-#     #     }
-#     # }
+            if "commands" in $func {
+                for cmd in $func.commands {
+                    let processed = if ($cmd | str contains "{arg}") {
+                        $cmd | str replace -a "{arg}" '$1'
+                    } else {
+                        $cmd
+                    }
+                    $content = $content + $"    ($processed)\n"
+                }
+            } else if "command" in $func {
+                let processed = if ($func.command | str contains "{arg}") {
+                    $func.command | str replace -a "{arg}" '$1'
+                } else {
+                    $func.command
+                }
+                $content = $content + $"    ($processed)\n"
+            }
 
-#     # if $cloud_provider == "gcp" or $cloud_provider == null {
-#     #     print $"(ansi blue)Checking GCP account...(ansi reset)"
-#     #     if (which gcloud | is-empty) {
-#     #         print $"  ❌ GCP CLI not installed"
-#     #         $account_info = ($account_info | upsert gcp null)
-#     #     } else {
-#     #         try {
-#     #             let config_project = $env_vars.CLOUD_GPROJECT?
-#     #             let config_account = $env_vars.CLOUD_GACOUNT?
-#     #             let config_region = $env_vars.CLOUD_GREGION?
+            $content = $content + "}\n\n"
+        }
+    }
 
-#     #             if $config_project != null {
-#     #                 gcloud config set project $config_project
-#     #             }
-#     #             if $config_account != null {
-#     #                 gcloud config set account $config_account
-#     #             }
-#     #             if $config_region != null {
-#     #                 gcloud config set compute/region $config_region
-#     #             }
+    if "environment" in $config {
+        $content = $content + "# Environment Variables\n"
+        for entry in ($config.environment | transpose key value) {
+            let val = if ($entry.value | describe) == "bool" {
+                if $entry.value { "true" } else { "false" }
+            } else {
+                $entry.value
+            }
+            $content = $content + $"export ($entry.key)='($val)'\n"
+        }
+    }
 
-#     #             let gcp_config = (gcloud config list --format=json | from json)
-#     #             let gcp_account = $gcp_config.core.account?
-#     #             let gcp_project = $gcp_config.core.project?
-#     #             let gcp_region = $gcp_config.compute.region?
+    $content | save -f $output_file
+    log info $"Generated zsh config: ($output_file)"
+}
 
-#     #             if $gcp_account != null {
-#     #                 $account_info = ($account_info | upsert gcp {
-#     #                     account: $gcp_account,
-#     #                     project: $gcp_project,
-#     #                     region: $gcp_region
-#     #                 })
-#     #                 print $"  ✅ GCP Account: ($gcp_account)"
-#     #                 print $"  ✅ GCP Project: ($gcp_project)"
-#     #                 print $"  ✅ GCP Region: ($gcp_region)"
-#     #             } else {
-#     #                 print $"  ❌ GCP not configured"
-#     #                 $account_info = ($account_info | upsert gcp null)
-#     #             }
-#     #         } catch {
-#     #             print $"  ❌ GCP CLI not available"
-#     #             $account_info = ($account_info | upsert gcp null)
-#     #         }
-#     #     }
-#     # }
+def generate_fish [config: record, output_dir: string] {
+    mkdir $output_dir
+    let functions_dir = $output_dir | path join "functions"
+    mkdir $functions_dir
 
-#     # if $cloud_provider == "azure" or $cloud_provider == null {
-#     #     print $"(ansi blue)Checking Azure account...(ansi reset)"
-#     #     if (which az | is-empty) {
-#     #         print $"  ❌ Azure CLI not installed"
-#     #         $account_info = ($account_info | upsert azure null)
-#     #     } else {
-#     #         try {
-#     #             let azure_account = (az account show --output json | from json)
-#     #             $account_info = ($account_info | upsert azure {
-#     #                 subscription_id: $azure_account.id,
-#     #                 subscription_name: $azure_account.name,
-#     #                 tenant_id: $azure_account.tenantId,
-#     #                 user_name: $azure_account.user.name,
-#     #                 user_type: $azure_account.user.type,
-#     #                 region: ($env_vars.CLOUD_AREGION? | default "eastus")
-#     #             })
-#     #             print $"  ✅ Azure Subscription: ($azure_account.name) \(($azure_account.id)\)"
-#     #             print $"  ✅ Azure User: ($azure_account.user.name)"
-#     #             print $"  ✅ Azure Region: ($account_info.azure.region)"
-#     #         } catch {
-#     #             print $"  ❌ Azure CLI not configured or not available"
-#     #             $account_info = ($account_info | upsert azure null)
-#     #         }
-#     #     }
-#     # }
+    if "aliases" in $config {
+        let aliases_file = $output_dir | path join "generated_aliases.fish"
+        mut content = "# Generated from config.toml\n\n"
 
-#     # print $"\n(ansi green_bold)Account Information Summary:(ansi reset)"
-#     # print $"Primary Cloud Provider: ($cloud_provider)"
-#     # $account_info | table
+        for entry in ($config.aliases | transpose key value) {
+            $content = $content + $"alias ($entry.key) '($entry.value)'\n"
+        }
 
-#     # $account_info
-# }
+        $content | save -f $aliases_file
+        log info $"Generated fish aliases: ($aliases_file)"
+    }
 
-# # Retrieves a container registry address
-# def "main get container_registry" [] {
+    if "functions" in $config {
+        for entry in ($config.functions | transpose key value) {
+            let func = $entry.value
+            let func_file = $functions_dir | path join $"($entry.key).fish"
+            mut content = "# Generated from config.toml\n"
 
-#     mut registry = ""
-#     if "CONTAINER_REGISTRY" in $env {
-#         $registry = $env.CONTAINER_REGISTRY
-#     } else {
-#         let value = input $"(ansi green_bold)Enter container image registry \(e.g., `ghcr.io/vfarcic`\):(ansi reset) "
-#         $registry = $value
-#     }
-#     $"CONTAINER_REGISTRY=($registry)\n" | save --append .env
+            if "description" in $func {
+                $content = $content + $"# ($func.description)\n"
+            }
 
-#     $registry
+            $content = $content + $"\nfunction ($entry.key)\n"
 
-# }
+            if "commands" in $func {
+                for cmd in $func.commands {
+                    let processed = if ($cmd | str contains "{arg}") {
+                        $cmd | str replace -a "{arg}" '$argv[1]'
+                    } else {
+                        $cmd
+                    }
+                    $content = $content + $"    ($processed)\n"
+                }
+            } else if "command" in $func {
+                let processed = if ($func.command | str contains "{arg}") {
+                    $func.command | str replace -a "{arg}" '$argv[1]'
+                } else {
+                    $func.command
+                }
+                $content = $content + $"    ($processed)\n"
+            }
 
-# # Generate shell configurations from unified config
-# # --path: str = "~/configs-files/shells/config.toml"
-# # def main [
-# #     repo?: string = "../../../config.toml"
-# #     --path: string = "../../../config.toml"
-# # ] {
-# #     print $path
-# #     print $repo
-# #     # print $env
-# #     let config = open ($nu.env-paths.config-path | path join 'config.toml')
-# #     #let config = open ~/configs-files/shells/config.toml
-# #     #print $config
-# #     generate-zsh $config
-# #     #generate-fish $config
-# #     #generate-nu $config
+            $content = $content + "end\n"
+            $content | save -f $func_file
+        }
+        log info $"Generated fish functions: ($functions_dir)"
+    }
 
-# #     print "✅ Generated configurations for all shells"
-# # }
+    if "environment" in $config {
+        let env_file = $output_dir | path join "generated_env.fish"
+        mut content = "# Generated from config.toml\n\n"
 
-# def generate-zsh [config] {
-#     let zsh_dir = "~/dotconfig/zsh/.config/zsh"
-#     mkdir $zsh_dir
-#     mut content = "# Generated from shells/config.toml\n\n"
-#     # Aliases
-#     for alias in ($config.aliases | transpose key value) {
-#         $content = $content + $"alias ($alias.key)='($alias.value)'\n"
-#     }
+        for entry in ($config.environment | transpose key value) {
+            let val = if ($entry.value | describe) == "bool" {
+                if $entry.value { "true" } else { "false" }
+            } else {
+                $entry.value
+            }
+            $content = $content + $"set -gx ($entry.key) '($val)'\n"
+        }
 
-#     $content = $content + "\n"
-#     # Functions
-#     for func in ($config.functions | transpose key value) {
-#         $content = $content + $"($func.key)" + "() {\n"
-#         if "type" in $func.value and $func.value.type == "complex" {
-#             # Complex functions call Nu scripts with arguments
-#             $content = $content + $"    nu ($func.value.script) \"$@\"\n"
-#         } else if "commands" in $func.value {
-#             for cmd in $func.value.commands {
-#                 let processed_cmd = ($cmd | str replace "{arg}" '$1')
-#                 $content = $content + $"    ($processed_cmd)\n"
-#             }
-#         } else {
-#             let cmd = if "args" in $func.value {
-#                 mut processed_cmd = $func.value.command
-#                 for i in 0..($func.value.args | length) {
-#                     $processed_cmd = ($processed_cmd | str replace "{arg}" $"$($i + 1)")
-#                 }
-#                 $processed_cmd
-#             } else {
-#                 ($func.value.command | str replace "{arg}" '$1')
-#             }
-#             $content = $content + $"    ($cmd)\n"
-#         }
-#         $content = $content + "}\n\n"
-#         print $content
-#     }
+        $content | save -f $env_file
+        log info $"Generated fish environment: ($env_file)"
+    }
+}
 
-#     $content | save --force $"($zsh_dir)/generated.zsh"
-# }
+def generate_nushell [config: record, output_dir: string] {
+    mkdir $output_dir
+    let output_file = $output_dir | path join "generated.nu"
 
-# def generate-fish [config] {
-#     let fish_dir = ($env.HOME | path join "configs-files/fish/.config/fish")
-#     let functions_dir = ($fish_dir | path join "functions")
-#     mkdir $fish_dir
-#     mkdir $functions_dir
+    mut content = "# Generated from config.toml\n\n"
 
-#     # Create aliases file
-#     mut aliases_content = "# Generated from shells/config.toml\n\n"
-#     for alias in ($config.aliases | transpose key value) {
-#         $aliases_content = $aliases_content + $"alias ($alias.key) '($alias.value)'\n"
-#     }
-#     $aliases_content | save --force ($fish_dir | path join "generated_aliases.fish")
+    if "aliases" in $config {
+        $content = $content + "# Aliases\n"
+        for entry in ($config.aliases | transpose key value) {
+            $content = $content + $"export alias ($entry.key) = ($entry.value)\n"
+        }
+        $content = $content + "\n"
+    }
 
-#     # Create individual function files
-#     for func in ($config.functions | transpose key value) {
-#         mut func_content = $"# Generated from shells/config.toml\n"
-#         if "description" in $func.value {
-#             $func_content = $func_content + $"# ($func.value.description)\n"
-#         }
-#         $func_content = $func_content + $"\nfunction ($func.key)\n"
+    if "functions" in $config {
+        $content = $content + "# Functions\n"
+        for entry in ($config.functions | transpose key value) {
+            let func = $entry.value
 
-#         if "type" in $func.value and $func.value.type == "complex" {
-#             # Complex functions call Nu scripts with arguments
-#             $func_content = $func_content + $"    nu ($func.value.script) $argv\n"
-#         } else if "commands" in $func.value {
-#             for cmd in $func.value.commands {
-#                 let processed_cmd = ($cmd | str replace "{arg}" '$argv[1]')
-#                 $func_content = $func_content + $"    ($processed_cmd)\n"
-#             }
-#         } else {
-#             let cmd = ($func.value.command | str replace "{arg}" '$argv[1]')
-#             $func_content = $func_content + $"    ($cmd)\n"
-#         }
-#         $func_content = $func_content + "end\n"
+            if "description" in $func {
+                $content = $content + $"# ($func.description)\n"
+            }
 
-#         $func_content | save --force ($functions_dir | path join $"($func.key).fish")
-#     }
-# }
+            if "commands" in $func {
+                let args = if "args" in $func {
+                    $func.args | get 0
+                } else {
+                    "arg"
+                }
 
-# def generate-nu [config] {
-#     let nu_dir = "~/configs-files/nu/.config/nu"
-#     mkdir $nu_dir
+                $content = $content + $"export def ($entry.key) [($args): string] {\n"
+                for cmd in $func.commands {
+                    let processed = if ($cmd | str contains "{arg}") {
+                        $cmd | str replace -a "{arg}" $"$($args)"
+                    } else {
+                        $cmd
+                    }
+                    $content = $content + $"    ^($processed)\n"
+                }
+                $content = $content + "}\n\n"
+            } else if "command" in $func {
+                let args = if "args" in $func {
+                    $func.args | get 0
+                } else {
+                    "arg"
+                }
 
-#     mut content = "# Generated from shells/config.toml\n\n"
+                let processed = if ($func.command | str contains "{arg}") {
+                    $func.command | str replace -a "{arg}" $"$($args)"
+                } else {
+                    $func.command
+                }
 
-#     # Aliases
-#     for alias in ($config.aliases | transpose key value) {
-#         $content = $content + $"export alias ($alias.key) = ($alias.value)\n"
-#     }
+                $content = $content + $"export def ($entry.key) [($args): string] {\n"
+                $content = $content + $"    ^($processed)\n"
+                $content = $content + "}\n\n"
+            }
+        }
+    }
 
-#     $content = $content + "\n"
+    if "environment" in $config {
+        $content = $content + "# Environment Variables\n"
+        for entry in ($config.environment | transpose key value) {
+            let val = if ($entry.value | describe) == "bool" {
+                $entry.value
+            } else {
+                $"'($entry.value)'"
+            }
+            $content = $content + $"$env.($entry.key) = ($val)\n"
+        }
+    }
 
-#     # Functions
-#     for func in ($config.functions | transpose key value) {
-#         if "type" in $func.value and $func.value.type == "complex" {
-#             # Complex functions - keep original implementation or source from script
-#             $content = $content + $"# Complex function ($func.key) - use original implementation\n"
-#             $content = $content + $"# Or source from: ($func.value.script)\n\n"
-#         } else if "commands" in $func.value {
-#             let args = if "args" in $func.value { $func.value.args.0 } else { "arg" }
-#             $content = $content + $"export def ($func.key) [($args): string] {\n"
-#             for cmd in $func.value.commands {
-#                 let processed_cmd = ($cmd | str replace "{arg}" $"$($args)")
-#                 $content = $content + $"    ^($processed_cmd)\n"
-#             }
-#             $content = $content + "}\n\n"
-#         } else {
-#             let args = if "args" in $func.value { $func.value.args.0 } else { "arg" }
-#             let cmd = ($func.value.command | str replace "{arg}" $"$($args)")
-#             $content = $content + $"export def ($func.key) [($args): string] {\n"
-#             $content = $content + $"    ^($cmd)\n"
-#             $content = $content + "}\n\n"
-#         }
-#     }
+    $content | save -f $output_file
+    log info $"Generated nushell config: ($output_file)"
+}
 
-#     $content | save --force $"($nu_dir)/generated.nu"
-# }
+export def "main generate" [
+    --config-path: string = "~/dotconfig/scripts/nu/setup-local-machine/config.toml"
+    --zsh-dir: string = "~/dotconfig/zsh/.config/zsh"
+    --fish-dir: string = "~/dotconfig/fish/.config/fish"
+    --nu-dir: string = "~/dotconfig/nu/.config/nushell"
+    --shells: list<string> = ["zsh", "fish", "nu"]
+] {
+    let config_path = $config_path | path expand
+    let config = load_config $config_path
+
+    log info $"Loading config from: ($config_path)"
+
+    if "zsh" in $shells {
+        generate_zsh $config ($zsh_dir | path expand)
+    }
+
+    if "fish" in $shells {
+        generate_fish $config ($fish_dir | path expand)
+    }
+
+    if "nu" in $shells {
+        generate_nushell $config ($nu_dir | path expand)
+    }
+
+    log info "Shell configurations generated successfully"
+}
+
+def "apply_atlas" [] {
+    helm upgrade --install atlas-operator oci://ghcr.io/ariga/charts/atlas-operator --namespace atlas-operator --create-namespace --wait
+}

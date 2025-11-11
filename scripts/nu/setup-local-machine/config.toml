@@ -100,3 +100,4 @@ CLOUD_GACOUNT = "krupnik.yuri@gmail.com"
 CLOUD_GREGION = "me-west1"
 CLOUD = "gcp"
 CONTAINER_REGISTRY = "docker.com/yurikrupnik"
+CONTAINER_REGISTRY_BACKUP = "docker.com/yurikrupnik" # AWS or GCP

@@ -1,5 +1,6 @@
 #!/usr/bin/env nu
 
-def main [] {
+def main []
+{
 
 }
