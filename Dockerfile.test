@@ -1,0 +1,30 @@
+# Test Dockerfile for dotconfig installation
+# Usage: docker build -f Dockerfile.test -t dotconfig-test .
+#        docker run -it --rm dotconfig-test
+
+FROM ubuntu:22.04
+
+# Avoid interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+ENV HOME=/root
+
+# Install basic dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    build-essential \
+    sudo \
+    stow \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create dotconfig directory
+WORKDIR /root/dotconfig
+
+# Copy repository files
+COPY . .
+
+# Set permissions
+RUN chmod +x install.sh update.sh bootstrap.sh test-install.sh
+
+# Run test script by default
+CMD ["./test-install.sh"]

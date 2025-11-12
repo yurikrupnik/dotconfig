@@ -28,3 +28,4 @@ local/
 # Backup files
 *.backup
 *.bak
+dotconfig-backup-*/
