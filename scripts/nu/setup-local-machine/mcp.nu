@@ -3,8 +3,8 @@
 use std log
 
 # Generate MCP server configuration files
-export def --env "main mcp" [
-    --location: list<string> = [".cursor/mcp.json", ".roo/mcp.json", ".vscode/mcp.json", ".claude/mcp.json"]
+export def --env "main" [
+    --location: list<string> = [".mcp.json"]
     --memory-file-path: string = ""
     --anthropic-api-key: string = ""
     --github-token: string = ""
@@ -29,13 +29,6 @@ export def --env "main mcp" [
     )
 
     mut mcp_servers_map = {
-        memory: {
-            command: "npx",
-            args: ["-y", "@modelcontextprotocol/server-memory"],
-            env: {
-                MEMORY_FILE_PATH: $resolved_memory_file_path
-            }
-        },
         context7: {
             command: "npx",
             args: ["-y", "@upstash/context7-mcp"]

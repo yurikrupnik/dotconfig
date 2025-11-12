@@ -62,3 +62,105 @@ impl AppContext {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_context_new() {
+        let ctx = AppContext::new(
+            0,
+            false,
+            OutputFormat::Human,
+            false,
+            Some("postgres://localhost".into()),
+            None,
+            None,
+        );
+
+        assert_eq!(ctx.debug_level, 0);
+        assert!(!ctx.dry_run);
+        assert_eq!(ctx.output_format, OutputFormat::Human);
+        assert!(!ctx.no_color);
+        assert_eq!(ctx.postgres_url, Some("postgres://localhost".into()));
+        assert_eq!(ctx.redis_url, None);
+        assert_eq!(ctx.mongo_url, None);
+    }
+
+    #[test]
+    fn test_tracing_level_info() {
+        let ctx = AppContext::new(0, false, OutputFormat::Human, false, None, None, None);
+        assert_eq!(ctx.tracing_level(), Level::INFO);
+    }
+
+    #[test]
+    fn test_tracing_level_debug() {
+        let ctx = AppContext::new(1, false, OutputFormat::Human, false, None, None, None);
+        assert_eq!(ctx.tracing_level(), Level::DEBUG);
+    }
+
+    #[test]
+    fn test_tracing_level_trace() {
+        let ctx = AppContext::new(2, false, OutputFormat::Human, false, None, None, None);
+        assert_eq!(ctx.tracing_level(), Level::TRACE);
+
+        let ctx = AppContext::new(5, false, OutputFormat::Human, false, None, None, None);
+        assert_eq!(ctx.tracing_level(), Level::TRACE);
+    }
+
+    #[test]
+    fn test_should_output_human() {
+        let ctx = AppContext::new(0, false, OutputFormat::Human, false, None, None, None);
+        assert!(ctx.should_output());
+    }
+
+    #[test]
+    fn test_should_output_json() {
+        let ctx = AppContext::new(0, false, OutputFormat::Json, false, None, None, None);
+        assert!(ctx.should_output());
+    }
+
+    #[test]
+    fn test_should_output_quiet() {
+        let ctx = AppContext::new(0, false, OutputFormat::Quiet, false, None, None, None);
+        assert!(!ctx.should_output());
+    }
+
+    #[test]
+    fn test_is_json_output() {
+        let ctx = AppContext::new(0, false, OutputFormat::Json, false, None, None, None);
+        assert!(ctx.is_json_output());
+
+        let ctx = AppContext::new(0, false, OutputFormat::Human, false, None, None, None);
+        assert!(!ctx.is_json_output());
+
+        let ctx = AppContext::new(0, false, OutputFormat::Quiet, false, None, None, None);
+        assert!(!ctx.is_json_output());
+    }
+
+    #[test]
+    fn test_dry_run_flag() {
+        let ctx = AppContext::new(0, true, OutputFormat::Human, false, None, None, None);
+        assert!(ctx.dry_run);
+
+        let ctx = AppContext::new(0, false, OutputFormat::Human, false, None, None, None);
+        assert!(!ctx.dry_run);
+    }
+
+    #[test]
+    fn test_no_color_flag() {
+        let ctx = AppContext::new(0, false, OutputFormat::Human, true, None, None, None);
+        assert!(ctx.no_color);
+
+        let ctx = AppContext::new(0, false, OutputFormat::Human, false, None, None, None);
+        assert!(!ctx.no_color);
+    }
+
+    #[test]
+    fn test_output_format_values() {
+        assert_ne!(OutputFormat::Human, OutputFormat::Json);
+        assert_ne!(OutputFormat::Human, OutputFormat::Quiet);
+        assert_ne!(OutputFormat::Json, OutputFormat::Quiet);
+    }
+}
+

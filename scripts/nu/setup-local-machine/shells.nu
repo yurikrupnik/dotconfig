@@ -9,6 +9,8 @@ def load_config [config_path: string]: nothing -> record {
     open $config_path
 }
 
+def main [] {}
+
 def generate_zsh [config: record, output_dir: string] {
     mkdir $output_dir
     let output_file = $output_dir | path join "generated.zsh"
@@ -27,7 +29,7 @@ def generate_zsh [config: record, output_dir: string] {
         $content = $content + "# Functions\n"
         for entry in ($config.functions | transpose key value) {
             let func = $entry.value
-            $content = $content + $"($entry.key)() {\n"
+            $content = $content + $entry.key + "() {\n"
 
             if "commands" in $func {
                 for cmd in $func.commands {
@@ -216,9 +218,9 @@ def generate_nushell [config: record, output_dir: string] {
 
 export def "main generate" [
     --config-path: string = "~/dotconfig/scripts/nu/setup-local-machine/config.toml"
-    --zsh-dir: string = "~/dotconfig/zsh/.config/zsh"
-    --fish-dir: string = "~/dotconfig/fish/.config/fish"
-    --nu-dir: string = "~/dotconfig/nu/.config/nushell"
+    --zsh-dir: string = "~/dotconfig/output/zsh/.config/zsh"
+    --fish-dir: string = "~/dotconfig/output/fish/.config/fish"
+    --nu-dir: string = "~/dotconfig/output/nu/.config/nushell"
     --shells: list<string> = ["zsh", "fish", "nu"]
 ] {
     let config_path = $config_path | path expand
@@ -241,6 +243,105 @@ export def "main generate" [
     log info "Shell configurations generated successfully"
 }
 
-def "apply_atlas" [] {
+# dampen stow output
+export def "main stow" [
+    --items: list<string> = []
+    --dry-run
+] {
+    let output_dir = "~/dotconfig/output" | path expand
+    let target_dir = "~" | path expand
+
+    if not ($output_dir | path exists) {
+        error make { msg: $"Output directory not found: ($output_dir)\nRun 'main generate' first." }
+    }
+
+    let all_items = if ($items | is-empty) {
+        ls $output_dir | where type == dir | get name | path basename
+    } else {
+        $items
+    }
+
+    log info $"Applying shell configurations with stow from ($output_dir) to ($target_dir)"
+    log info $"Items to stow: ($all_items | str join ', ')"
+
+    for item in $all_items {
+        let item_dir = $output_dir | path join $item
+        if not ($item_dir | path exists) {
+            log warning $"Skipping ($item): directory not found at ($item_dir)"
+            continue
+        }
+
+        let stow_cmd = if $dry_run {
+            $"stow -d ($output_dir) -t ($target_dir) --no -v ($item)"
+        } else {
+            $"stow -d ($output_dir) -t ($target_dir) -v ($item)"
+        }
+
+        log info $"Running: ($stow_cmd)"
+        let result = (bash -c $stow_cmd | complete)
+
+        if $result.exit_code != 0 {
+            log error $"Failed to stow ($item): ($result.stderr)"
+        } else {
+            log info $"Successfully stowed ($item)"
+            if ($result.stdout | str length) > 0 {
+                print $result.stdout
+            }
+        }
+    }
+
+    log info "Stow apply complete"
+}
+
+export def "main unstow" [
+    --items: list<string> = []
+    --dry-run
+] {
+    let output_dir = "~/dotconfig/output" | path expand
+    let target_dir = "~" | path expand
+
+    if not ($output_dir | path exists) {
+        error make { msg: $"Output directory not found: ($output_dir)\nRun 'main generate' first." }
+    }
+
+    let all_items = if ($items | is-empty) {
+        ls $output_dir | where type == dir | get name | path basename
+    } else {
+        $items
+    }
+
+    log info $"Removing shell configurations with stow from ($target_dir)"
+    log info $"Items to unstow: ($all_items | str join ', ')"
+
+    for item in $all_items {
+        let item_dir = $output_dir | path join $item
+        if not ($item_dir | path exists) {
+            log warning $"Skipping ($item): directory not found at ($item_dir)"
+            continue
+        }
+
+        let stow_cmd = if $dry_run {
+            $"stow -D -d ($output_dir) -t ($target_dir) --no -v ($item)"
+        } else {
+            $"stow -D -d ($output_dir) -t ($target_dir) -v ($item)"
+        }
+
+        log info $"Running: ($stow_cmd)"
+        let result = (bash -c $stow_cmd | complete)
+
+        if $result.exit_code != 0 {
+            log error $"Failed to unstow ($item): ($result.stderr)"
+        } else {
+            log info $"Successfully unstowed ($item)"
+            if ($result.stdout | str length) > 0 {
+                print $result.stdout
+            }
+        }
+    }
+
+    log info "Stow remove complete"
+}
+
+def "main apply_atlas" [] {
     helm upgrade --install atlas-operator oci://ghcr.io/ariga/charts/atlas-operator --namespace atlas-operator --create-namespace --wait
 }
