@@ -33,6 +33,10 @@ export def --env "main" [
             command: "npx",
             args: ["-y", "@upstash/context7-mcp"]
         }
+        browsermcp: {
+          command: "npx",
+          args: ["@browsermcp/mcp@latest"]
+        }
     }
 
     if ($resolved_anthropic_api_key | is-not-empty) {

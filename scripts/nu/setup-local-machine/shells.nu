@@ -105,6 +105,8 @@ def generate_fish [config: record, output_dir: string] {
                     } else {
                         $cmd
                     }
+                    # Replace bash "$@" with fish $argv
+                    let processed = $processed | str replace -a '"$@"' '$argv'
                     $content = $content + $"    ($processed)\n"
                 }
             } else if "command" in $func {
@@ -113,6 +115,8 @@ def generate_fish [config: record, output_dir: string] {
                 } else {
                     $func.command
                 }
+                # Replace bash "$@" with fish $argv
+                let processed = $processed | str replace -a '"$@"' '$argv'
                 $content = $content + $"    ($processed)\n"
             }
 
@@ -146,10 +150,47 @@ def generate_nushell [config: record, output_dir: string] {
 
     mut content = "# Generated from config.toml\n\n"
 
+    # Build mapping of aliases that point to functions
+    mut alias_to_function = {}
+    if ("aliases" in $config) and ("functions" in $config) {
+        let function_names = $config.functions | transpose key value | get key
+        for entry in ($config.aliases | transpose key value) {
+            if $entry.value in $function_names {
+                $alias_to_function = ($alias_to_function | insert $entry.value $entry.key)
+            }
+        }
+    }
+
     if "aliases" in $config {
         $content = $content + "# Aliases\n"
         for entry in ($config.aliases | transpose key value) {
-            $content = $content + $"export alias ($entry.key) = ($entry.value)\n"
+            let val = $entry.value
+            # Check if alias has bash-specific syntax that needs conversion to function
+            let has_subshell = $val | str contains '$('
+            let has_andand = $val | str contains '&&'
+            let has_pipe = $val | str contains '|'
+            # Check if this alias points to a function we're defining
+            let points_to_function = $val in $alias_to_function
+
+            if $points_to_function {
+                # Skip - we'll use the alias name for the function itself
+                continue
+            } else if $has_subshell or $has_andand {
+                # Convert to function for command substitution or multiple commands
+                $content = $content + $"export def ($entry.key) [] {\n"
+                # Convert bash $(...) to nushell (^...)
+                let converted = $val
+                    | str replace -a '&&' ';'
+                    | str replace -r '\$\(([^)]+)\)' '(^$1 | str trim)'
+                # Split by ; and execute each command
+                let commands = $converted | split row ';' | each {|cmd| $cmd | str trim}
+                for cmd in $commands {
+                    $content = $content + $"    ^($cmd)\n"
+                }
+                $content = $content + "}\n"
+            } else {
+                $content = $content + $"export alias ($entry.key) = ($val)\n"
+            }
         }
         $content = $content + "\n"
     }
@@ -158,42 +199,81 @@ def generate_nushell [config: record, output_dir: string] {
         $content = $content + "# Functions\n"
         for entry in ($config.functions | transpose key value) {
             let func = $entry.value
+            # Use alias name if this function has one pointing to it
+            let func_name = if $entry.key in $alias_to_function {
+                $alias_to_function | get $entry.key
+            } else {
+                $entry.key
+            }
 
             if "description" in $func {
                 $content = $content + $"# ($func.description)\n"
             }
 
             if "commands" in $func {
+                # Check if any command uses "$@" to determine if we need rest parameters
+                let uses_varargs = ($func.commands | any {|cmd| $cmd | str contains '"$@"' })
+                # Check if any command uses {arg} placeholder
+                let uses_arg = ($func.commands | any {|cmd| $cmd | str contains '{arg}' })
+
                 let args = if "args" in $func {
                     $func.args | get 0
                 } else {
                     "arg"
                 }
 
-                $content = $content + $"export def ($entry.key) [($args): string] {\n"
+                # Determine parameter signature based on actual usage
+                let param_sig = if $uses_varargs {
+                    "...args"
+                } else if $uses_arg {
+                    $"($args): string"
+                } else {
+                    ""  # No parameters needed
+                }
+
+                $content = $content + $"export def ($func_name) [($param_sig)] {\n"
                 for cmd in $func.commands {
-                    let processed = if ($cmd | str contains "{arg}") {
+                    mut processed = if ($cmd | str contains "{arg}") {
                         $cmd | str replace -a "{arg}" $"$($args)"
                     } else {
                         $cmd
                     }
+                    # Replace bash "$@" with nushell rest parameters
+                    $processed = $processed | str replace -a '"$@"' '...$args'
                     $content = $content + $"    ^($processed)\n"
                 }
                 $content = $content + "}\n\n"
             } else if "command" in $func {
+                # Check if command uses "$@" to determine if we need rest parameters
+                let uses_varargs = $func.command | str contains '"$@"'
+                # Check if command uses {arg} placeholder
+                let uses_arg = $func.command | str contains '{arg}'
+
                 let args = if "args" in $func {
                     $func.args | get 0
                 } else {
                     "arg"
                 }
 
-                let processed = if ($func.command | str contains "{arg}") {
+                mut processed = if ($func.command | str contains "{arg}") {
                     $func.command | str replace -a "{arg}" $"$($args)"
                 } else {
                     $func.command
                 }
 
-                $content = $content + $"export def ($entry.key) [($args): string] {\n"
+                # Replace bash "$@" with nushell rest parameters
+                $processed = $processed | str replace -a '"$@"' '...$args'
+
+                # Determine parameter signature based on actual usage
+                let param_sig = if $uses_varargs {
+                    "...args"
+                } else if $uses_arg {
+                    $"($args): string"
+                } else {
+                    ""  # No parameters needed
+                }
+
+                $content = $content + $"export def ($func_name) [($param_sig)] {\n"
                 $content = $content + $"    ^($processed)\n"
                 $content = $content + "}\n\n"
             }
