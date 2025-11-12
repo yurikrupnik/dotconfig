@@ -1,5 +1,6 @@
-use crate::context::AppContext;
+use crate::context::{AppContext, OutputFormat};
 use crate::state::AppState;
+use crate::traits::CommandContext;
 
 #[derive(Clone)]
 pub struct App {
@@ -10,6 +11,49 @@ pub struct App {
 impl App {
     pub fn new(ctx: AppContext, state: AppState) -> Self {
         Self { ctx, state }
+    }
+}
+
+// Implement CommandContext trait for App
+impl CommandContext for App {
+    fn dry_run(&self) -> bool {
+        self.ctx.dry_run
+    }
+
+    fn output_format(&self) -> OutputFormat {
+        self.ctx.output_format
+    }
+
+    fn no_color(&self) -> bool {
+        self.ctx.no_color
+    }
+
+    fn debug_level(&self) -> u8 {
+        self.ctx.debug_level
+    }
+
+    fn postgres_url(&self) -> Option<&str> {
+        self.ctx.postgres_url.as_deref()
+    }
+
+    fn redis_url(&self) -> Option<&str> {
+        self.ctx.redis_url.as_deref()
+    }
+
+    fn mongo_url(&self) -> Option<&str> {
+        self.ctx.mongo_url.as_deref()
+    }
+
+    fn neo4j_uri(&self) -> &str {
+        &self.state.neo4j_uri
+    }
+
+    fn neo4j_username(&self) -> &str {
+        &self.state.neo4j_username
+    }
+
+    fn neo4j_password(&self) -> &str {
+        &self.state.neo4j_password
     }
 }
 

@@ -1,7 +1,7 @@
 use clap::Subcommand;
 use tokio::process::Command;
 use crate::commands::RunCommand;
-use crate::app::App;
+use crate::traits::CommandContext;
 use crate::utils::docker::resolve_compose_file;
 
 #[derive(clap::Args)]
@@ -37,10 +37,10 @@ pub enum ComposeAction {
 
 #[async_trait::async_trait]
 impl RunCommand for ComposeAction {
-    async fn run(&self, app: &App) -> anyhow::Result<()> {
+    async fn run(&self, ctx: &dyn CommandContext) -> anyhow::Result<()> {
         match self {
             ComposeAction::Up(args) => {
-                if app.ctx.dry_run {
+                if ctx.dry_run() {
                     tracing::info!("DRY-RUN: Would run docker compose up with detach={}", args.detach);
                     return Ok(());
                 }
@@ -56,7 +56,7 @@ impl RunCommand for ComposeAction {
                 Ok(result)
             }
             ComposeAction::Down(args) => {
-                if app.ctx.dry_run {
+                if ctx.dry_run() {
                     tracing::info!("DRY-RUN: Would run docker compose down");
                     return Ok(());
                 }
@@ -66,7 +66,7 @@ impl RunCommand for ComposeAction {
                 result
             }
             ComposeAction::Convert(args) => {
-                if app.ctx.dry_run {
+                if ctx.dry_run() {
                     tracing::info!("DRY-RUN: Would convert docker compose to k8s");
                     return Ok(());
                 }

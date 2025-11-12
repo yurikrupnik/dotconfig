@@ -620,6 +620,7 @@ dependencies = [
  "serial_test",
  "syn 2.0.106",
  "tempfile",
+ "thiserror 2.0.16",
  "tokio",
  "toml",
  "tracing",

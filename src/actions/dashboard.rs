@@ -1,7 +1,7 @@
 use clap::Subcommand;
 use std::fs;
 use crate::commands::RunCommand;
-use crate::app::App;
+use crate::traits::CommandContext;
 
 #[derive(Subcommand)]
 pub enum DashboardAction {
@@ -16,7 +16,7 @@ pub enum DashboardAction {
 
 #[async_trait::async_trait]
 impl RunCommand for DashboardAction {
-    async fn run(&self, app: &App) -> anyhow::Result<()> {
+    async fn run(&self, ctx: &dyn CommandContext) -> anyhow::Result<()> {
         match self {
             DashboardAction::Create { name, query } => {
                 let dashboard_template = serde_json::json!({
@@ -67,7 +67,7 @@ impl RunCommand for DashboardAction {
                 );
                 let dashboard_content = serde_json::to_string_pretty(&dashboard_template)?;
 
-                if app.ctx.dry_run {
+                if ctx.dry_run() {
                     tracing::info!("DRY-RUN: Would create dashboard '{}' at {}", name, dashboard_path);
                     return Ok(());
                 }

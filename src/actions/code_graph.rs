@@ -1,7 +1,7 @@
 use clap::Subcommand;
 use std::path::PathBuf;
 use crate::commands::RunCommand;
-use crate::app::App;
+use crate::traits::CommandContext;
 use crate::crates::code_graph::CodeGraphClient;
 
 #[derive(Subcommand)]
@@ -20,17 +20,17 @@ pub enum CodeGraphAction {
 
 #[async_trait::async_trait]
 impl RunCommand for CodeGraphAction {
-    async fn run(&self, app: &App) -> anyhow::Result<()> {
+    async fn run(&self, ctx: &dyn CommandContext) -> anyhow::Result<()> {
         let client = CodeGraphClient::new(
-            &app.state.neo4j_uri,
-            &app.state.neo4j_username,
-            &app.state.neo4j_password,
+            ctx.neo4j_uri(),
+            ctx.neo4j_username(),
+            ctx.neo4j_password(),
         )
         .await?;
 
         match self {
             CodeGraphAction::Init => {
-                if app.ctx.dry_run {
+                if ctx.dry_run() {
                     tracing::info!("DRY-RUN: Would initialize knowledge graph schema");
                     return Ok(());
                 }
@@ -40,7 +40,7 @@ impl RunCommand for CodeGraphAction {
             }
 
             CodeGraphAction::Scan { path } => {
-                if app.ctx.dry_run {
+                if ctx.dry_run() {
                     tracing::info!("DRY-RUN: Would scan workspace at: {:?}", path);
                     return Ok(());
                 }
@@ -57,7 +57,7 @@ impl RunCommand for CodeGraphAction {
             }
 
             CodeGraphAction::Clear => {
-                if app.ctx.dry_run {
+                if ctx.dry_run() {
                     tracing::info!("DRY-RUN: Would clear all nodes from the graph");
                     return Ok(());
                 }
@@ -67,7 +67,7 @@ impl RunCommand for CodeGraphAction {
             }
 
             CodeGraphAction::Query { cypher } => {
-                if app.ctx.dry_run {
+                if ctx.dry_run() {
                     tracing::info!("DRY-RUN: Would execute query: {}", cypher);
                     return Ok(());
                 }

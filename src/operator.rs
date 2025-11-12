@@ -1,104 +1,178 @@
-use k8s_openapi::{
-    api::apps::v1::Deployment, api::core::v1::Node, apimachinery::pkg::api::resource::Quantity,
-};
-use kube::{api::ListParams, Api, ResourceExt};
-use serde::Deserialize;
+/// Kubernetes operator using trait abstractions for testability
+use async_trait::async_trait;
+use k8s_openapi::api::core::v1::Node;
+use std::collections::BTreeMap;
+use thiserror::Error;
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let client = kube::Client::try_default().await?;
+/// Error types for Kubernetes operations
+#[derive(Error, Debug)]
+pub enum KubeError {
+    #[error("Failed to connect to Kubernetes cluster: {0}")]
+    Connection(String),
 
-    let api: Api<Node> = Api::all(client.clone());
-    let nodes = api.list(&ListParams::default()).await?;
-    let mut summaries = Vec::new();
+    #[error("Failed to list resources: {0}")]
+    ListError(String),
 
-    for node in nodes {
-        let name = node.name_any();
+    #[error("Failed to make API request: {0}")]
+    RequestError(String),
 
-        // Query node stats by issuing a request to the admin endpoint.
-        // See https://kubernetes.io/docs/reference/instrumentation/node-metrics/
-        let url = format!("/api/v1/nodes/{}/proxy/stats/summary", name);
-        let req = http::Request::get(url).body(Default::default())?;
+    #[error("Failed to deserialize response: {0}")]
+    DeserializationError(String),
 
-        // Deserialize JSON response as a JSON value. Alternatively, a type that
-        // implements `Deserialize` can be used.
-        let resp = client.request::<serde_json::Value>(req).await?;
+    #[error("Resource not found: {0}")]
+    NotFound(String),
 
-        // Our JSON value is an object so we can treat it like a dictionary.
-        let summary = resp
-            // .get("node")
-            .get("deployment")
-            .expect("node summary should exist in kubelet's admin endpoint");
+    #[error("Invalid configuration: {0}")]
+    ConfigError(String),
+}
 
-        // The base JSON representation includes a lot of metrics, including
-        // container metrics. Use a `NodeMetrics` type to deserialize only the
-        // values we care about.
-        let metrics = serde_json::from_value::<NodeMetrics>(summary.to_owned())?;
+/// Metrics for a Kubernetes node
+#[derive(Debug, Clone)]
+pub struct NodeMetrics {
+    pub cpu_usage_nano_cores: usize,
+    pub memory_usage_bytes: usize,
+}
 
-        // Get the current allocatable values for the node we are looking at and
-        // save in a table we will use to print the results.
-        let allocatable = node
-            .status
-            .unwrap_or_default()
-            .allocatable
-            .unwrap_or_default();
+/// Summary of a Kubernetes node including metrics and allocatable resources
+#[derive(Debug, Clone)]
+pub struct NodeSummary {
+    pub name: String,
+    pub metrics: NodeMetrics,
+    pub allocatable: BTreeMap<String, String>,
+}
 
-        summaries.push(NodeSummary {
-            name,
-            metrics,
-            allocatable,
-        })
+/// Trait for Kubernetes client operations
+#[async_trait]
+pub trait KubeClient: Send + Sync {
+    /// Lists all nodes in the cluster
+    async fn list_nodes(&self) -> Result<Vec<Node>, KubeError>;
+
+    /// Gets node metrics by querying the kubelet stats endpoint
+    async fn get_node_metrics(&self, node_name: &str) -> Result<NodeMetrics, KubeError>;
+
+    /// Gets a summary of all nodes with their metrics
+    async fn get_nodes_summary(&self) -> Result<Vec<NodeSummary>, KubeError> {
+        let nodes = self.list_nodes().await?;
+        let mut summaries = Vec::new();
+
+        for node in nodes {
+            let name = node
+                .metadata
+                .name
+                .clone()
+                .ok_or_else(|| KubeError::ConfigError("Node has no name".into()))?;
+
+            let metrics = self.get_node_metrics(&name).await?;
+
+            let allocatable = node
+                .status
+                .and_then(|s| s.allocatable)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(k, v)| (k, v.0))
+                .collect();
+
+            summaries.push(NodeSummary {
+                name,
+                metrics,
+                allocatable,
+            });
+        }
+
+        Ok(summaries)
+    }
+}
+
+/// Real Kubernetes client implementation using kube-rs
+pub struct RealKubeClient {
+    client: kube::Client,
+}
+
+impl RealKubeClient {
+    /// Creates a new Kubernetes client using the default configuration
+    pub async fn try_default() -> Result<Self, KubeError> {
+        let client = kube::Client::try_default()
+            .await
+            .map_err(|e| KubeError::Connection(e.to_string()))?;
+
+        Ok(Self { client })
+    }
+}
+
+#[async_trait]
+impl KubeClient for RealKubeClient {
+    async fn list_nodes(&self) -> Result<Vec<Node>, KubeError> {
+        use kube::api::ListParams;
+        use kube::Api;
+
+        let api: Api<Node> = Api::all(self.client.clone());
+        let nodes = api
+            .list(&ListParams::default())
+            .await
+            .map_err(|e| KubeError::ListError(e.to_string()))?;
+
+        Ok(nodes.items)
     }
 
-    print_table(summaries);
-    Ok(())
+    async fn get_node_metrics(&self, node_name: &str) -> Result<NodeMetrics, KubeError> {
+        use serde::Deserialize;
+
+        // Query node stats from kubelet admin endpoint
+        let url = format!("/api/v1/nodes/{}/proxy/stats/summary", node_name);
+        let req = http::Request::get(url)
+            .body(Vec::new())
+            .map_err(|e| KubeError::RequestError(e.to_string()))?;
+
+        let resp: serde_json::Value = self
+            .client
+            .request(req)
+            .await
+            .map_err(|e| KubeError::RequestError(e.to_string()))?;
+
+        // Extract node metrics from the response
+        let summary = resp
+            .get("node")
+            .ok_or_else(|| KubeError::NotFound("node summary not found in response".into()))?;
+
+        #[derive(Deserialize)]
+        struct CpuMetric {
+            #[serde(rename = "usageNanoCores")]
+            usage_nano_cores: usize,
+        }
+
+        #[derive(Deserialize)]
+        struct MemoryMetric {
+            #[serde(rename = "usageBytes")]
+            usage_bytes: usize,
+        }
+
+        #[derive(Deserialize)]
+        struct Metrics {
+            cpu: CpuMetric,
+            memory: MemoryMetric,
+        }
+
+        let metrics: Metrics = serde_json::from_value(summary.clone())
+            .map_err(|e| KubeError::DeserializationError(e.to_string()))?;
+
+        Ok(NodeMetrics {
+            cpu_usage_nano_cores: metrics.cpu.usage_nano_cores,
+            memory_usage_bytes: metrics.memory.usage_bytes,
+        })
+    }
 }
 
-/// Contains a node's stats, its total allocatable memory and CPU and its CPU
-/// and memory usage metrics.
-#[derive(Debug)]
-struct NodeSummary {
-    name: String,
-    metrics: NodeMetrics,
-    allocatable: NodeAlloc,
-}
-
-/// Information on the CPU and memory usage of a node as returned by its
-/// kubelet.
-#[derive(Debug, Deserialize)]
-struct NodeMetrics {
-    cpu: Metric,
-    memory: Metric,
-}
-
-// Convenience alias
-type NodeAlloc = std::collections::BTreeMap<String, Quantity>;
-
-/// A metric is either the CPU usage (represented as a share of the CPU's whole
-/// core value) or the memory usage (represented in bytes)
-/// None of these metrics are cumulative.
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum Metric {
-    #[serde(rename_all = "camelCase")]
-    Cpu { usage_nano_cores: usize },
-
-    #[serde(rename_all = "camelCase")]
-    Memory { usage_bytes: usize },
-}
-
-fn print_table(summaries: Vec<NodeSummary>) {
+/// Displays node metrics in a formatted table
+pub fn print_table(summaries: Vec<NodeSummary>) {
     use headers::*;
 
-    // Each column (except for name) should be as wide as the length of its
-    // header plus some additional slack to make it look prettier.
+    // Calculate column widths
     let w_used_mem = USED_MEM.len() + 4;
     let w_used_cpu = USED_CPU.len() + 2;
     let w_percent_mem = PERCENT_MEM.len() + 2;
     let w_percent_cpu = PERCENT_CPU.len() + 4;
 
-    // Width of name column should accommodate the longest node name present in
-    // the list of summaries
+    // Width of name column accommodates the longest node name
     let w_name = {
         let max_name_width = summaries
             .iter()
@@ -109,77 +183,92 @@ fn print_table(summaries: Vec<NodeSummary>) {
         max_name_width + 4
     };
 
+    // Print header
     println!(
         "{NAME:w_name$} {USED_MEM:w_used_mem$} {PERCENT_MEM:w_percent_mem$} {USED_CPU:w_used_cpu$} {PERCENT_CPU:w_percent_cpu$}"
     );
+
+    // Print each node's metrics
     for summary in summaries {
-        // Get Node memory allocatable and trim measurement suffix.
+        let name = &summary.name;
+
+        // Parse memory allocatable (in Ki)
         let mem_total = summary
             .allocatable
             .get("memory")
-            .map(|mem| {
-                let mem = mem.0.trim_end_matches("Ki");
-                mem.parse::<usize>().ok().unwrap_or(1)
+            .and_then(|mem| {
+                mem.trim_end_matches("Ki")
+                    .parse::<usize>()
+                    .ok()
             })
-            .unwrap_or_else(|| 1);
+            .unwrap_or(1);
 
-        // CPU allocatable quantity on the node does not have a measurement,
-        // but is assumed to be whole cores.
+        // Parse CPU allocatable (whole cores)
         let cpu_total = summary
             .allocatable
             .get("cpu")
-            .map(|mem| mem.0.parse::<usize>().ok().unwrap_or(1))
-            .unwrap_or_else(|| 1);
+            .and_then(|cpu| cpu.parse::<usize>().ok())
+            .unwrap_or(1);
 
-        let name = summary.name;
-        let (percent_mem, used_mem) = summary.metrics.memory.convert_to_stat(mem_total);
-        let (percent_cpu, used_cpu) = summary.metrics.cpu.convert_to_stat(cpu_total);
+        let (percent_mem, used_mem) =
+            convert_memory_to_stat(summary.metrics.memory_usage_bytes, mem_total);
+        let (percent_cpu, used_cpu) =
+            convert_cpu_to_stat(summary.metrics.cpu_usage_nano_cores, cpu_total);
 
         println!("{name:w_name$} {used_mem:<w_used_mem$} {percent_mem:<w_percent_mem$} {used_cpu:<w_used_cpu$} {percent_cpu:<w_percent_cpu$}");
     }
 }
 
-// === impl Metric ===
+/// Convert memory usage to human-readable format
+fn convert_memory_to_stat(usage_bytes: usize, alloc_kibibytes: usize) -> (String, String) {
+    // 1 MiB = 2^20 bytes
+    let mem_mib = usage_bytes as f64 / (1 << 20) as f64;
+    // 1 MiB = 2^10 KiB
+    let alloc_mib = alloc_kibibytes as f64 / (1 << 10) as f64;
+    let used_percent = ((mem_mib / alloc_mib) * 100.0) as usize;
 
-impl Metric {
-    // Convert measurement to what we will use in the table.
-    // - CPU values are represented in millicores
-    // - Memory values are represented in MiB (mebibyte)
-    fn convert_to_stat(&self, alloc_total: usize) -> (String, String) {
-        match self {
-            // 1 millicore = 1000th of a CPU, 1 nano core = 1 billionth of a CPU
-            // convert nano to milli
-            Metric::Cpu { usage_nano_cores } => {
-                // 1 millicore is a 1000th of a CPU. Our values are in
-                // nanocores (a billionth of a CPU), so convert from nano to
-                // milli.
-                let cpu_m = (usage_nano_cores / (1000 * 1000)) as f64;
-                // Convert a whole core to a millicore value
-                let alloc_m = (alloc_total * 1000) as f64;
-                // Calculate percentage
-                let used = (cpu_m / alloc_m * 100.0) as usize;
-
-                (format!("{used}%"), format!("{}m", cpu_m as usize))
-            }
-
-            Metric::Memory { usage_bytes } => {
-                // 1 MiB = 2^20 bytes
-                let mem_mib = *usage_bytes as f64 / (u64::pow(2, 20)) as f64;
-                // 1 MiB = 2^10 KiB
-                let alloc_mib = alloc_total as f64 / (u64::pow(2, 10)) as f64;
-                let used = ((mem_mib / alloc_mib) * 100.0) as usize;
-                (format!("{used}%"), format!("{}Mi", mem_mib as usize))
-            }
-        }
-    }
+    (format!("{}%", used_percent), format!("{}Mi", mem_mib as usize))
 }
 
-/// Namespaces a group of constants used as the stat table headers.
-// This way, the names do not have to be prefixed with `HEADER_`.
+/// Convert CPU usage to human-readable format
+fn convert_cpu_to_stat(usage_nano_cores: usize, alloc_cores: usize) -> (String, String) {
+    // 1 millicore = 1000th of a CPU
+    // 1 nanocore = 1 billionth of a CPU
+    // Convert nano to milli: divide by 1,000,000
+    let cpu_millicores = (usage_nano_cores / 1_000_000) as f64;
+    // Convert cores to millicores
+    let alloc_millicores = (alloc_cores * 1000) as f64;
+    let used_percent = ((cpu_millicores / alloc_millicores) * 100.0) as usize;
+
+    (
+        format!("{}%", used_percent),
+        format!("{}m", cpu_millicores as usize),
+    )
+}
+
+/// Runs the operator with the given Kubernetes client
+pub async fn run_operator(client: &dyn KubeClient) -> Result<(), KubeError> {
+    let summaries = client.get_nodes_summary().await?;
+    print_table(summaries);
+    Ok(())
+}
+
+/// Namespaces table header constants
 pub mod headers {
     pub const NAME: &str = "NAME";
     pub const USED_MEM: &str = "MEMORY(bytes)";
     pub const USED_CPU: &str = "CPU(cores)";
     pub const PERCENT_MEM: &str = "MEMORY%";
     pub const PERCENT_CPU: &str = "CPU%";
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Create a real Kubernetes client
+    let client = RealKubeClient::try_default().await?;
+
+    // Run the operator with the real client
+    run_operator(&client).await?;
+
+    Ok(())
 }

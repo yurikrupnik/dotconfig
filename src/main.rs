@@ -6,6 +6,7 @@ mod state;
 mod actions;
 mod utils;
 mod app;
+mod traits;
 
 use crates::tracing::init_tracing_with_level;
 use clap::{CommandFactory, Parser, Subcommand};

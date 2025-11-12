@@ -27,7 +27,7 @@ k8s-openapi = {version = "0.26", features = ["latest"]}
 serde = { version = "1.0", features = ["derive"] }
 tracing = '0.1'
 tracing-subscriber = { version = '0.3', features = ['env-filter', 'json', 'serde_json'] }
-#thiserror = "2.0.16"
+thiserror = "2.0.16"
 #uuid = "1.18.1"
 #sqlx = "0.8.6"
 serde_json = "1.0.145"

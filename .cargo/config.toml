@@ -7,10 +7,6 @@ target-dir = 'dist/target'
 [term]
 color = "auto"
 
-[config-files]
-RUST_LOG = "info"
-LOG_LEVEL = "info"
-
 [env]
 RUST_LOG = "info"
 RUST_ENV = "development"
