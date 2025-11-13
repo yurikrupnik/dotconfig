@@ -85,21 +85,31 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
+    let Cli {
+        command,
+        debug,
+        dry_run,
+        output,
+        no_color,
+        postgres_url,
+        redis_url,
+        mongo_url,
+        config,
+    } = Cli::parse();
 
-    let config = Config::load_or_default(cli.config);
+    let config = Config::load_or_default(config);
 
     let merged_config = config.merge_with_cli(
-        cli.postgres_url,
-        cli.redis_url,
-        cli.mongo_url,
+        postgres_url,
+        redis_url,
+        mongo_url,
     );
 
     let ctx = AppContext::new(
-        cli.debug,
-        cli.dry_run,
-        cli.output,
-        cli.no_color,
+        debug,
+        dry_run,
+        output,
+        no_color,
         merged_config.database.postgres_url.clone(),
         merged_config.database.redis_url.clone(),
         merged_config.database.mongo_url.clone(),
@@ -120,7 +130,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app = App::new(ctx, state);
 
-    match cli.command {
+    match command {
         Commands::Completions { shell } => {
             generate_completions(shell);
             Ok(())

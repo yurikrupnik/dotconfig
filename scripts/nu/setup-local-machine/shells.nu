@@ -1,7 +1,7 @@
 #!/usr/bin/env nu
 
 use std log
-#nu -c 'source scripts/nu/setup-local-machine/mcp.nu; main apply mcp --enable-playwright'
+
 def load_config [config_path: string]: nothing -> record {
     if not ($config_path | path exists) {
         error make { msg: $"Config file not found: ($config_path)" }

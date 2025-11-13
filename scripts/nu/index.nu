@@ -1,29 +1,8 @@
 #!/usr/bin/env nu
 
-#use local-dev/cluster.nu *
 use shared/shared.nu *
-#source setup-local-machine/mcp.nu
-#source setup-local-machine/mcp.nu
-# source setup-local-machine/index.nu
-source setup-local-machine/index.nu
 
- export def "main nx" [
-  --cpu(-c): string = ""
-  --target(-t): string = "build"
-  --command(-s): string = "run-many"
-] {
-  if $command not-in ["run-many", "affected"] {
-      error make {msg: "command must be either 'run-many' or 'affected'"}
-  }
-  let cpus = if ($cpu | is-empty) {
-      sys cpu | length
-  } else {
-      $cpu | into int
-  }
-
-  print $cpus
-  bun nx run-many -t $target --parallel $"--max-parallel=($cpus)" --prod
-}
+def main [] {}
 
 export def "main dev down" [
     --cloud: string = "local"
