@@ -8,4 +8,5 @@ providers:
           github-secret: GITHUB_TOKEN
           app-secrets: APP_SECRETS
           manager-secrets: MANAGER_SECRETS
+          docker-secret: DOCKER_PASSWORD
 

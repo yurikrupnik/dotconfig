@@ -1,5 +1,18 @@
 #!/usr/bin/env nu
 
+# Logging functions
+export def "log info" [message: string] {
+    print $"(ansi green)INFO:(ansi reset) ($message)"
+}
+
+export def "log error" [message: string] {
+    print $"(ansi red)ERROR:(ansi reset) ($message)"
+}
+
+export def "log warning" [message: string] {
+    print $"(ansi yellow)WARNING:(ansi reset) ($message)"
+}
+
 export const CLOUD_PROVIDERS = {
   aws: "aws",
   gcp: "gcp",
