@@ -10,7 +10,7 @@ def fetch-secrets-from-teller [] {
     log info "Fetching secrets from GCP Secret Manager via Teller..."
 
     # Fetch secrets from Teller and parse into a record
-    let secrets_output = (^teller --config .teller.yml env)
+    let secrets_output = (^teller --config ~/dotconfig/.teller.yml env)
     let secrets = ($secrets_output | lines)
 
     mut env_record = {}
@@ -147,7 +147,7 @@ export def "main dev up" [
 
             if (do --ignore-errors { kubectl get ns dbs --no-headers -o name | lines | length }) == 0 {
                 ^kubectl create namespace dbs
-                kompose convert --file ~/projects/playground/manifests/dockers/compose.yaml --namespace dbs --stdout | kubectl apply -f -
+                kompose convert --file ~/private/nx-playground/manifests/dockers/compose.yaml --namespace dbs --stdout | kubectl apply -f -
             }
 
             if (do --ignore-errors { kubectl -n flux-system get deployment source-controller -o name --no-headers | lines | length }) == 0 {
