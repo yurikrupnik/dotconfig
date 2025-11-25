@@ -1,8 +1,8 @@
+use crate::commands::RunCommand;
+use crate::crates::code_graph::CodeGraphClient;
+use crate::traits::CommandContext;
 use clap::Subcommand;
 use std::path::PathBuf;
-use crate::commands::RunCommand;
-use crate::traits::CommandContext;
-use crate::crates::code_graph::CodeGraphClient;
 
 #[derive(Subcommand)]
 pub enum CodeGraphAction {
@@ -21,12 +21,9 @@ pub enum CodeGraphAction {
 #[async_trait::async_trait]
 impl RunCommand for CodeGraphAction {
     async fn run(&self, ctx: &dyn CommandContext) -> anyhow::Result<()> {
-        let client = CodeGraphClient::new(
-            ctx.neo4j_uri(),
-            ctx.neo4j_username(),
-            ctx.neo4j_password(),
-        )
-        .await?;
+        let client =
+            CodeGraphClient::new(ctx.neo4j_uri(), ctx.neo4j_username(), ctx.neo4j_password())
+                .await?;
 
         match self {
             CodeGraphAction::Init => {

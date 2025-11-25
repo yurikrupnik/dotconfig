@@ -15,8 +15,7 @@ pub fn init_tracing_with_level(level: Level, no_color: bool) {
         Level::ERROR => "error",
     };
 
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(level_str));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level_str));
 
     if is_production {
         tracing_subscriber::fmt()
@@ -36,5 +35,8 @@ pub fn init_tracing_with_level(level: Level, no_color: bool) {
         }
     }
 
-    info!("Logging initialized. Environment: {}, Level: {}", rust_env, level_str);
+    info!(
+        "Logging initialized. Environment: {}, Level: {}",
+        rust_env, level_str
+    );
 }

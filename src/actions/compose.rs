@@ -1,8 +1,8 @@
-use clap::Subcommand;
-use tokio::process::Command;
 use crate::commands::RunCommand;
 use crate::traits::CommandContext;
 use crate::utils::docker::resolve_compose_file;
+use clap::Subcommand;
+use tokio::process::Command;
 
 #[derive(clap::Args)]
 pub struct ComposeUpArgs {
@@ -41,7 +41,10 @@ impl RunCommand for ComposeAction {
         match self {
             ComposeAction::Up(args) => {
                 if ctx.dry_run() {
-                    tracing::info!("DRY-RUN: Would run docker compose up with detach={}", args.detach);
+                    tracing::info!(
+                        "DRY-RUN: Would run docker compose up with detach={}",
+                        args.detach
+                    );
                     return Ok(());
                 }
 
@@ -51,7 +54,8 @@ impl RunCommand for ComposeAction {
                 let compose_file = resolve_compose_file(args.file.clone())?;
 
                 let cmd = vec!["up"];
-                let result = run_docker_compose(&cmd, &compose_file, args.detach, &args.args).await?;
+                let result =
+                    run_docker_compose(&cmd, &compose_file, args.detach, &args.args).await?;
 
                 Ok(result)
             }
@@ -137,10 +141,10 @@ async fn run_docker_compose(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::App;
     use crate::commands::RunCommand;
     use crate::context::{AppContext, OutputFormat};
     use crate::state::AppState;
-    use crate::app::App;
     use serial_test::serial;
     use std::fs;
     use tempfile::TempDir;

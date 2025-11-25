@@ -1,21 +1,21 @@
-mod crates;
-mod context;
-mod config;
-mod commands;
-mod state;
 mod actions;
-mod utils;
 mod app;
+mod commands;
+mod config;
+mod context;
+mod crates;
+mod state;
 mod traits;
+mod utils;
 
-use crates::tracing::init_tracing_with_level;
-use clap::{CommandFactory, Parser, Subcommand};
-use context::{AppContext, OutputFormat};
-use config::Config;
-use state::AppState;
+use actions::{CodeGraphAction, ComposeAction, DashboardAction, ShitAction};
 use app::App;
+use clap::{CommandFactory, Parser, Subcommand};
 use commands::RunCommand;
-use actions::{ComposeAction, DashboardAction, ShitAction, CodeGraphAction};
+use config::Config;
+use context::{AppContext, OutputFormat};
+use crates::tracing::init_tracing_with_level;
+use state::AppState;
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -99,11 +99,7 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Config::load_or_default(config);
 
-    let merged_config = config.merge_with_cli(
-        postgres_url,
-        redis_url,
-        mongo_url,
-    );
+    let merged_config = config.merge_with_cli(postgres_url, redis_url, mongo_url);
 
     let ctx = AppContext::new(
         debug,

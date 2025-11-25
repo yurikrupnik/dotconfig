@@ -1,5 +1,5 @@
 mod client;
-mod visitor;
 mod types;
+mod visitor;
 
 pub use client::CodeGraphClient;

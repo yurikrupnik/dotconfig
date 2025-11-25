@@ -1,9 +1,9 @@
+pub mod code_graph;
 pub mod compose;
 pub mod dashboard;
 pub mod shit;
-pub mod code_graph;
 
+pub use code_graph::CodeGraphAction;
 pub use compose::ComposeAction;
 pub use dashboard::DashboardAction;
 pub use shit::ShitAction;
-pub use code_graph::CodeGraphAction;

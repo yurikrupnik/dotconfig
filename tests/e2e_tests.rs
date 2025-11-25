@@ -47,11 +47,7 @@ fn test_compose_down_e2e_with_stub_docker() {
     fs::write(&compose_file, "version: '3'\nservices: {}\n").unwrap();
 
     let stub_docker = temp_dir.path().join("docker");
-    fs::write(
-        &stub_docker,
-        "#!/bin/bash\necho \"Docker down\"\nexit 0\n",
-    )
-    .unwrap();
+    fs::write(&stub_docker, "#!/bin/bash\necho \"Docker down\"\nexit 0\n").unwrap();
 
     #[cfg(unix)]
     {

@@ -39,6 +39,11 @@ commands = [
     "nu ~/dotconfig/scripts/nu/setup-local-machine/shells.nu generate \"$@\""
 ]
 
+[functions.sort]
+commands = [
+    "cargo fmt",
+    "cargo sort --workspace"
+]
 [functions.generate]
 description = "Run generate shells commands, supports zsh, fish and nu scripts."
 commands = [

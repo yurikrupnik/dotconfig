@@ -1,6 +1,6 @@
+use super::types::{CodeNode, Relationship};
 use std::sync::Arc;
 use syn::{visit::Visit, Item};
-use super::types::{CodeNode, Relationship};
 
 pub struct CodeVisitor {
     file_path: Arc<str>,
@@ -337,9 +337,7 @@ mod tests {
 
         match &visitor.nodes()[0] {
             CodeNode::Impl {
-                target,
-                trait_name,
-                ..
+                target, trait_name, ..
             } => {
                 assert_eq!(target, "MyStruct");
                 assert_eq!(trait_name, &Some("Display".into()));

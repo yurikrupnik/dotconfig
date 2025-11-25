@@ -1,6 +1,6 @@
-use clap::Subcommand;
 use crate::commands::RunCommand;
 use crate::traits::CommandContext;
+use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub enum ShitAction {
@@ -28,8 +28,12 @@ impl RunCommand for ShitAction {
                 } else {
                     tracing::info!("Doing it with {name:?}");
                 }
-            },
-            ShitAction::Project { dry_run, docker_runtime, .. } => {
+            }
+            ShitAction::Project {
+                dry_run,
+                docker_runtime,
+                ..
+            } => {
                 let effective_dry_run = *dry_run.as_ref().unwrap_or(&false) || ctx.dry_run();
                 if effective_dry_run {
                     tracing::info!("DRY-RUN: Would manage project");

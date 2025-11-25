@@ -42,8 +42,7 @@ impl AppState {
             postgres: None,
             redis: None,
             mongo: None,
-            neo4j_uri: std::env::var("NEO4J_URI")
-                .unwrap_or_else(|_| DEFAULT_NEO4J_URI.into()),
+            neo4j_uri: std::env::var("NEO4J_URI").unwrap_or_else(|_| DEFAULT_NEO4J_URI.into()),
             neo4j_username: std::env::var("NEO4J_USERNAME")
                 .unwrap_or_else(|_| DEFAULT_NEO4J_USERNAME.into()),
             neo4j_password: std::env::var("NEO4J_PASSWORD")

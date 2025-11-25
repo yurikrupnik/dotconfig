@@ -196,11 +196,7 @@ pub fn print_table(summaries: Vec<NodeSummary>) {
         let mem_total = summary
             .allocatable
             .get("memory")
-            .and_then(|mem| {
-                mem.trim_end_matches("Ki")
-                    .parse::<usize>()
-                    .ok()
-            })
+            .and_then(|mem| mem.trim_end_matches("Ki").parse::<usize>().ok())
             .unwrap_or(1);
 
         // Parse CPU allocatable (whole cores)
@@ -227,7 +223,10 @@ fn convert_memory_to_stat(usage_bytes: usize, alloc_kibibytes: usize) -> (String
     let alloc_mib = alloc_kibibytes as f64 / (1 << 10) as f64;
     let used_percent = ((mem_mib / alloc_mib) * 100.0) as usize;
 
-    (format!("{}%", used_percent), format!("{}Mi", mem_mib as usize))
+    (
+        format!("{}%", used_percent),
+        format!("{}Mi", mem_mib as usize),
+    )
 }
 
 /// Convert CPU usage to human-readable format

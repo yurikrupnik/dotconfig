@@ -1,5 +1,5 @@
-use anyhow::Result;
 use crate::traits::CommandContext;
+use anyhow::Result;
 
 /// Trait for executable commands
 ///

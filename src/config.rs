@@ -9,14 +9,12 @@ pub struct Config {
     pub logging: LoggingConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DatabaseConfig {
     pub postgres_url: Option<String>,
     pub redis_url: Option<String>,
     pub mongo_url: Option<String>,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoggingConfig {
@@ -136,7 +134,10 @@ format = "json"
             config.database.postgres_url,
             Some("postgres://localhost/test".into())
         );
-        assert_eq!(config.database.redis_url, Some("redis://localhost:6379".into()));
+        assert_eq!(
+            config.database.redis_url,
+            Some("redis://localhost:6379".into())
+        );
         assert_eq!(config.logging.level, Some("debug".into()));
         assert_eq!(config.logging.format, Some("json".into()));
     }
@@ -222,10 +223,7 @@ format = "json"
 
         let merged = base_config.merge_with_cli(None, None, None);
 
-        assert_eq!(
-            merged.database.postgres_url,
-            Some("postgres://base".into())
-        );
+        assert_eq!(merged.database.postgres_url, Some("postgres://base".into()));
         assert_eq!(merged.database.redis_url, Some("redis://base".into()));
         assert_eq!(merged.database.mongo_url, Some("mongo://base".into()));
     }
@@ -263,10 +261,7 @@ postgres_url = "postgres://test"
 
         let config = Config::load_or_default(Some(temp_file.path().to_str().unwrap().into()));
 
-        assert_eq!(
-            config.database.postgres_url,
-            Some("postgres://test".into())
-        );
+        assert_eq!(config.database.postgres_url, Some("postgres://test".into()));
     }
 
     #[test]
@@ -280,10 +275,7 @@ postgres_url = "postgres://test"
         let config = Config::default();
         let cloned = config.clone();
 
-        assert_eq!(
-            config.database.postgres_url,
-            cloned.database.postgres_url
-        );
+        assert_eq!(config.database.postgres_url, cloned.database.postgres_url);
         assert_eq!(config.logging.level, cloned.logging.level);
     }
 }

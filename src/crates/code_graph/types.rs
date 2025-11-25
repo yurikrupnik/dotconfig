@@ -257,10 +257,7 @@ mod tests {
         let cloned = node.clone();
 
         match (node, cloned) {
-            (
-                CodeNode::Function { name: n1, .. },
-                CodeNode::Function { name: n2, .. },
-            ) => {
+            (CodeNode::Function { name: n1, .. }, CodeNode::Function { name: n2, .. }) => {
                 assert_eq!(n1, n2);
             }
             _ => panic!("Clone failed"),

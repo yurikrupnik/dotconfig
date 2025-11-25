@@ -163,4 +163,3 @@ mod tests {
         assert_ne!(OutputFormat::Json, OutputFormat::Quiet);
     }
 }
-

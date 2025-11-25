@@ -21,7 +21,6 @@ salvo-cli
 wasm-pack
 
 # Development tools
-cargo-watch
 cargo-nextest
 bacon
 

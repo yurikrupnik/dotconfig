@@ -1,7 +1,7 @@
-use clap::Subcommand;
-use std::fs;
 use crate::commands::RunCommand;
 use crate::traits::CommandContext;
+use clap::Subcommand;
+use std::fs;
 
 #[derive(Subcommand)]
 pub enum DashboardAction {
@@ -68,7 +68,11 @@ impl RunCommand for DashboardAction {
                 let dashboard_content = serde_json::to_string_pretty(&dashboard_template)?;
 
                 if ctx.dry_run() {
-                    tracing::info!("DRY-RUN: Would create dashboard '{}' at {}", name, dashboard_path);
+                    tracing::info!(
+                        "DRY-RUN: Would create dashboard '{}' at {}",
+                        name,
+                        dashboard_path
+                    );
                     return Ok(());
                 }
 
@@ -76,7 +80,11 @@ impl RunCommand for DashboardAction {
 
                 match result {
                     Ok(_) => {
-                        tracing::info!("Dashboard '{}' created successfully at {}", name, dashboard_path);
+                        tracing::info!(
+                            "Dashboard '{}' created successfully at {}",
+                            name,
+                            dashboard_path
+                        );
                         Ok(())
                     }
                     Err(e) => anyhow::bail!("Failed to create dashboard: {}", e),

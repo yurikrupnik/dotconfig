@@ -184,7 +184,10 @@ impl CodeGraphClient {
         }
 
         for chunk in relationships.chunks(BATCH_SIZE) {
-            let futures: Vec<_> = chunk.iter().map(|rel| self.create_relationship(rel)).collect();
+            let futures: Vec<_> = chunk
+                .iter()
+                .map(|rel| self.create_relationship(rel))
+                .collect();
             let results = join_all(futures).await;
             for result in results {
                 if let Err(e) = result {
@@ -202,12 +205,10 @@ impl CodeGraphClient {
                 name,
                 path,
                 node_type,
-            } => Query::new(
-                "MERGE (p:Project {name: $name, path: $path, type: $type})".into(),
-            )
-            .param("name", name.as_str())
-            .param("path", path.as_str())
-            .param("type", node_type.as_str()),
+            } => Query::new("MERGE (p:Project {name: $name, path: $path, type: $type})".into())
+                .param("name", name.as_str())
+                .param("path", path.as_str())
+                .param("type", node_type.as_str()),
 
             CodeNode::File { path, project } => {
                 Query::new("MERGE (f:File {path: $path, project: $project})".into())
@@ -233,23 +234,19 @@ impl CodeGraphClient {
                 name,
                 file,
                 visibility,
-            } => Query::new(
-                "MERGE (s:Struct {name: $name, file: $file, visibility: $vis})".into(),
-            )
-            .param("name", name.as_str())
-            .param("file", file.as_str())
-            .param("vis", visibility.as_str()),
+            } => Query::new("MERGE (s:Struct {name: $name, file: $file, visibility: $vis})".into())
+                .param("name", name.as_str())
+                .param("file", file.as_str())
+                .param("vis", visibility.as_str()),
 
             CodeNode::Trait {
                 name,
                 file,
                 visibility,
-            } => Query::new(
-                "MERGE (t:Trait {name: $name, file: $file, visibility: $vis})".into(),
-            )
-            .param("name", name.as_str())
-            .param("file", file.as_str())
-            .param("vis", visibility.as_str()),
+            } => Query::new("MERGE (t:Trait {name: $name, file: $file, visibility: $vis})".into())
+                .param("name", name.as_str())
+                .param("file", file.as_str())
+                .param("vis", visibility.as_str()),
 
             CodeNode::Module { name, file } => {
                 Query::new("MERGE (m:Module {name: $name, file: $file})".into())
@@ -262,10 +259,9 @@ impl CodeGraphClient {
                 trait_name,
                 file,
             } => {
-                let mut q =
-                    Query::new("MERGE (i:Impl {target: $target, file: $file})".into())
-                        .param("target", target.as_str())
-                        .param("file", file.as_str());
+                let mut q = Query::new("MERGE (i:Impl {target: $target, file: $file})".into())
+                    .param("target", target.as_str())
+                    .param("file", file.as_str());
 
                 if let Some(trait_impl) = trait_name {
                     q = q.param("trait", trait_impl.as_str());
