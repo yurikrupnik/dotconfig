@@ -45,7 +45,7 @@ cargo-audit
 # Release & deployment
 cargo-release
 cargo-bloat
-
+sccache
 # Database tools
 sqlx-cli
 

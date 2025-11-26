@@ -32,7 +32,8 @@ claude = "bun run ~/.bun/bin/claude"
 [functions.update]
 description = "Update system packages"
 commands = [
-    "brew bundle --file ~/dotconfig/brew/Brewfile",
+    "brew update",
+    "brew bundle --file ~/dotconfig/brew/Brewfile --upgrade",
     "rustup update",
     "gcloud components update",
     "npm update -g",
