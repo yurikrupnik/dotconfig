@@ -1,0 +1,15 @@
+# Generated from config.toml
+
+set -gx EDITOR 'zed'
+set -gx BROWSER 'open'
+set -gx SHIT_TEXT 'omg'
+set -gx SHIT 'true'
+set -gx AI 'claude'
+set -gx PROJECT 'rust'
+set -gx TYPE 'be'
+set -gx CLOUD_GPROJECT 'playground-447016'
+set -gx CLOUD_GACOUNT 'krupnik.yuri@gmail.com'
+set -gx CLOUD_GREGION 'me-west1'
+set -gx CLOUD 'gcp'
+set -gx CONTAINER_REGISTRY 'docker.com/yurikrupnik'
+set -gx CONTAINER_REGISTRY_BACKUP 'me-west1-docker.pkg.dev/playground-447016/containers'

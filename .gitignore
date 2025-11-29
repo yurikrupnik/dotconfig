@@ -10,7 +10,6 @@ Thumbs.db
 /target
 /dist
 /tmp
-/output
 # Temporary files
 *.tmp
 *.temp
