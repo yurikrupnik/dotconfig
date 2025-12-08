@@ -144,6 +144,64 @@ def generate_fish [config: record, output_dir: string] {
     }
 }
 
+def generate_bash [config: record, output_dir: string] {
+    mkdir $output_dir
+    let output_file = $output_dir | path join "generated.bash"
+
+    mut content = "# Generated from config.toml\n\n"
+
+    if "aliases" in $config {
+        $content = $content + "# Aliases\n"
+        for entry in ($config.aliases | transpose key value) {
+            $content = $content + $"alias ($entry.key)='($entry.value)'\n"
+        }
+        $content = $content + "\n"
+    }
+
+    if "functions" in $config {
+        $content = $content + "# Functions\n"
+        for entry in ($config.functions | transpose key value) {
+            let func = $entry.value
+            $content = $content + $entry.key + "() {\n"
+
+            if "commands" in $func {
+                for cmd in $func.commands {
+                    let processed = if ($cmd | str contains "{arg}") {
+                        $cmd | str replace -a "{arg}" '$1'
+                    } else {
+                        $cmd
+                    }
+                    $content = $content + $"    ($processed)\n"
+                }
+            } else if "command" in $func {
+                let processed = if ($func.command | str contains "{arg}") {
+                    $func.command | str replace -a "{arg}" '$1'
+                } else {
+                    $func.command
+                }
+                $content = $content + $"    ($processed)\n"
+            }
+
+            $content = $content + "}\n\n"
+        }
+    }
+
+    if "environment" in $config {
+        $content = $content + "# Environment Variables\n"
+        for entry in ($config.environment | transpose key value) {
+            let val = if ($entry.value | describe) == "bool" {
+                if $entry.value { "true" } else { "false" }
+            } else {
+                $entry.value
+            }
+            $content = $content + $"export ($entry.key)='($val)'\n"
+        }
+    }
+
+    $content | save -f $output_file
+    log info $"Generated bash config: ($output_file)"
+}
+
 def generate_nushell [config: record, output_dir: string] {
     mkdir $output_dir
     let output_file = $output_dir | path join "generated.nu"
@@ -301,7 +359,8 @@ export def "main generate" [
     --zsh-dir: string = "~/dotconfig/output/zsh/.config/zsh"
     --fish-dir: string = "~/dotconfig/output/fish/.config/fish"
     --nu-dir: string = "~/dotconfig/output/nu/.config/nushell"
-    --shells: list<string> = ["zsh", "fish", "nu"]
+    --bash-dir: string = "~/dotconfig/output/bash/.config/bash"
+    --shells: list<string> = ["zsh", "fish", "nu", "bash"]
 ] {
     let config_path = $config_path | path expand
     let config = load_config $config_path
@@ -318,6 +377,10 @@ export def "main generate" [
 
     if "nu" in $shells {
         generate_nushell $config ($nu_dir | path expand)
+    }
+
+    if "bash" in $shells {
+        generate_bash $config ($bash_dir | path expand)
     }
 
     log info "Shell configurations generated successfully"

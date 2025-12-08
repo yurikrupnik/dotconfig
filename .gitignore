@@ -30,3 +30,4 @@ local/
 dotconfig-backup-*/
 /output/zsh/.config/zsh/.zcompdump
 /output/zsh/.config/zsh/.zsh_history
+/output/bash/.config/bash/.bash_history
