@@ -59,3 +59,8 @@ set -gx KUBE_EDITOR zed
 if test -f /opt/homebrew/share/google-cloud-sdk/path.fish.inc
     source /opt/homebrew/share/google-cloud-sdk/path.fish.inc
 end
+
+# Added by LM Studio CLI (lms)
+set -gx PATH $PATH /Users/yurikrupnik/.lmstudio/bin
+# End of LM Studio CLI section
+

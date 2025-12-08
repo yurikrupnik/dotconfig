@@ -18,7 +18,7 @@ cdoc = "cargo doc"
 #alias cdoco=cargo doc --open
 gs = "git status"
 ga = "git add"
-claude = "bun run ~/.bun/bin/claude"
+#claude = "bun run ~/.bun/bin/claude"
 
 
 #[functions.knd]
@@ -36,7 +36,6 @@ commands = [
     "brew bundle --file ~/dotconfig/brew/Brewfile --upgrade",
     "rustup update",
     "gcloud components update",
-    "npm update -g",
     "nu ~/dotconfig/scripts/nu/setup-local-machine/shells.nu generate \"$@\""
 ]
 

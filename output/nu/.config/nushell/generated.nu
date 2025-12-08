@@ -16,7 +16,6 @@ export alias c = cargo
 export alias cdoc = cargo doc
 export alias gs = git status
 export alias ga = git add
-export alias claude = bun run ~/.bun/bin/claude
 
 # Functions
 # Update system packages
@@ -25,7 +24,6 @@ export def u [...args] {
     ^brew bundle --file ~/dotconfig/brew/Brewfile --upgrade
     ^rustup update
     ^gcloud components update
-    ^npm update -g
     ^nu ~/dotconfig/scripts/nu/setup-local-machine/shells.nu generate ...$args
 }
 

@@ -12,7 +12,6 @@ alias c='cargo'
 alias cdoc='cargo doc'
 alias gs='git status'
 alias ga='git add'
-alias claude='bun run ~/.bun/bin/claude'
 
 # Functions
 update() {
@@ -20,7 +19,6 @@ update() {
     brew bundle --file ~/dotconfig/brew/Brewfile --upgrade
     rustup update
     gcloud components update
-    npm update -g
     nu ~/dotconfig/scripts/nu/setup-local-machine/shells.nu generate "$@"
 }
 
