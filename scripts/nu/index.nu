@@ -3,14 +3,14 @@
 use shared/shared.nu *
 use local-dev/cluster.nu [create, delete_cluster]
 
-# Fetch secrets from Teller and return as a record
-def fetch-secrets-from-teller [] {
-    _require-bin "teller"
+# Fetch secrets from vals and return as a record
+def fetch-secrets-from-vals [] {
+    _require-bin "vals"
 
-    log info "Fetching secrets from GCP Secret Manager via Teller..."
+    log info "Fetching secrets from GCP Secret Manager via vals..."
 
-    # Fetch secrets from Teller and parse into a record
-    let secrets_output = (^teller --config ~/dotconfig/.teller.yml env)
+    # Fetch secrets from vals and parse into a record
+    let secrets_output = (^vals env -f ~/dotconfig/.vals.yaml)
     let secrets = ($secrets_output | lines)
 
     mut env_record = {}
@@ -28,14 +28,14 @@ def fetch-secrets-from-teller [] {
         }
     }
 
-    log info $"✅ Fetched ($env_record | columns | length) secrets from Teller"
+    log info $"✅ Fetched ($env_record | columns | length) secrets from vals"
 
     $env_record
 }
 
 def main [] {
     print "Development Environment Management"
-    print "\nSecrets are automatically fetched from GCP Secret Manager via Teller"
+    print "\nSecrets are automatically fetched from GCP Secret Manager via vals"
     print "No .env file is needed - secrets are loaded directly into memory"
     print "\nAvailable commands:"
     print "  main dev up      - Create and configure development cluster"
@@ -44,9 +44,9 @@ def main [] {
 }
 
 export def "main secrets" [] {
-    _require-bin "teller"
-    log info "Fetching secrets from GCP Secret Manager using Teller..."
-    ^teller --config .teller.yml env | save --force .env
+    _require-bin "vals"
+    log info "Fetching secrets from GCP Secret Manager using vals..."
+    ^vals env -f ~/dotconfig/.vals.yaml | save --force .env
     log info "✅ Secrets written to .env file"
     log warning "Remember: Never commit the .env file to version control!"
 }
@@ -85,8 +85,8 @@ export def "main dev up" [
     --dry-run
     --verbose
 ] {
-    # Load secrets directly from Teller (no .env file needed)
-    let secrets = (fetch-secrets-from-teller)
+    # Load secrets directly from vals (no .env file needed)
+    let secrets = (fetch-secrets-from-vals)
     load-env $secrets
 
     _validate-provider $cloud
@@ -151,12 +151,12 @@ export def "main dev up" [
             }
 
             if (do --ignore-errors { kubectl -n flux-system get deployment source-controller -o name --no-headers | lines | length }) == 0 {
-                # Use GITHUB_TOKEN from Teller, fallback to gh CLI if not available
+                # Use GITHUB_TOKEN from vals, fallback to gh CLI if not available
                 let github_token = if ($env.GITHUB_TOKEN? | is-empty) {
-                    log warning "GITHUB_TOKEN not found in Teller secrets, using gh auth token"
+                    log warning "GITHUB_TOKEN not found in vals secrets, using gh auth token"
                     (gh auth token)
                 } else {
-                    log info "Using GITHUB_TOKEN from Teller secrets"
+                    log info "Using GITHUB_TOKEN from vals secrets"
                     $env.GITHUB_TOKEN
                 }
 
