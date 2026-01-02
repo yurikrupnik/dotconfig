@@ -1,0 +1,460 @@
+# Multi-cloud Kubernetes Cluster Examples
+# This abstraction provisions GKE/EKS/AKS clusters via Crossplane with Vault-based authentication
+
+---
+# GKE Cluster with Dynamic Vault Credentials (Kubernetes Auth)
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: Cluster
+metadata:
+  name: production-gke
+  namespace: default
+spec:
+  provider: gcp
+  parameters:
+    kubernetesVersion: "1.29"
+    region: us-central1
+    workloadIdentityEnabled: true
+    networkPolicyEnabled: true
+    controlPlane:
+      highAvailability: true
+    gcp:
+      projectId: my-project-123
+      releaseChannel: REGULAR
+      datapathProvider: ADVANCED_DATAPATH  # Dataplane V2 / Cilium
+      loggingService: logging.googleapis.com/kubernetes
+      monitoringService: monitoring.googleapis.com/kubernetes
+      binaryAuthorization: false
+      masterAuthorizedNetworks:
+        enabled: true
+        cidrBlocks:
+          - displayName: office
+            cidrBlock: 10.0.0.0/8
+  nodePools:
+    - name: default
+      machineType: e2-standard-4
+      diskSizeGb: 100
+      diskType: pd-ssd
+      preemptible: false
+      autoscaling:
+        enabled: true
+        minCount: 1
+        maxCount: 10
+      labels:
+        workload-type: general
+      taints: []
+  network:
+    privateCluster: true
+    masterIpv4CidrBlock: 172.16.0.0/28
+    vpc:
+      name: my-vpc
+      subnetName: gke-subnet
+  vaultAuth:
+    mode: dynamic
+    server: https://vault.example.com
+    vaultAuth:
+      kubernetes:
+        mountPath: kubernetes
+        role: crossplane-gcp
+        serviceAccountName: crossplane-sa
+        serviceAccountNamespace: crossplane-system
+    dynamic:
+      secretsEnginePath: gcp
+      role: cluster-admin
+      ttl: 3600
+  addons:
+    monitoring: true
+    logging: true
+  writeConnectionSecretToRef:
+    name: production-gke-kubeconfig
+    namespace: default
+  deletionPolicy: Delete
+
+---
+# GKE Autopilot Cluster with Static Vault Credentials (KV v2)
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: Cluster
+metadata:
+  name: dev-gke-autopilot
+  namespace: default
+spec:
+  provider: gcp
+  parameters:
+    kubernetesVersion: "1.29"
+    region: us-west1
+    workloadIdentityEnabled: true
+    networkPolicyEnabled: true
+    controlPlane:
+      highAvailability: false
+    gcp:
+      projectId: my-dev-project
+      releaseChannel: RAPID
+      autopilot: true
+      loggingService: logging.googleapis.com/kubernetes
+      monitoringService: monitoring.googleapis.com/kubernetes
+  nodePools: []  # Autopilot manages node pools automatically
+  network:
+    privateCluster: false
+    vpc:
+      name: default
+  vaultAuth:
+    mode: static
+    server: https://vault.example.com
+    vaultAuth:
+      kubernetes:
+        mountPath: kubernetes
+        role: crossplane-gcp
+    staticSecrets:
+      kvMountPath: secret
+      secretPath: cloud/gcp/crossplane
+      kvVersion: 2
+      keys:
+        gcp:
+          credentialsKey: service_account_json
+  addons:
+    monitoring: true
+    logging: true
+  writeConnectionSecretToRef:
+    name: dev-gke-kubeconfig
+  deletionPolicy: Delete
+
+---
+# EKS Cluster with Dynamic Vault Credentials (AppRole Auth)
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: Cluster
+metadata:
+  name: production-eks
+  namespace: default
+spec:
+  provider: aws
+  parameters:
+    kubernetesVersion: "1.29"
+    region: us-east-1
+    workloadIdentityEnabled: true  # IRSA
+    networkPolicyEnabled: true
+    controlPlane:
+      highAvailability: true
+    aws:
+      vpcId: vpc-0123456789abcdef0
+      subnetIds:
+        - subnet-0123456789abcdef1
+        - subnet-0123456789abcdef2
+        - subnet-0123456789abcdef3
+      securityGroupIds:
+        - sg-0123456789abcdef0
+      endpointPrivateAccess: true
+      endpointPublicAccess: false
+      publicAccessCidrs: []
+      enabledClusterLogTypes:
+        - api
+        - audit
+        - authenticator
+        - controllerManager
+        - scheduler
+      encryptionConfig:
+        keyArn: arn:aws:kms:us-east-1:123456789012:key/my-key-id
+  nodePools:
+    - name: default
+      machineType: m5.xlarge
+      diskSizeGb: 100
+      autoscaling:
+        enabled: true
+        minCount: 2
+        maxCount: 20
+      labels:
+        workload-type: general
+    - name: spot
+      machineType: m5.xlarge
+      diskSizeGb: 50
+      autoscaling:
+        enabled: true
+        minCount: 0
+        maxCount: 50
+      labels:
+        workload-type: batch
+        node-type: spot
+      aws:
+        capacityType: SPOT
+        instanceTypes:
+          - m5.xlarge
+          - m5.2xlarge
+          - m5a.xlarge
+  network:
+    privateCluster: true
+  vaultAuth:
+    mode: dynamic
+    server: https://vault.example.com
+    vaultAuth:
+      appRole:
+        mountPath: approle
+        roleIdSecretRef:
+          name: vault-approle
+          key: role_id
+          namespace: crossplane-system
+        secretIdSecretRef:
+          name: vault-approle
+          key: secret_id
+          namespace: crossplane-system
+    dynamic:
+      secretsEnginePath: aws
+      role: crossplane-admin
+      ttl: 3600
+  addons:
+    monitoring: true
+    logging: true
+  writeConnectionSecretToRef:
+    name: production-eks-kubeconfig
+  deletionPolicy: Delete
+
+---
+# EKS Cluster with Fargate and Static Vault Credentials (KV v1)
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: Cluster
+metadata:
+  name: serverless-eks
+  namespace: default
+spec:
+  provider: aws
+  parameters:
+    kubernetesVersion: "1.29"
+    region: eu-west-1
+    workloadIdentityEnabled: true
+    networkPolicyEnabled: false
+    controlPlane:
+      highAvailability: true
+    aws:
+      vpcId: vpc-fargate123
+      subnetIds:
+        - subnet-fargate1
+        - subnet-fargate2
+      endpointPrivateAccess: true
+      endpointPublicAccess: true
+      publicAccessCidrs:
+        - 10.0.0.0/8
+      fargateProfiles:
+        - name: default
+          selectors:
+            - namespace: default
+            - namespace: kube-system
+        - name: apps
+          selectors:
+            - namespace: apps
+              labels:
+                compute: fargate
+  nodePools: []  # Using Fargate only
+  network:
+    privateCluster: false
+  vaultAuth:
+    mode: static
+    server: https://vault.example.com
+    vaultAuth:
+      token:
+        tokenSecretRef:
+          name: vault-token
+          key: token
+          namespace: crossplane-system
+    staticSecrets:
+      kvMountPath: kv
+      secretPath: cloud/aws/crossplane
+      kvVersion: 1
+      keys:
+        aws:
+          accessKeyIdKey: access_key_id
+          secretAccessKeyKey: secret_access_key
+  addons:
+    monitoring: true
+    logging: true
+  writeConnectionSecretToRef:
+    name: serverless-eks-kubeconfig
+  deletionPolicy: Orphan
+
+---
+# AKS Cluster with Dynamic Vault Credentials
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: Cluster
+metadata:
+  name: production-aks
+  namespace: default
+spec:
+  provider: azure
+  parameters:
+    kubernetesVersion: "1.29"
+    region: eastus
+    workloadIdentityEnabled: true
+    networkPolicyEnabled: true
+    controlPlane:
+      highAvailability: true
+    azure:
+      resourceGroupName: rg-aks-production
+      subscriptionId: 00000000-0000-0000-0000-000000000000
+      dnsPrefix: prod-aks
+      skuTier: Standard  # Paid tier with SLA
+      networkProfile:
+        networkPlugin: azure
+        networkPolicy: azure
+        serviceCidr: 10.0.0.0/16
+        dnsServiceIp: 10.0.0.10
+      aadProfile:
+        managed: true
+        enableAzureRbac: true
+        adminGroupObjectIds:
+          - 00000000-0000-0000-0000-000000000001
+      identity:
+        type: SystemAssigned
+  nodePools:
+    - name: system
+      machineType: Standard_D4s_v3
+      diskSizeGb: 128
+      autoscaling:
+        enabled: true
+        minCount: 3
+        maxCount: 5
+      labels:
+        nodepool-type: system
+      taints:
+        - key: CriticalAddonsOnly
+          value: "true"
+          effect: NoSchedule
+      azure:
+        mode: System
+        osDiskType: Managed
+        availabilityZones:
+          - "1"
+          - "2"
+          - "3"
+    - name: workload
+      machineType: Standard_D8s_v3
+      diskSizeGb: 256
+      autoscaling:
+        enabled: true
+        minCount: 2
+        maxCount: 50
+      labels:
+        nodepool-type: workload
+      azure:
+        mode: User
+        osDiskType: Ephemeral
+        availabilityZones:
+          - "1"
+          - "2"
+          - "3"
+        spotMaxPrice: -1  # Use current spot price
+  network:
+    privateCluster: true
+    vpc:
+      name: vnet-aks-production
+      subnetName: snet-aks-nodes
+  vaultAuth:
+    mode: dynamic
+    server: https://vault.example.com
+    vaultAuth:
+      kubernetes:
+        mountPath: kubernetes
+        role: crossplane-azure
+    dynamic:
+      secretsEnginePath: azure
+      role: aks-contributor
+      ttl: 3600
+  addons:
+    monitoring: true
+    logging: true
+  writeConnectionSecretToRef:
+    name: production-aks-kubeconfig
+  deletionPolicy: Delete
+
+---
+# AKS Cluster with Static Vault Credentials and Managed Identity
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: Cluster
+metadata:
+  name: dev-aks
+  namespace: default
+spec:
+  provider: azure
+  parameters:
+    kubernetesVersion: "1.28"
+    region: westeurope
+    workloadIdentityEnabled: true
+    networkPolicyEnabled: false
+    controlPlane:
+      highAvailability: false
+    azure:
+      resourceGroupName: rg-aks-dev
+      subscriptionId: 00000000-0000-0000-0000-000000000000
+      dnsPrefix: dev-aks
+      skuTier: Free
+      networkProfile:
+        networkPlugin: kubenet
+        serviceCidr: 10.1.0.0/16
+        dnsServiceIp: 10.1.0.10
+      identity:
+        type: UserAssigned
+        userAssignedIdentityId: /subscriptions/.../resourceGroups/.../providers/Microsoft.ManagedIdentity/userAssignedIdentities/aks-identity
+  nodePools:
+    - name: default
+      machineType: Standard_B4ms
+      diskSizeGb: 64
+      autoscaling:
+        enabled: true
+        minCount: 1
+        maxCount: 5
+      labels:
+        environment: dev
+      azure:
+        mode: System
+  network:
+    privateCluster: false
+  vaultAuth:
+    mode: static
+    server: https://vault.example.com
+    vaultAuth:
+      kubernetes:
+        mountPath: kubernetes
+        role: crossplane-azure
+    staticSecrets:
+      kvMountPath: secret
+      secretPath: cloud/azure/crossplane
+      kvVersion: 2
+      keys:
+        azure:
+          clientIdKey: client_id
+          clientSecretKey: client_secret
+          tenantIdKey: tenant_id
+          subscriptionIdKey: subscription_id
+  addons:
+    monitoring: false
+    logging: false
+  writeConnectionSecretToRef:
+    name: dev-aks-kubeconfig
+  deletionPolicy: Delete
+
+---
+# Minimal GKE Cluster Example
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: Cluster
+metadata:
+  name: minimal-gke
+  namespace: default
+spec:
+  provider: gcp
+  parameters:
+    kubernetesVersion: "1.29"
+    region: us-central1
+    gcp:
+      projectId: my-project
+  nodePools:
+    - name: default
+      machineType: e2-medium
+      autoscaling:
+        enabled: true
+        minCount: 1
+        maxCount: 3
+  vaultAuth:
+    mode: dynamic
+    server: https://vault.example.com
+    vaultAuth:
+      kubernetes:
+        mountPath: kubernetes
+        role: gcp-crossplane
+    dynamic:
+      secretsEnginePath: gcp
+      role: cluster-creator

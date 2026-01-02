@@ -1,0 +1,477 @@
+# Litmus Network Chaos Experiments
+# Equivalent to network-chaos.yaml from Chaos Mesh
+
+---
+# Experiment 1: Network Partition (equivalent to network-partition)
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: pod-network-partition-chaos
+  namespace: default
+spec:
+  annotationCheck: "false"
+  engineState: "active"
+  appinfo:
+    appns: default
+    applabel: "app=dotconfig"
+    appkind: deployment
+  chaosServiceAccount: pod-delete-sa
+  experiments:
+  - name: pod-network-partition
+    spec:
+      components:
+        env:
+        - name: TOTAL_CHAOS_DURATION
+          value: "30"
+        - name: NETWORK_INTERFACE
+          value: "eth0"
+        - name: DESTINATION_IPS
+          value: "" # Will target pods with app=redis
+        - name: DESTINATION_HOSTS
+          value: "redis" # Service name
+        - name: NETWORK_PACKET_LOSS_PERCENTAGE
+          value: "100" # Complete partition
+      probe: []
+---
+# CronJob for network partition every 5 minutes
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: network-partition-chaos-cron
+  namespace: default
+spec:
+  schedule: "*/5 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pod-delete-sa
+          containers:
+          - name: chaos-runner
+            image: litmuschaos/chaos-runner:latest
+            command:
+            - sh
+            - -c
+            - |
+              kubectl apply -f - <<EOF
+              apiVersion: litmuschaos.io/v1alpha1
+              kind: ChaosEngine
+              metadata:
+                name: network-partition-chaos-$(date +%s)
+                namespace: default
+              spec:
+                annotationCheck: "false"
+                engineState: "active"
+                appinfo:
+                  appns: default
+                  applabel: "app=dotconfig"
+                  appkind: deployment
+                chaosServiceAccount: pod-delete-sa
+                jobCleanUpPolicy: "delete"
+                experiments:
+                - name: pod-network-partition
+                  spec:
+                    components:
+                      env:
+                      - name: TOTAL_CHAOS_DURATION
+                        value: "30"
+                      - name: DESTINATION_HOSTS
+                        value: "redis"
+              EOF
+              sleep 40
+          restartPolicy: OnFailure
+---
+# Experiment 2: Network Loss (equivalent to network-loss)
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: pod-network-loss-chaos
+  namespace: default
+spec:
+  annotationCheck: "false"
+  engineState: "active"
+  appinfo:
+    appns: default
+    applabel: "app=dotconfig"
+    appkind: deployment
+  chaosServiceAccount: pod-delete-sa
+  experiments:
+  - name: pod-network-loss
+    spec:
+      components:
+        env:
+        - name: TOTAL_CHAOS_DURATION
+          value: "60"
+        - name: NETWORK_INTERFACE
+          value: "eth0"
+        - name: NETWORK_PACKET_LOSS_PERCENTAGE
+          value: "25"
+        - name: DESTINATION_IPS
+          value: ""
+        - name: DESTINATION_HOSTS
+          value: ""
+      probe: []
+---
+# CronJob for network loss every 8 minutes
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: network-loss-chaos-cron
+  namespace: default
+spec:
+  schedule: "*/8 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pod-delete-sa
+          containers:
+          - name: chaos-runner
+            image: litmuschaos/chaos-runner:latest
+            command:
+            - sh
+            - -c
+            - |
+              kubectl apply -f - <<EOF
+              apiVersion: litmuschaos.io/v1alpha1
+              kind: ChaosEngine
+              metadata:
+                name: network-loss-chaos-$(date +%s)
+                namespace: default
+              spec:
+                annotationCheck: "false"
+                engineState: "active"
+                appinfo:
+                  appns: default
+                  applabel: "app=dotconfig"
+                  appkind: deployment
+                chaosServiceAccount: pod-delete-sa
+                jobCleanUpPolicy: "delete"
+                experiments:
+                - name: pod-network-loss
+                  spec:
+                    components:
+                      env:
+                      - name: TOTAL_CHAOS_DURATION
+                        value: "60"
+                      - name: NETWORK_PACKET_LOSS_PERCENTAGE
+                        value: "25"
+              EOF
+              sleep 70
+          restartPolicy: OnFailure
+---
+# Experiment 3: Network Duplication (equivalent to network-duplicate)
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: pod-network-duplication-chaos
+  namespace: default
+spec:
+  annotationCheck: "false"
+  engineState: "active"
+  appinfo:
+    appns: default
+    applabel: "app=dotconfig"
+    appkind: deployment
+  chaosServiceAccount: pod-delete-sa
+  experiments:
+  - name: pod-network-duplication
+    spec:
+      components:
+        env:
+        - name: TOTAL_CHAOS_DURATION
+          value: "45"
+        - name: NETWORK_INTERFACE
+          value: "eth0"
+        - name: NETWORK_PACKET_DUPLICATION_PERCENTAGE
+          value: "10"
+        - name: DESTINATION_IPS
+          value: ""
+        - name: DESTINATION_HOSTS
+          value: ""
+      probe: []
+---
+# CronJob for network duplication every 12 minutes
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: network-duplication-chaos-cron
+  namespace: default
+spec:
+  schedule: "*/12 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pod-delete-sa
+          containers:
+          - name: chaos-runner
+            image: litmuschaos/chaos-runner:latest
+            command:
+            - sh
+            - -c
+            - |
+              kubectl apply -f - <<EOF
+              apiVersion: litmuschaos.io/v1alpha1
+              kind: ChaosEngine
+              metadata:
+                name: network-duplication-chaos-$(date +%s)
+                namespace: default
+              spec:
+                annotationCheck: "false"
+                engineState: "active"
+                appinfo:
+                  appns: default
+                  applabel: "app=dotconfig"
+                  appkind: deployment
+                chaosServiceAccount: pod-delete-sa
+                jobCleanUpPolicy: "delete"
+                experiments:
+                - name: pod-network-duplication
+                  spec:
+                    components:
+                      env:
+                      - name: TOTAL_CHAOS_DURATION
+                        value: "45"
+                      - name: NETWORK_PACKET_DUPLICATION_PERCENTAGE
+                        value: "10"
+              EOF
+              sleep 55
+          restartPolicy: OnFailure
+---
+# Experiment 4: Network Corruption (equivalent to network-corrupt)
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: pod-network-corruption-chaos
+  namespace: default
+spec:
+  annotationCheck: "false"
+  engineState: "active"
+  appinfo:
+    appns: default
+    applabel: "app=dotconfig"
+    appkind: deployment
+  chaosServiceAccount: pod-delete-sa
+  experiments:
+  - name: pod-network-corruption
+    spec:
+      components:
+        env:
+        - name: TOTAL_CHAOS_DURATION
+          value: "30"
+        - name: NETWORK_INTERFACE
+          value: "eth0"
+        - name: NETWORK_PACKET_CORRUPTION_PERCENTAGE
+          value: "5"
+        - name: DESTINATION_IPS
+          value: ""
+        - name: DESTINATION_HOSTS
+          value: ""
+      probe: []
+---
+# CronJob for network corruption every 15 minutes
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: network-corruption-chaos-cron
+  namespace: default
+spec:
+  schedule: "*/15 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pod-delete-sa
+          containers:
+          - name: chaos-runner
+            image: litmuschaos/chaos-runner:latest
+            command:
+            - sh
+            - -c
+            - |
+              kubectl apply -f - <<EOF
+              apiVersion: litmuschaos.io/v1alpha1
+              kind: ChaosEngine
+              metadata:
+                name: network-corruption-chaos-$(date +%s)
+                namespace: default
+              spec:
+                annotationCheck: "false"
+                engineState: "active"
+                appinfo:
+                  appns: default
+                  applabel: "app=dotconfig"
+                  appkind: deployment
+                chaosServiceAccount: pod-delete-sa
+                jobCleanUpPolicy: "delete"
+                experiments:
+                - name: pod-network-corruption
+                  spec:
+                    components:
+                      env:
+                      - name: TOTAL_CHAOS_DURATION
+                        value: "30"
+                      - name: NETWORK_PACKET_CORRUPTION_PERCENTAGE
+                        value: "5"
+              EOF
+              sleep 40
+          restartPolicy: OnFailure
+---
+# Experiment 5: Pod DNS Error (equivalent to dns-chaos)
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: pod-dns-error-chaos
+  namespace: default
+spec:
+  annotationCheck: "false"
+  engineState: "active"
+  appinfo:
+    appns: default
+    applabel: "app=dotconfig"
+    appkind: deployment
+  chaosServiceAccount: pod-delete-sa
+  experiments:
+  - name: pod-dns-error
+    spec:
+      components:
+        env:
+        - name: TOTAL_CHAOS_DURATION
+          value: "60"
+        - name: TARGET_HOSTNAMES
+          value: "dotconfig-.*"
+        - name: MATCH_SCHEME
+          value: "regex"
+      probe: []
+---
+# CronJob for DNS chaos every 10 minutes
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dns-error-chaos-cron
+  namespace: default
+spec:
+  schedule: "*/10 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pod-delete-sa
+          containers:
+          - name: chaos-runner
+            image: litmuschaos/chaos-runner:latest
+            command:
+            - sh
+            - -c
+            - |
+              kubectl apply -f - <<EOF
+              apiVersion: litmuschaos.io/v1alpha1
+              kind: ChaosEngine
+              metadata:
+                name: dns-error-chaos-$(date +%s)
+                namespace: default
+              spec:
+                annotationCheck: "false"
+                engineState: "active"
+                appinfo:
+                  appns: default
+                  applabel: "app=dotconfig"
+                  appkind: deployment
+                chaosServiceAccount: pod-delete-sa
+                jobCleanUpPolicy: "delete"
+                experiments:
+                - name: pod-dns-error
+                  spec:
+                    components:
+                      env:
+                      - name: TOTAL_CHAOS_DURATION
+                        value: "60"
+                      - name: TARGET_HOSTNAMES
+                        value: "dotconfig-.*"
+              EOF
+              sleep 70
+          restartPolicy: OnFailure
+---
+# Experiment 6: Network Latency (equivalent to network-bandwidth)
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: pod-network-latency-chaos
+  namespace: default
+spec:
+  annotationCheck: "false"
+  engineState: "active"
+  appinfo:
+    appns: default
+    applabel: "app=dotconfig"
+    appkind: deployment
+  chaosServiceAccount: pod-delete-sa
+  experiments:
+  - name: pod-network-latency
+    spec:
+      components:
+        env:
+        - name: TOTAL_CHAOS_DURATION
+          value: "120"
+        - name: NETWORK_INTERFACE
+          value: "eth0"
+        - name: NETWORK_LATENCY
+          value: "2000" # 2000ms to simulate bandwidth limit effects
+        - name: JITTER
+          value: "500"
+        - name: DESTINATION_IPS
+          value: ""
+        - name: DESTINATION_HOSTS
+          value: ""
+      probe: []
+---
+# CronJob for network latency every 10 minutes
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: network-latency-chaos-cron
+  namespace: default
+spec:
+  schedule: "*/10 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pod-delete-sa
+          containers:
+          - name: chaos-runner
+            image: litmuschaos/chaos-runner:latest
+            command:
+            - sh
+            - -c
+            - |
+              kubectl apply -f - <<EOF
+              apiVersion: litmuschaos.io/v1alpha1
+              kind: ChaosEngine
+              metadata:
+                name: network-latency-chaos-$(date +%s)
+                namespace: default
+              spec:
+                annotationCheck: "false"
+                engineState: "active"
+                appinfo:
+                  appns: default
+                  applabel: "app=dotconfig"
+                  appkind: deployment
+                chaosServiceAccount: pod-delete-sa
+                jobCleanUpPolicy: "delete"
+                experiments:
+                - name: pod-network-latency
+                  spec:
+                    components:
+                      env:
+                      - name: TOTAL_CHAOS_DURATION
+                        value: "120"
+                      - name: NETWORK_LATENCY
+                        value: "2000"
+                      - name: JITTER
+                        value: "500"
+              EOF
+              sleep 130
+          restartPolicy: OnFailure

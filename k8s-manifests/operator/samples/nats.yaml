@@ -1,0 +1,54 @@
+---
+# NATS - Cloud Native Messaging System
+# Installed via PlatformApp operator using Helm
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: PlatformApp
+metadata:
+  name: nats
+  namespace: observability
+spec:
+  name: nats
+  namespace: observability
+  installationType: helm
+  helm:
+    chart: nats
+    repository: https://nats-io.github.io/k8s/helm/charts/
+    version: "1.2.0"
+    wait: true
+    timeout: 300
+    values:
+      # Cluster configuration
+      cluster:
+        enabled: true
+        replicas: 3
+
+      # JetStream for persistence
+      jetstream:
+        enabled: true
+        memoryStore:
+          enabled: true
+          maxSize: 1Gi
+        fileStore:
+          enabled: true
+          storageDirectory: /data
+          pvc:
+            enabled: true
+            size: 10Gi
+
+      # Monitoring
+      promExporter:
+        enabled: true
+        port: 7777
+
+      # NATS Box for debugging
+      natsbox:
+        enabled: true
+
+      # Resources
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi

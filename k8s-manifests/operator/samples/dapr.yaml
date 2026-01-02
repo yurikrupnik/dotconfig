@@ -1,0 +1,93 @@
+---
+# Dapr - Distributed Application Runtime
+# Installed via PlatformApp operator using Helm
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: PlatformApp
+metadata:
+  name: dapr
+  namespace: dapr-system
+spec:
+  name: dapr
+  namespace: dapr-system
+  installationType: helm
+  helm:
+    chart: dapr
+    repository: https://dapr.github.io/helm-charts/
+    version: "1.14.4"
+    wait: true
+    timeout: 600
+    values:
+      global:
+        # Enable high-availability mode
+        ha:
+          enabled: false  # Set to true for production
+
+        # Prometheus metrics
+        prometheus:
+          enabled: true
+          port: 9090
+
+        # mTLS for service-to-service communication
+        mtls:
+          enabled: true
+          workloadCertTTL: 24h
+          allowedClockSkew: 15m
+
+        # DNS configuration
+        dnsSuffix: .cluster.local
+
+      # Dapr Dashboard
+      dapr_dashboard:
+        enabled: true
+        replicaCount: 1
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 200Mi
+
+      # Dapr Operator
+      dapr_operator:
+        replicaCount: 1
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+      # Dapr Sidecar Injector
+      dapr_sidecar_injector:
+        replicaCount: 1
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 200Mi
+
+      # Dapr Placement for Actor support
+      dapr_placement:
+        replicaCount: 1
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 200Mi
+
+      # Dapr Sentry for mTLS certificate authority
+      dapr_sentry:
+        replicaCount: 1
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 200Mi

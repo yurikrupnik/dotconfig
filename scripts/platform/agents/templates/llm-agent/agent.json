@@ -1,0 +1,21 @@
+{
+  "name": "{{agent_name}}",
+  "version": "0.1.0",
+  "description": "{{description}}",
+  "model": {
+    "provider": "openrouter",
+    "default": "anthropic/claude-3.5-sonnet",
+    "fallback": [
+      "openai/gpt-4-turbo",
+      "anthropic/claude-3-haiku"
+    ]
+  },
+  "tools": [],
+  "systemPrompt": "You are a helpful AI assistant.",
+  "config": {
+    "maxTokens": 4096,
+    "temperature": 0.7,
+    "maxTurns": 10,
+    "contextWindow": 100000
+  }
+}

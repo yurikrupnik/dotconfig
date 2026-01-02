@@ -1,0 +1,95 @@
+---
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: PlatformApp
+metadata:
+  name: sample-app
+  namespace: default
+spec:
+  name: sample-nginx
+  namespace: default
+  installationType: helm
+  helm:
+    chart: nginx
+    repository: https://charts.bitnami.com/bitnami
+    version: "15.0.0"
+    wait: true
+    timeout: 300
+    values:
+      replicaCount: 1
+      service:
+        type: ClusterIP
+
+      # Custom nginx configuration via ConfigMap
+      serverBlock: |
+        server {
+          listen 8080;
+          server_name _;
+
+          location / {
+            root /app;
+            index index.html;
+            try_files $uri $uri/ /index.html;
+          }
+
+          location /api {
+            proxy_pass http://backend-service:8080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          }
+
+          location /health {
+            return 200 'OK';
+            add_header Content-Type text/plain;
+          }
+        }
+
+      # Or use existing ConfigMap for nginx config
+      # existingServerBlockConfigmap: my-nginx-config
+
+      # Extra volumes
+      extraVolumes:
+        - name: app-static
+          persistentVolumeClaim:
+            claimName: nginx-static-pvc
+        - name: cache
+          emptyDir: {}
+        - name: custom-config
+          configMap:
+            name: nginx-extra-config
+
+      # Extra volume mounts
+      extraVolumeMounts:
+        - name: app-static
+          mountPath: /app
+          readOnly: true
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: custom-config
+          mountPath: /etc/nginx/conf.d/extra.conf
+          subPath: extra.conf
+
+      # Static site from Git (Bitnami feature)
+      # cloneStaticSiteFromGit:
+      #   enabled: true
+      #   repository: https://github.com/user/static-site.git
+      #   branch: main
+
+      # Resources
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 250m
+          memory: 256Mi
+
+      # Health checks
+      livenessProbe:
+        enabled: true
+        initialDelaySeconds: 30
+        periodSeconds: 10
+      readinessProbe:
+        enabled: true
+        initialDelaySeconds: 5
+        periodSeconds: 5

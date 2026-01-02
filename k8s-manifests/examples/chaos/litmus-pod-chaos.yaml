@@ -1,0 +1,292 @@
+# Litmus Pod Chaos Experiments
+# Equivalent to pod-chaos.yaml from Chaos Mesh
+
+---
+# ServiceAccount for running chaos experiments
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pod-delete-sa
+  namespace: default
+  labels:
+    app.kubernetes.io/part-of: litmus
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-delete-sa-role
+  namespace: default
+rules:
+- apiGroups: [""]
+  resources: ["pods", "events"]
+  verbs: ["create", "list", "get", "patch", "update", "delete", "deletecollection"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["get", "list", "create"]
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["create", "list", "get", "delete", "deletecollection"]
+- apiGroups: ["litmuschaos.io"]
+  resources: ["chaosengines", "chaosexperiments", "chaosresults"]
+  verbs: ["create", "list", "get", "patch", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pod-delete-sa-role-binding
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pod-delete-sa-role
+subjects:
+- kind: ServiceAccount
+  name: pod-delete-sa
+  namespace: default
+---
+# Experiment 1: Pod Delete (equivalent to pod-kill-random)
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: pod-delete-chaos
+  namespace: default
+spec:
+  # Annotation to schedule chaos using cron
+  # Note: Requires litmus-chaos-scheduler or use external CronJob
+  annotationCheck: "false"
+  engineState: "active"
+  appinfo:
+    appns: default
+    applabel: "app=dotconfig"
+    appkind: deployment
+  chaosServiceAccount: pod-delete-sa
+  experiments:
+  - name: pod-delete
+    spec:
+      components:
+        env:
+        # Percentage of pods to kill (30%)
+        - name: TOTAL_CHAOS_DURATION
+          value: "300" # 5 minutes
+        - name: CHAOS_INTERVAL
+          value: "10"
+        - name: FORCE
+          value: "false"
+        - name: PODS_AFFECTED_PERC
+          value: "30"
+        - name: TARGET_PODS
+          value: ""
+        - name: RANDOMNESS
+          value: "true"
+        - name: SEQUENCE
+          value: "parallel"
+      probe: []
+---
+# CronJob to run pod-delete every 10 minutes
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pod-delete-chaos-cron
+  namespace: default
+spec:
+  schedule: "*/10 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pod-delete-sa
+          containers:
+          - name: chaos-runner
+            image: litmuschaos/chaos-runner:latest
+            command:
+            - sh
+            - -c
+            - |
+              kubectl apply -f - <<EOF
+              apiVersion: litmuschaos.io/v1alpha1
+              kind: ChaosEngine
+              metadata:
+                name: pod-delete-chaos-$(date +%s)
+                namespace: default
+              spec:
+                annotationCheck: "false"
+                engineState: "active"
+                appinfo:
+                  appns: default
+                  applabel: "app=dotconfig"
+                  appkind: deployment
+                chaosServiceAccount: pod-delete-sa
+                jobCleanUpPolicy: "delete"
+                experiments:
+                - name: pod-delete
+                  spec:
+                    components:
+                      env:
+                      - name: TOTAL_CHAOS_DURATION
+                        value: "300"
+                      - name: PODS_AFFECTED_PERC
+                        value: "30"
+                      - name: RANDOMNESS
+                        value: "true"
+              EOF
+              sleep 310
+          restartPolicy: OnFailure
+---
+# Experiment 2: Container Kill (equivalent to container-kill)
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: container-kill-chaos
+  namespace: default
+spec:
+  annotationCheck: "false"
+  engineState: "active"
+  appinfo:
+    appns: default
+    applabel: "app=dotconfig"
+    appkind: deployment
+  chaosServiceAccount: pod-delete-sa
+  experiments:
+  - name: container-kill
+    spec:
+      components:
+        env:
+        - name: TOTAL_CHAOS_DURATION
+          value: "120" # 2 minutes
+        - name: CHAOS_INTERVAL
+          value: "10"
+        - name: TARGET_CONTAINER
+          value: "dotconfig"
+        - name: CONTAINER_RUNTIME
+          value: "containerd"
+        - name: SOCKET_PATH
+          value: "/run/containerd/containerd.sock"
+        - name: SIGNAL
+          value: "SIGKILL"
+      probe: []
+---
+# CronJob for container-kill every 15 minutes
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: container-kill-chaos-cron
+  namespace: default
+spec:
+  schedule: "*/15 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pod-delete-sa
+          containers:
+          - name: chaos-runner
+            image: litmuschaos/chaos-runner:latest
+            command:
+            - sh
+            - -c
+            - |
+              kubectl apply -f - <<EOF
+              apiVersion: litmuschaos.io/v1alpha1
+              kind: ChaosEngine
+              metadata:
+                name: container-kill-chaos-$(date +%s)
+                namespace: default
+              spec:
+                annotationCheck: "false"
+                engineState: "active"
+                appinfo:
+                  appns: default
+                  applabel: "app=dotconfig"
+                  appkind: deployment
+                chaosServiceAccount: pod-delete-sa
+                jobCleanUpPolicy: "delete"
+                experiments:
+                - name: container-kill
+                  spec:
+                    components:
+                      env:
+                      - name: TOTAL_CHAOS_DURATION
+                        value: "120"
+                      - name: TARGET_CONTAINER
+                        value: "dotconfig"
+              EOF
+              sleep 130
+          restartPolicy: OnFailure
+---
+# Experiment 3: Pod Failure (equivalent to pod-failure-simulated)
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: pod-failure-chaos
+  namespace: default
+spec:
+  annotationCheck: "false"
+  engineState: "active"
+  appinfo:
+    appns: default
+    applabel: "app=dotconfig"
+    appkind: deployment
+  chaosServiceAccount: pod-delete-sa
+  experiments:
+  - name: pod-failure
+    spec:
+      components:
+        env:
+        - name: TOTAL_CHAOS_DURATION
+          value: "180" # 3 minutes
+        - name: PODS_AFFECTED_PERC
+          value: "20"
+        - name: TARGET_PODS
+          value: ""
+      probe: []
+---
+# CronJob for pod-failure every 20 minutes
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pod-failure-chaos-cron
+  namespace: default
+spec:
+  schedule: "*/20 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pod-delete-sa
+          containers:
+          - name: chaos-runner
+            image: litmuschaos/chaos-runner:latest
+            command:
+            - sh
+            - -c
+            - |
+              kubectl apply -f - <<EOF
+              apiVersion: litmuschaos.io/v1alpha1
+              kind: ChaosEngine
+              metadata:
+                name: pod-failure-chaos-$(date +%s)
+                namespace: default
+              spec:
+                annotationCheck: "false"
+                engineState: "active"
+                appinfo:
+                  appns: default
+                  applabel: "app=dotconfig"
+                  appkind: deployment
+                chaosServiceAccount: pod-delete-sa
+                jobCleanUpPolicy: "delete"
+                experiments:
+                - name: pod-failure
+                  spec:
+                    components:
+                      env:
+                      - name: TOTAL_CHAOS_DURATION
+                        value: "180"
+                      - name: PODS_AFFECTED_PERC
+                        value: "20"
+              EOF
+              sleep 190
+          restartPolicy: OnFailure

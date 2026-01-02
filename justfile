@@ -1,9 +1,12 @@
 # https://just.systems
 
-default:
-    just --list
+#default:
+#    just --list
 #    cargo run --bin dotconfig -- -h --debug
-
+car:
+    cargo run --bin resource-stats-operator -- collect
+    cargo run --features full --bin resource-stats-operator -- crds
+    just up
 up *args='':
   nu ~/dotconfig/scripts/nu/index.nu dev up {{args}}
 down *args='':
@@ -68,5 +71,69 @@ ci-rust-setup:
 create-cluster-minimal name="minimal" providers="aws,gcp":
     nu ~/dotconfig/scripts/nu/index.nu -h
     nu ~/dotconfig/scripts/nu/index.nu kcl init --path scripts/kcl/stam
-    @echo "🔧 Creating minimal cluster: {{name}}"
-    @echo "🔧 Creating minimal cluster: {{providers}}"
+    @echo "Creating minimal cluster: {{name}}"
+    @echo "Creating minimal cluster: {{providers}}"
+
+# =============================================================================
+# API Server
+# =============================================================================
+
+# Run API server locally
+api-dev:
+    cd apps/api && cargo run --bin api-server
+
+# Run API server with hot reload
+api-watch:
+    cd apps/api && cargo watch -x 'run --bin api-server'
+
+# Build API server
+api-build:
+    cd apps/api && cargo build --release --bin api-server
+
+# Test API server
+api-test:
+    cd apps/api && cargo test
+
+# Build API Docker image
+api-docker-build tag="latest":
+    docker build -t ghcr.io/yurikrupnik/api-server:{{tag}} -f apps/api/Dockerfile .
+
+# Deploy API to K8s
+api-k8s-deploy:
+    kubectl apply -k apps/api/k8s/
+
+# Delete API from K8s
+api-k8s-delete:
+    kubectl delete -k apps/api/k8s/ --ignore-not-found
+
+# =============================================================================
+# Tauri Apps
+# =============================================================================
+
+# Run web-app (Leptos + Tauri)
+tauri-web-dev:
+    cd web-app && cargo tauri dev
+
+# Run native-app (SolidJS + Tauri)
+tauri-native-dev:
+    cd app/native-app && cargo tauri dev
+
+# Build web-app for desktop
+tauri-web-build:
+    cd web-app && cargo tauri build
+
+# Build native-app for desktop
+tauri-native-build:
+    cd app/native-app && cargo tauri build
+
+# =============================================================================
+# Full Stack Development
+# =============================================================================
+
+# Run API + web-app frontend (browser mode)
+dev-web: api-dev
+    cd web-app && trunk serve
+
+# Run API + native-app frontend (browser mode)
+dev-native: api-dev
+    cd app/native-app && bun run dev

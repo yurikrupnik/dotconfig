@@ -2,7 +2,7 @@
 name = "dotconfig"
 version = "0.1.0"
 edition = "2021"
-default-run = "operator"
+default-run = "platform-operator"
 description = "Cli app"
 license = "MIT"
 repository = "https://github.com/yurikrupnik/dotconfig"
@@ -12,30 +12,78 @@ name = "dotconfig"
 path = "src/main.rs"
 
 [[bin]]
-name = "operator"
-path = "src/operator.rs"
+name = "node-metrics"
+path = "src/node_metrics.rs"
+
+[[bin]]
+name = "platform-operator"
+path = "src/bin/platform_operator.rs"
+
+[[bin]]
+name = "resource-stats-operator"
+path = "src/bin/resource_stats_operator.rs"
+
+[[bin]]
+name = "cluster-dashboard"
+path = "src/bin/cluster_dashboard.rs"
+required-features = ["tui"]
 
 [dependencies]
 anyhow = "1.0"
 async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive", "env"] }
 clap_complete = "4.5"
 dirs = "6.0"
 futures = "0.3"
+async-stream = "0.3"
 http = "1.4"
 k8s-openapi = { version = "0.26", features = ["latest"] }
-kube = { version = "2.0.1", features = ["config", "derive", "runtime"] }
+kube = { version = "2.0.1", features = ["config", "derive", "runtime", "admission"] }
 neo4rs = "0.8"
-
+schemars = { version = "1.2.0", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+serde_yaml = "0.9"
 syn = { version = "2.0", features = ["full", "visit"] }
+tempfile = "3"
 thiserror = "2.0"
-tokio = { version = "1.47", features = ["rt-multi-thread", "macros", "fs", "process"] }
+tokio = { version = "1.48", features = ["rt-multi-thread", "macros", "fs", "process"] }
 toml = "0.9"
 tracing = '0.1'
 tracing-subscriber = { version = '0.3', features = ['env-filter', 'json', 'serde_json'] }
 walkdir = "2.5"
+
+# Web UI
+axum = { version = "0.8", features = ["json", "ws"], optional = true }
+tower = { version = "0.5", optional = true }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"], optional = true }
+askama = { version = "0.15", optional = true }
+
+# Terminal UI
+ratatui = { version = "0.30", optional = true }
+crossterm = { version = "0.29", optional = true }
+
+# Cost calculation
+rust_decimal = "1.39"
+moka = { version = "0.12", features = ["future"] }
+regex = "1.12"
+
+# Google Workspace integration
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+jsonwebtoken = "9"
+base64 = "0.22"
+json-patch = "4"
+
+# GPU (optional)
+nvml-wrapper = { version = "0.11", optional = true }
+
+[features]
+default = ["web-ui", "tui"]
+web-ui = ["dep:axum", "dep:tower", "dep:tower-http", "dep:askama"]
+tui = ["dep:ratatui", "dep:crossterm"]
+nvidia-gpu = ["dep:nvml-wrapper"]
+full = ["web-ui", "tui", "nvidia-gpu"]
 
 [dev-dependencies]
 assert_cmd = "2"

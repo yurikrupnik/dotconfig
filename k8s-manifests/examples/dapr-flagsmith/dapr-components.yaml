@@ -1,0 +1,51 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub
+  namespace: default
+spec:
+  type: pubsub.nats
+  version: v1
+  metadata:
+  - name: natsURL
+    value: "nats://data.nats.svc.cluster.local:4222"
+  - name: name
+    value: "jetstream"
+  - name: queueGroupName
+    value: "group1"
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+  namespace: default
+spec:
+  type: state.redis
+  version: v1
+  metadata:
+  - name: redisHost
+    value: "redis-master.data.svc.cluster.local:6379"
+  - name: redisPassword
+    secretKeyRef:
+      name: redis-secret
+      key: redis-password
+  - name: actorStateStore
+    value: "true"
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: featureflags
+  namespace: default
+spec:
+  type: configuration.http
+  version: v1
+  metadata:
+  - name: clientID
+    value: "dotconfig-client"
+  - name: clientSecret
+    value: "secret"
+  - name: flagsmithUrl
+    value: "http://flagsmith-api.flagsmith.svc.cluster.local:8000/api/v1"
+  - name: environmentKey
+    value: "local"

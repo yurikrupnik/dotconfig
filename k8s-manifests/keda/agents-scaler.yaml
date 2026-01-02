@@ -1,0 +1,147 @@
+# KEDA ScaledObject for Platform Agents
+# Scale LLM agents based on queue depth and active requests
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openrouter-connection
+type: Opaque
+stringData:
+  api-key: "${OPENROUTER_API_KEY}"
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: openrouter-auth
+spec:
+  secretTargetRef:
+    - parameter: apiKey
+      name: openrouter-connection
+      key: api-key
+---
+# Scale agents based on pending prompts in Redis queue
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: platform-agents-scaler
+  labels:
+    app: platform-agents
+spec:
+  scaleTargetRef:
+    name: llm-agent
+    kind: Deployment
+  pollingInterval: 10
+  cooldownPeriod: 120
+  minReplicaCount: 0  # Scale to zero when idle
+  maxReplicaCount: 20
+  idleReplicaCount: 1  # Keep 1 warm replica
+  fallback:
+    failureThreshold: 3
+    replicas: 2
+  triggers:
+    # Scale on Redis queue (agent invocation requests)
+    - type: redis
+      metadata:
+        address: redis.default.svc.cluster.local:6379
+        listName: agent-requests
+        listLength: "5"  # 1 agent per 5 pending requests
+        activationListLength: "1"
+
+    # Scale on Dapr pub/sub messages
+    - type: redis-streams
+      metadata:
+        address: redis.default.svc.cluster.local:6379
+        stream: agent.invoke
+        consumerGroup: agents
+        pendingEntriesCount: "10"
+
+    # Scale on active agent count (from Prometheus)
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.monitoring.svc.cluster.local:9090
+        metricName: agent_active_sessions
+        query: sum(agent_active_sessions{app="platform-agents"})
+        threshold: "10"
+---
+# Scale skills based on task queue
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: platform-skills-scaler
+  labels:
+    app: platform-skills
+spec:
+  scaleTargetRef:
+    name: skill-runner
+    kind: Deployment
+  pollingInterval: 15
+  cooldownPeriod: 180
+  minReplicaCount: 1
+  maxReplicaCount: 50
+  triggers:
+    # Scale on skill execution queue
+    - type: redis
+      metadata:
+        address: redis.default.svc.cluster.local:6379
+        listName: skill-queue
+        listLength: "3"
+        activationListLength: "1"
+
+    # Scale on CPU for compute-intensive skills
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "60"
+
+    # Scale on memory for large context processing
+    - type: memory
+      metricType: Utilization
+      metadata:
+        value: "70"
+---
+# ScaledJob for batch skill processing
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: skill-batch-processor
+  labels:
+    app: skill-batch
+spec:
+  jobTargetRef:
+    parallelism: 5
+    completions: 5
+    backoffLimit: 3
+    template:
+      metadata:
+        labels:
+          app: skill-batch
+      spec:
+        containers:
+          - name: skill-runner
+            image: ghcr.io/yurikrupnik/skill-runner:latest
+            args: ["batch", "--queue", "batch-skills"]
+            env:
+              - name: REDIS_URL
+                value: "redis://redis.default.svc.cluster.local:6379"
+              - name: OPENROUTER_API_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: openrouter-connection
+                    key: api-key
+            resources:
+              limits:
+                memory: "512Mi"
+                cpu: "500m"
+        restartPolicy: Never
+  pollingInterval: 30
+  minReplicaCount: 0
+  maxReplicaCount: 20
+  successfulJobsHistoryLimit: 10
+  failedJobsHistoryLimit: 5
+  triggers:
+    - type: redis
+      metadata:
+        address: redis.default.svc.cluster.local:6379
+        listName: batch-skills
+        listLength: "1"
+        activationListLength: "1"

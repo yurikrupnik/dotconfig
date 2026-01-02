@@ -1,0 +1,291 @@
+# Litmus Advanced Chaos Experiments
+# Equivalent to advanced-chaos.yaml from Chaos Mesh
+
+---
+# Note: Litmus doesn't have KernelChaos or TimeChaos equivalents
+# Providing alternatives and workarounds
+
+# HTTP Chaos - Experiment 1: HTTP Abort (equivalent to http-fault)
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: pod-http-reset-peer-chaos
+  namespace: default
+spec:
+  annotationCheck: "false"
+  engineState: "active"
+  appinfo:
+    appns: default
+    applabel: "app=dotconfig"
+    appkind: deployment
+  chaosServiceAccount: pod-delete-sa
+  experiments:
+  - name: pod-http-reset-peer
+    spec:
+      components:
+        env:
+        - name: TOTAL_CHAOS_DURATION
+          value: "20"
+        - name: TARGET_SERVICE_PORT
+          value: "8080"
+        - name: RESET_TIMEOUT
+          value: "0" # Immediate reset (abort)
+        - name: TOXICITY
+          value: "50" # 50% of requests affected
+        - name: PODS_AFFECTED_PERC
+          value: "100"
+      probe: []
+---
+# CronJob for HTTP abort every 10 minutes
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: http-reset-chaos-cron
+  namespace: default
+spec:
+  schedule: "*/10 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pod-delete-sa
+          containers:
+          - name: chaos-runner
+            image: litmuschaos/chaos-runner:latest
+            command:
+            - sh
+            - -c
+            - |
+              kubectl apply -f - <<EOF
+              apiVersion: litmuschaos.io/v1alpha1
+              kind: ChaosEngine
+              metadata:
+                name: http-reset-chaos-$(date +%s)
+                namespace: default
+              spec:
+                annotationCheck: "false"
+                engineState: "active"
+                appinfo:
+                  appns: default
+                  applabel: "app=dotconfig"
+                  appkind: deployment
+                chaosServiceAccount: pod-delete-sa
+                jobCleanUpPolicy: "delete"
+                experiments:
+                - name: pod-http-reset-peer
+                  spec:
+                    components:
+                      env:
+                      - name: TOTAL_CHAOS_DURATION
+                        value: "20"
+                      - name: TARGET_SERVICE_PORT
+                        value: "8080"
+                      - name: TOXICITY
+                        value: "50"
+              EOF
+              sleep 30
+          restartPolicy: OnFailure
+---
+# HTTP Chaos - Experiment 2: HTTP Latency (equivalent to http-delay)
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: pod-http-latency-chaos
+  namespace: default
+spec:
+  annotationCheck: "false"
+  engineState: "active"
+  appinfo:
+    appns: default
+    applabel: "app=dotconfig"
+    appkind: deployment
+  chaosServiceAccount: pod-delete-sa
+  experiments:
+  - name: pod-http-latency
+    spec:
+      components:
+        env:
+        - name: TOTAL_CHAOS_DURATION
+          value: "30"
+        - name: TARGET_SERVICE_PORT
+          value: "8080"
+        - name: LATENCY
+          value: "500" # 500ms delay
+        - name: TOXICITY
+          value: "100" # Affect all requests
+        - name: PODS_AFFECTED_PERC
+          value: "100"
+      probe: []
+---
+# CronJob for HTTP latency every 8 minutes
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: http-latency-chaos-cron
+  namespace: default
+spec:
+  schedule: "*/8 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pod-delete-sa
+          containers:
+          - name: chaos-runner
+            image: litmuschaos/chaos-runner:latest
+            command:
+            - sh
+            - -c
+            - |
+              kubectl apply -f - <<EOF
+              apiVersion: litmuschaos.io/v1alpha1
+              kind: ChaosEngine
+              metadata:
+                name: http-latency-chaos-$(date +%s)
+                namespace: default
+              spec:
+                annotationCheck: "false"
+                engineState: "active"
+                appinfo:
+                  appns: default
+                  applabel: "app=dotconfig"
+                  appkind: deployment
+                chaosServiceAccount: pod-delete-sa
+                jobCleanUpPolicy: "delete"
+                experiments:
+                - name: pod-http-latency
+                  spec:
+                    components:
+                      env:
+                      - name: TOTAL_CHAOS_DURATION
+                        value: "30"
+                      - name: TARGET_SERVICE_PORT
+                        value: "8080"
+                      - name: LATENCY
+                        value: "500"
+              EOF
+              sleep 40
+          restartPolicy: OnFailure
+---
+# HTTP Chaos - HTTP Status Code modification
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: pod-http-status-code-chaos
+  namespace: default
+spec:
+  annotationCheck: "false"
+  engineState: "active"
+  appinfo:
+    appns: default
+    applabel: "app=dotconfig"
+    appkind: deployment
+  chaosServiceAccount: pod-delete-sa
+  experiments:
+  - name: pod-http-status-code
+    spec:
+      components:
+        env:
+        - name: TOTAL_CHAOS_DURATION
+          value: "20"
+        - name: TARGET_SERVICE_PORT
+          value: "8080"
+        - name: STATUS_CODE
+          value: "500"
+        - name: TOXICITY
+          value: "50"
+        - name: MODIFY_RESPONSE_BODY
+          value: "false"
+        - name: PODS_AFFECTED_PERC
+          value: "100"
+      probe: []
+---
+# Documentation for missing Litmus features
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litmus-advanced-chaos-notes
+  namespace: default
+data:
+  README.md: |
+    # Litmus Advanced Chaos Limitations
+    
+    ## Features NOT Available in Litmus (available in Chaos Mesh):
+    
+    ### 1. KernelChaos
+    - Kernel-level fault injection
+    - System call interception
+    - Requires BPF/eBPF support
+    
+    **Workaround**: Use node-level experiments or custom chaos experiments
+    
+    ### 2. TimeChaos
+    - Time offset/skew injection
+    - Clock manipulation for testing time-dependent code
+    
+    **Workaround**: 
+    - Modify application configuration
+    - Use test containers with adjusted system time
+    - Custom chaos experiment with date manipulation
+    
+    ### 3. DNSChaos (Advanced)
+    - Chaos Mesh has more sophisticated DNS chaos
+    - Litmus has pod-dns-error but with limited options
+    
+    ### 4. HTTP Chaos Limitations
+    - Litmus HTTP chaos requires toxiproxy sidecar
+    - Less granular control than Chaos Mesh
+    - No direct method/path filtering in ChaosEngine spec
+    
+    ## Available Litmus HTTP Chaos Experiments:
+    - pod-http-latency: Add latency to HTTP requests
+    - pod-http-status-code: Modify HTTP response codes
+    - pod-http-reset-peer: Reset connections (abort)
+    - pod-http-modify-body: Modify response body
+    - pod-http-modify-header: Modify HTTP headers
+    
+    ## Recommendation for Advanced Chaos:
+    
+    1. **Kernel-level chaos**: Keep Chaos Mesh or use custom BPF tools
+    2. **Time chaos**: Keep Chaos Mesh or use application-level testing
+    3. **HTTP chaos**: Both tools are viable, choose based on your needs:
+       - Chaos Mesh: More features, simpler setup
+       - Litmus: Better workflow orchestration, hypothesis testing
+    
+    ## Hybrid Approach:
+    Consider using both tools:
+    - Chaos Mesh for advanced scenarios (kernel, time, sophisticated IO)
+    - Litmus for workflow orchestration and GitOps integration
+---
+# Custom Time Chaos Workaround using Generic Chaos
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosExperiment
+metadata:
+  name: custom-time-skew
+  namespace: default
+spec:
+  definition:
+    scope: Namespaced
+    permissions:
+    - apiGroups: [""]
+      resources: ["pods", "pods/exec"]
+      verbs: ["create", "delete", "get", "list", "patch"]
+    image: "litmuschaos/go-runner:latest"
+    args:
+    - -c
+    - |
+      # This is a simplified example - production would need proper implementation
+      # Inject time offset by modifying container's time perception
+      # Note: This requires privileged access or specific capabilities
+      echo "Time chaos not natively supported in Litmus"
+      echo "Consider using Chaos Mesh for TimeChaos"
+    command:
+    - /bin/sh
+    env:
+    - name: TOTAL_CHAOS_DURATION
+      value: "30"
+    - name: TIME_OFFSET
+      value: "-1h"
+    labels:
+      name: custom-time-skew
+      app.kubernetes.io/part-of: litmus

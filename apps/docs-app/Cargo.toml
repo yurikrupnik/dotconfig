@@ -1,0 +1,47 @@
+[package]
+name = "docs-app"
+version = "0.1.0"
+edition = "2021"
+description = "SSR Documentation App for Platform Operator"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Leptos with SSR + hydration
+leptos = { version = "0.7", features = ["ssr"] }
+leptos_axum = "0.8.7"
+leptos_router = { version = "0.8.11", features = ["ssr"] }
+leptos_meta = { version = "0.8.5", features = ["ssr"] }
+
+# Axum web framework
+axum = { version = "0.8", features = ["macros"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
+http = "1"
+
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+# Markdown processing
+pulldown-cmark = "0.13.0"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# File operations
+walkdir = "2"
+
+# Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+[features]
+default = ["ssr"]
+ssr = []
+hydrate = ["leptos/hydrate", "leptos_router/hydrate", "leptos_meta/hydrate"]

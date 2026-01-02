@@ -8,7 +8,7 @@ mod state;
 mod traits;
 mod utils;
 
-use actions::{CodeGraphAction, ComposeAction, DashboardAction, ShitAction};
+use actions::{ClusterAction, CodeGraphAction, ComposeAction, DashboardAction, ShitAction};
 use app::App;
 use clap::{CommandFactory, Parser, Subcommand};
 use commands::RunCommand;
@@ -19,6 +19,11 @@ use state::AppState;
 
 #[derive(Subcommand)]
 pub enum Commands {
+    /// Kubernetes cluster management and health checks
+    Cluster {
+        #[command(subcommand)]
+        action: ClusterAction,
+    },
     Compose {
         #[command(subcommand)]
         action: ComposeAction,
@@ -131,6 +136,7 @@ async fn main() -> anyhow::Result<()> {
             generate_completions(shell);
             Ok(())
         }
+        Commands::Cluster { action } => action.run(&app).await,
         Commands::Compose { action } => action.run(&app).await,
         Commands::Shit { action } => action.run(&app).await,
         Commands::Dashboard { action } => action.run(&app).await,

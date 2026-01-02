@@ -1,0 +1,295 @@
+---
+# Platform Stack - All infrastructure components
+# Apply this file to install the complete platform stack
+#
+# Components:
+#   - NATS (messaging)
+#   - Dapr (distributed runtime)
+#   - Prometheus + Grafana (monitoring)
+#   - Loki (logging)
+#   - External Secrets (secrets management)
+#   - Crossplane (cloud provisioning)
+#   - Kyverno (policy management)
+#
+# Usage:
+#   kubectl apply -f platform-stack.yaml
+#
+# Or install individual components:
+#   kubectl apply -f nats.yaml
+#   kubectl apply -f dapr.yaml
+#   etc.
+
+# Create namespaces first
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nats-system
+  labels:
+    app.kubernetes.io/part-of: platform-stack
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dapr-system
+  labels:
+    app.kubernetes.io/part-of: platform-stack
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    app.kubernetes.io/part-of: platform-stack
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-secrets
+  labels:
+    app.kubernetes.io/part-of: platform-stack
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: crossplane-system
+  labels:
+    app.kubernetes.io/part-of: platform-stack
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kyverno
+  labels:
+    app.kubernetes.io/part-of: platform-stack
+
+# Infrastructure Layer
+---
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: PlatformApp
+metadata:
+  name: nats
+  namespace: nats-system
+  labels:
+    app.kubernetes.io/part-of: platform-stack
+    platform.yurikrupnik.com/layer: infrastructure
+spec:
+  name: nats
+  namespace: nats-system
+  installationType: helm
+  helm:
+    chart: nats
+    repository: https://nats-io.github.io/k8s/helm/charts/
+    version: "1.2.0"
+    wait: true
+    timeout: 300
+    values:
+      cluster:
+        enabled: true
+        replicas: 3
+      jetstream:
+        enabled: true
+        memoryStore:
+          enabled: true
+          maxSize: 1Gi
+        fileStore:
+          enabled: true
+          pvc:
+            enabled: true
+            size: 10Gi
+      promExporter:
+        enabled: true
+
+# Observability Layer
+---
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: PlatformApp
+metadata:
+  name: prometheus
+  namespace: observability
+  labels:
+    app.kubernetes.io/part-of: platform-stack
+    platform.yurikrupnik.com/layer: observability
+spec:
+  name: prometheus
+  namespace: observability
+  installationType: helm
+  helm:
+    chart: kube-prometheus-stack
+    repository: https://prometheus-community.github.io/helm-charts
+    version: "61.0.0"
+    wait: true
+    timeout: 900
+    values:
+      prometheus:
+        prometheusSpec:
+          retention: 15d
+          serviceMonitorSelectorNilUsesHelmValues: false
+      grafana:
+        enabled: true
+        adminPassword: admin
+        additionalDataSources:
+          - name: Loki
+            type: loki
+            url: http://loki-gateway.observability.svc.cluster.local
+            access: proxy
+      nodeExporter:
+        enabled: true
+      kubeStateMetrics:
+        enabled: true
+---
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: PlatformApp
+metadata:
+  name: loki
+  namespace: observability
+  labels:
+    app.kubernetes.io/part-of: platform-stack
+    platform.yurikrupnik.com/layer: observability
+spec:
+  name: loki
+  namespace: observability
+  installationType: helm
+  helm:
+    chart: loki
+    repository: https://grafana.github.io/helm-charts
+    version: "6.6.0"
+    wait: true
+    timeout: 600
+    values:
+      deploymentMode: SingleBinary
+      loki:
+        auth_enabled: false
+        commonConfig:
+          replication_factor: 1
+      singleBinary:
+        replicas: 1
+      backend:
+        replicas: 0
+      read:
+        replicas: 0
+      write:
+        replicas: 0
+
+# Runtime Layer
+---
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: PlatformApp
+metadata:
+  name: dapr
+  namespace: dapr-system
+  labels:
+    app.kubernetes.io/part-of: platform-stack
+    platform.yurikrupnik.com/layer: runtime
+spec:
+  name: dapr
+  namespace: dapr-system
+  installationType: helm
+  helm:
+    chart: dapr
+    repository: https://dapr.github.io/helm-charts/
+    version: "1.14.4"
+    wait: true
+    timeout: 600
+    values:
+      global:
+        prometheus:
+          enabled: true
+        mtls:
+          enabled: true
+      dapr_dashboard:
+        enabled: true
+
+# Security Layer
+---
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: PlatformApp
+metadata:
+  name: external-secrets
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/part-of: platform-stack
+    platform.yurikrupnik.com/layer: security
+spec:
+  name: external-secrets
+  namespace: external-secrets
+  installationType: helm
+  helm:
+    chart: external-secrets
+    repository: https://charts.external-secrets.io
+    version: "0.10.0"
+    wait: true
+    timeout: 300
+    values:
+      installCRDs: true
+      webhook:
+        create: true
+      certController:
+        create: true
+      serviceMonitor:
+        enabled: true
+        namespace: observability
+---
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: PlatformApp
+metadata:
+  name: kyverno
+  namespace: kyverno
+  labels:
+    app.kubernetes.io/part-of: platform-stack
+    platform.yurikrupnik.com/layer: security
+spec:
+  name: kyverno
+  namespace: kyverno
+  installationType: helm
+  helm:
+    chart: kyverno
+    repository: https://kyverno.github.io/kyverno
+    version: "3.2.0"
+    wait: true
+    timeout: 600
+    values:
+      crds:
+        install: true
+      admissionController:
+        replicas: 1
+      backgroundController:
+        enabled: true
+      cleanupController:
+        enabled: true
+      reportsController:
+        enabled: true
+      serviceMonitor:
+        enabled: true
+        namespace: observability
+
+# Cloud Provisioning Layer
+---
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: PlatformApp
+metadata:
+  name: crossplane
+  namespace: crossplane-system
+  labels:
+    app.kubernetes.io/part-of: platform-stack
+    platform.yurikrupnik.com/layer: provisioning
+spec:
+  name: crossplane
+  namespace: crossplane-system
+  installationType: helm
+  helm:
+    chart: crossplane
+    repository: https://charts.crossplane.io/stable
+    version: "1.17.0"
+    wait: true
+    timeout: 600
+    values:
+      rbacManager:
+        deploy: true
+      metrics:
+        enabled: true
+      webhooks:
+        enabled: true
+      args:
+        - --enable-composition-functions
+        - --enable-environment-configs

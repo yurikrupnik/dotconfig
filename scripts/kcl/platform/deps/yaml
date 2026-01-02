@@ -1,0 +1,338 @@
+simple_api:
+  name: simple-api
+  namespace: default
+  image: ghcr.io/myorg/simple-api:v1.0.0
+  replicas: 2
+  port: 8080
+  dependencies:
+    postgres:
+      enabled: true
+      provider:
+        name: cnpg
+        internal: true
+        tier: free
+      database: api
+      username: app
+      storage_size: '5Gi'
+      instances: 1
+      pooler_enabled: false
+      pooler_mode: transaction
+      pooler_instances: 1
+production_api:
+  name: prod-api
+  namespace: production
+  image: ghcr.io/myorg/api:v2.0.0
+  replicas: 3
+  port: 3000
+  resources:
+    limits:
+      memory: '1Gi'
+    requests:
+      cpu: '500m'
+      memory: '512Mi'
+  dependencies:
+    postgres:
+      enabled: true
+      provider:
+        name: neon
+        internal: false
+        region: us-east-1
+        tier: standard
+      database: production
+      username: app
+      storage_size: '10Gi'
+      instances: 1
+      pooler_enabled: true
+      pooler_mode: transaction
+      pooler_instances: 1
+    redis:
+      enabled: true
+      provider:
+        name: upstash
+        internal: false
+        region: us-east-1
+        tier: free
+      mode: standalone
+      memory: '128Mi'
+      persistence: false
+      password_enabled: true
+    auth:
+      enabled: true
+      provider: clerk
+    monitoring:
+      enabled: true
+      provider: datadog
+      sentry_enabled: true
+  labels:
+    team: backend
+    cost-center: engineering
+staging_api:
+  name: staging-api
+  namespace: staging
+  image: ghcr.io/myorg/api:staging
+  replicas: 1
+  port: 8080
+  dependencies:
+    postgres:
+      enabled: true
+      provider:
+        name: cnpg
+        internal: true
+        tier: free
+      database: app
+      username: app
+      storage_size: '1Gi'
+      instances: 1
+      pooler_enabled: false
+      pooler_mode: transaction
+      pooler_instances: 1
+    redis:
+      enabled: true
+      provider:
+        name: internal
+        internal: true
+        tier: free
+      mode: standalone
+      memory: '64Mi'
+      persistence: false
+      password_enabled: true
+    monitoring:
+      enabled: true
+      provider: prometheus
+      sentry_enabled: false
+ml_worker:
+  name: ml-trainer
+  namespace: ml
+  image: ghcr.io/myorg/ml-trainer:latest
+  replicas: 1
+  port: 8080
+  resources:
+    limits:
+      memory: '32Gi'
+    requests:
+      cpu: '4'
+      memory: '16Gi'
+  dependencies:
+    postgres:
+      enabled: true
+      provider:
+        name: neon
+        internal: false
+        tier: standard
+      database: mlflow
+      username: app
+      storage_size: '10Gi'
+      instances: 1
+      pooler_enabled: false
+      pooler_mode: transaction
+      pooler_instances: 1
+    redis:
+      enabled: true
+      provider:
+        name: upstash
+        internal: false
+        tier: free
+      mode: standalone
+      memory: '128Mi'
+      persistence: false
+      password_enabled: true
+    storage:
+      enabled: true
+      provider: s3
+      bucket_name: ml-artifacts
+items:
+- apiVersion: postgresql.cnpg.io/v1
+  kind: Cluster
+  metadata:
+    name: staging-api-postgres
+    namespace: staging
+    labels:
+      app.kubernetes.io/name: staging-api-postgres
+      app.kubernetes.io/component: database
+      platform.yurikrupnik.com/postgres: 'true'
+      platform.yurikrupnik.com/internal: 'true'
+  spec:
+    instances: 1
+    storage:
+      size: '1Gi'
+    bootstrap:
+      initdb:
+        database: app
+        owner: app
+    postgresql:
+      parameters:
+        max_connections: '200'
+        shared_buffers: '256MB'
+    monitoring:
+      enablePodMonitor: true
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    labels:
+      app.kubernetes.io/name: staging-api-redis
+      app.kubernetes.io/component: cache
+      platform.yurikrupnik.com/redis: 'true'
+      platform.yurikrupnik.com/internal: 'true'
+    name: staging-api-redis
+    namespace: staging
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: staging-api-redis
+    template:
+      metadata:
+        labels:
+          app: staging-api-redis
+      spec:
+        containers:
+        - command:
+          - redis-server
+          - '--requirepass'
+          - $(REDIS_PASSWORD)
+          env:
+          - name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: password
+                name: staging-api-redis-auth
+          image: redis:7-alpine
+          name: redis
+          ports:
+          - containerPort: 6379
+            name: redis
+          resources:
+            limits:
+              memory: '64Mi'
+            requests:
+              memory: '64Mi'
+              cpu: '50m'
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      app.kubernetes.io/name: staging-api-redis
+    name: staging-api-redis
+    namespace: staging
+  spec:
+    ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+    selector:
+      app: staging-api-redis
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    labels:
+      app.kubernetes.io/name: staging-api-redis
+      app.kubernetes.io/component: cache
+    name: staging-api-redis-auth
+    namespace: staging
+  stringData:
+    password: $(RANDOM_PASSWORD)
+  type: Opaque
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    annotations: {}
+    labels:
+      app.kubernetes.io/name: staging-api
+      app.kubernetes.io/managed-by: platform-operator
+      platform.yurikrupnik.com/auto-label: 'true'
+      platform.yurikrupnik.com/postgres: 'true'
+      platform.yurikrupnik.com/postgres-internal: 'true'
+      platform.yurikrupnik.com/postgres-provider: cnpg
+      platform.yurikrupnik.com/redis: 'true'
+      platform.yurikrupnik.com/redis-internal: 'true'
+      platform.yurikrupnik.com/redis-provider: internal
+      platform.yurikrupnik.com/monitoring: 'true'
+      platform.yurikrupnik.com/monitoring-provider: prometheus
+    name: staging-api
+    namespace: staging
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: staging-api
+    template:
+      metadata:
+        annotations:
+          platform.yurikrupnik.com/auto-label: 'true'
+        labels:
+          app: staging-api
+          app.kubernetes.io/name: staging-api
+          app.kubernetes.io/managed-by: platform-operator
+          platform.yurikrupnik.com/auto-label: 'true'
+          platform.yurikrupnik.com/postgres: 'true'
+          platform.yurikrupnik.com/postgres-internal: 'true'
+          platform.yurikrupnik.com/postgres-provider: cnpg
+          platform.yurikrupnik.com/redis: 'true'
+          platform.yurikrupnik.com/redis-internal: 'true'
+          platform.yurikrupnik.com/redis-provider: internal
+          platform.yurikrupnik.com/monitoring: 'true'
+          platform.yurikrupnik.com/monitoring-provider: prometheus
+      spec:
+        containers:
+        - env:
+          - name: POSTGRES_USER
+            valueFrom:
+              secretKeyRef:
+                key: username
+                name: staging-api-postgres-app
+          - name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: password
+                name: staging-api-postgres-app
+          - name: POSTGRES_HOST
+            valueFrom:
+              secretKeyRef:
+                key: host
+                name: staging-api-postgres-app
+          - name: POSTGRES_PORT
+            value: '5432'
+          - name: POSTGRES_DB
+            value: app
+          - name: DATABASE_URL
+            value: postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@staging-api-postgres-rw.staging.svc:5432/app
+          - name: REDIS_HOST
+            value: staging-api-redis.staging.svc
+          - name: REDIS_PORT
+            value: '6379'
+          - name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: password
+                name: staging-api-redis-auth
+          - name: REDIS_URL
+            value: redis://:$(REDIS_PASSWORD)@staging-api-redis.staging.svc:6379
+          image: ghcr.io/myorg/api:staging
+          name: staging-api
+          ports:
+          - containerPort: 8080
+            name: http
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      app.kubernetes.io/name: staging-api
+      app.kubernetes.io/managed-by: platform-operator
+      platform.yurikrupnik.com/auto-label: 'true'
+      platform.yurikrupnik.com/postgres: 'true'
+      platform.yurikrupnik.com/postgres-internal: 'true'
+      platform.yurikrupnik.com/postgres-provider: cnpg
+      platform.yurikrupnik.com/redis: 'true'
+      platform.yurikrupnik.com/redis-internal: 'true'
+      platform.yurikrupnik.com/redis-provider: internal
+      platform.yurikrupnik.com/monitoring: 'true'
+      platform.yurikrupnik.com/monitoring-provider: prometheus
+    name: staging-api
+    namespace: staging
+  spec:
+    ports:
+    - name: http
+      port: 80
+      targetPort: http
+    selector:
+      app: staging-api

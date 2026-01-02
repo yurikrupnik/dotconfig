@@ -1,0 +1,116 @@
+---
+# Prometheus Stack - Monitoring and Alerting
+# Installed via PlatformApp operator using Helm
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: PlatformApp
+metadata:
+  name: prometheus
+  namespace: observability
+spec:
+  name: prometheus
+  namespace: observability
+  installationType: helm
+  helm:
+    chart: kube-prometheus-stack
+    repository: https://prometheus-community.github.io/helm-charts
+    version: "61.0.0"
+    wait: true
+    timeout: 900
+    values:
+      # Prometheus
+      prometheus:
+        prometheusSpec:
+          replicas: 1
+          retention: 15d
+          retentionSize: "10GB"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          storageSpec:
+            volumeClaimTemplate:
+              spec:
+                accessModes: ["ReadWriteOnce"]
+                resources:
+                  requests:
+                    storage: 20Gi
+          # ServiceMonitor selector
+          serviceMonitorSelectorNilUsesHelmValues: false
+          podMonitorSelectorNilUsesHelmValues: false
+
+      # Alertmanager
+      alertmanager:
+        enabled: true
+        alertmanagerSpec:
+          replicas: 1
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          storage:
+            volumeClaimTemplate:
+              spec:
+                accessModes: ["ReadWriteOnce"]
+                resources:
+                  requests:
+                    storage: 5Gi
+
+      # Grafana
+      grafana:
+        enabled: true
+        replicas: 1
+        adminPassword: admin  # Change in production!
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        persistence:
+          enabled: true
+          size: 5Gi
+        # Default dashboards
+        defaultDashboardsEnabled: true
+        defaultDashboardsTimezone: utc
+        # Additional data sources
+        additionalDataSources:
+          - name: Loki
+            type: loki
+            url: http://loki-gateway.observability.svc.cluster.local
+            access: proxy
+            isDefault: false
+
+      # Node Exporter
+      nodeExporter:
+        enabled: true
+
+      # Kube State Metrics
+      kubeStateMetrics:
+        enabled: true
+
+      # Prometheus Operator
+      prometheusOperator:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+      # Disable components not needed for most clusters
+      kubeEtcd:
+        enabled: false
+      kubeControllerManager:
+        enabled: false
+      kubeScheduler:
+        enabled: false
+      kubeProxy:
+        enabled: false

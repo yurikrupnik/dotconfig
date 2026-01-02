@@ -1,0 +1,234 @@
+version: "3.9"
+
+services:
+  # Core Application
+#  dotconfig-app:
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+#    image: yurikrupnik/dotconfig:latest
+#    container_name: dotconfig-app
+#    ports:
+#      - "8080:8080"
+#    environment:
+#      - RUST_LOG=info
+#      - DAPR_HTTP_PORT=3500
+#      - DAPR_GRPC_PORT=50001
+#      - FLAGSMITH_API_URL=http://flagsmith-frontend:3000
+#      - FLAGSMITH_ENV_KEY=local
+#    depends_on:
+#      - nats
+#      - flagsmith-api
+#      - redis
+#    networks:
+#      - platform-network
+#    volumes:
+#      - ./src:/app/src
+#    command: ["dotconfig", "shit", "do-it", "-n", "aris"]
+
+  # Dapr Sidecar
+  dapr-sidecar:
+    image: daprio/daprd:latest
+    container_name: dapr-sidecar
+    ports:
+      - "3500:3500"
+      - "50001:50001"
+    command: ["./daprd", "-app-id", "dotconfig", "-app-port", "8080", "-dapr-grpc-port", "50001", "-components-path", "/components"]
+    volumes:
+      - ./config/dapr/components:/components
+    depends_on:
+      - dotconfig-app
+    networks:
+      - platform-network
+
+  # NATS Message Queue
+  nats:
+    image: nats:latest
+    container_name: nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: "-js"
+    networks:
+      - platform-network
+    volumes:
+      - nats-data:/data
+
+  # Redis for Dapr state
+  redis:
+    image: redis:8-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    networks:
+      - platform-network
+    volumes:
+      - redis-data:/data
+
+  # PostgreSQL for Flagsmith
+  postgres-flagsmith:
+    image: postgres:18-alpine
+    container_name: postgres-flagsmith
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=flagsmith
+      - POSTGRES_PASSWORD=flagsmith123
+      - POSTGRES_DB=flagsmith
+    volumes:
+      - postgres-flagsmith-data:/var/lib/postgresql/data
+    networks:
+      - platform-network
+
+  # Redis for Flagsmith
+  redis-flagsmith:
+    image: redis:8-alpine
+    container_name: redis-flagsmith
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes
+    networks:
+      - platform-network
+    volumes:
+      - redis-flagsmith-data:/data
+
+  # Flagsmith API
+  flagsmith-api:
+    image: flagsmith/flagsmith-api:latest
+    container_name: flagsmith-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DJANGO_DB=postgres
+      - DJANGO_DB_USER=flagsmith
+      - DJANGO_DB_PASSWORD=flagsmith123
+      - DJANGO_DB_HOST=postgres-flagsmith
+      - DJANGO_DB_PORT=5432
+      - DJANGO_DB_NAME=flagsmith
+      - REDIS_HOST=redis-flagsmith
+      - REDIS_PORT=6379
+      - SECRET_KEY=local-secret-key-change-in-production
+      - ALLOWED_HOSTS=*
+      - URL=http://localhost:8000
+    depends_on:
+      - postgres-flagsmith
+      - redis-flagsmith
+    networks:
+      - platform-network
+    command: sh -c "python manage.py migrate && gunicorn config.wsgi:application --bind 0.0.0.0:8000"
+
+  # Flagsmith Frontend
+  flagsmith-frontend:
+    image: flagsmith/flagsmith-frontend:latest
+    container_name: flagsmith-frontend
+    ports:
+      - "9085:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000/api/v1
+    depends_on:
+      - flagsmith-api
+    networks:
+      - platform-network
+
+  # Prometheus for observability
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - platform-network
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "9091:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+    networks:
+      - platform-network
+
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"
+      - "14268:14268"
+      - "9411:9411"
+    environment:
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+    networks:
+      - platform-network
+
+  # Chaos Mesh (simplified for local dev)
+#  chaos-dashboard:
+#    image: chaos-mesh/chaos-dashboard:latest
+#    container_name: chaos-dashboard
+#    ports:
+#      - "2333:2333"
+#    networks:
+#      - platform-network
+#    environment:
+#      - LISTEN_HOST=0.0.0.0
+#      - LISTEN_PORT=2333
+
+  # Loki for log aggregation
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./config/loki/loki-config.yml:/etc/loki/local-config.yaml
+    networks:
+      - platform-network
+
+  # Promtail for log collection
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    volumes:
+      - ./config/promtail/promtail-config.yml:/etc/promtail/config.yml
+      - /var/log:/var/log:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - platform-network
+    depends_on:
+      - loki
+
+networks:
+  platform-network:
+    driver: bridge
+
+volumes:
+  nats-data:
+  redis-data:
+  redis-flagsmith-data:
+  postgres-flagsmith-data:
+  prometheus-data:
+  grafana-data:

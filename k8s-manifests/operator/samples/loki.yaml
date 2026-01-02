@@ -1,0 +1,78 @@
+---
+# Loki - Log Aggregation System
+# Installed via PlatformApp operator using Helm
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: PlatformApp
+metadata:
+  name: loki
+  namespace: observability
+spec:
+  name: loki
+  namespace: observability
+  installationType: helm
+  helm:
+    chart: loki
+    repository: https://grafana.github.io/helm-charts
+    version: "6.6.0"
+    wait: true
+    timeout: 600
+    values:
+      # Deployment mode: single binary for dev, distributed for prod
+      deploymentMode: SingleBinary
+
+      # Single Binary mode configuration
+      singleBinary:
+        replicas: 1
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+      # Loki configuration
+      loki:
+        auth_enabled: false
+        commonConfig:
+          replication_factor: 1
+        storage:
+          type: filesystem
+        schemaConfig:
+          configs:
+            - from: "2024-01-01"
+              store: tsdb
+              object_store: filesystem
+              schema: v13
+              index:
+                prefix: index_
+                period: 24h
+
+      # Persistence
+      persistence:
+        enabled: true
+        size: 10Gi
+
+      # Gateway (nginx)
+      gateway:
+        enabled: true
+        replicas: 1
+
+      # Disable distributed components in single binary mode
+      backend:
+        replicas: 0
+      read:
+        replicas: 0
+      write:
+        replicas: 0
+
+      # Monitoring
+      monitoring:
+        selfMonitoring:
+          enabled: false
+        lokiCanary:
+          enabled: false
+
+      # Test disabled
+      test:
+        enabled: false

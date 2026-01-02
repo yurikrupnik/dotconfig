@@ -1,0 +1,75 @@
+# API Server justfile
+
+default:
+    just --list
+
+# Development
+# -----------------------------------------------------------------------------
+
+# Run the API server locally
+dev:
+    cargo run --bin api-server
+
+# Run with hot reload (requires cargo-watch)
+watch:
+    cargo watch -x 'run --bin api-server'
+
+# Run tests
+test:
+    cargo test
+
+# Build
+# -----------------------------------------------------------------------------
+
+# Build release binary
+build:
+    cargo build --release --bin api-server
+
+# Build Docker image
+docker-build tag="latest":
+    docker build -t ghcr.io/yurikrupnik/api-server:{{tag}} -f Dockerfile ../..
+
+# Push Docker image
+docker-push tag="latest":
+    docker push ghcr.io/yurikrupnik/api-server:{{tag}}
+
+# Build and push Docker image
+docker-release tag="latest": (docker-build tag) (docker-push tag)
+
+# Kubernetes
+# -----------------------------------------------------------------------------
+
+# Deploy to Kubernetes
+k8s-deploy:
+    kubectl apply -k k8s/
+
+# Delete from Kubernetes
+k8s-delete:
+    kubectl delete -k k8s/ --ignore-not-found
+
+# Check deployment status
+k8s-status:
+    kubectl get pods -l app=api-server
+    kubectl get svc api-server
+    kubectl get ingress api-server
+
+# View logs
+k8s-logs:
+    kubectl logs -l app=api-server -f
+
+# Port forward for local testing
+k8s-port-forward:
+    kubectl port-forward svc/api-server 3000:80
+
+# Testing
+# -----------------------------------------------------------------------------
+
+# Test the health endpoint
+test-health url="http://localhost:3000":
+    curl -s {{url}}/health | jq .
+
+# Test the greet endpoint
+test-greet name="World" url="http://localhost:3000":
+    curl -s -X POST {{url}}/api/greet \
+        -H "Content-Type: application/json" \
+        -d '{"name": "{{name}}"}' | jq .

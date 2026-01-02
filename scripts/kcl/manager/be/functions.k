@@ -7,6 +7,11 @@ pluralize = lambda word: str -> str {
         _result = word + "zes"
     elif word.endswith("s") or word.endswith("z") or word.endswith("x") or word.endswith("ch") or word.endswith("sh"):
         _result = word + "es"
+    elif word.endswith("z"):
+        _result = word + "zes"
+    elif word.endswith("s") or word.endswith("x") or word.endswith("ch") or word.endswith("sh"):
+       _result = word + "es"
+
     else:
         _result = word + "s"
     _result

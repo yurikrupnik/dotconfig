@@ -1,0 +1,54 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: pod-kill-random
+  namespace: default
+spec:
+  action: pod-kill
+  mode: random-max-percent
+  value: "30"
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: dotconfig
+  duration: "5m"
+  scheduler:
+    cron: "@every 10m"
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: container-kill
+  namespace: default
+spec:
+  action: container-kill
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: dotconfig
+  containerNames:
+    - dotconfig
+  duration: "2m"
+  scheduler:
+    cron: "@every 15m"
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: pod-failure-simulated
+  namespace: default
+spec:
+  action: pod-failure
+  mode: fixed-percent
+  value: "20"
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: dotconfig
+  duration: "3m"
+  scheduler:
+    cron: "@every 20m"

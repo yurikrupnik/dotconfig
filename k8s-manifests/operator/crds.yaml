@@ -1,0 +1,791 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: buckets.platform.yurikrupnik.com
+spec:
+  group: platform.yurikrupnik.com
+  names:
+    kind: Bucket
+    listKind: BucketList
+    plural: buckets
+    singular: bucket
+    shortNames:
+      - bkt
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Provider
+          type: string
+          jsonPath: .spec.provider
+        - name: Location
+          type: string
+          jsonPath: .spec.parameters.location
+        - name: Ready
+          type: boolean
+          jsonPath: .status.ready
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: ["provider", "parameters"]
+              properties:
+                provider:
+                  type: string
+                  enum: ["gcp", "aws", "azure"]
+                  description: "Cloud provider to create the bucket in"
+                parameters:
+                  type: object
+                  required: ["location"]
+                  properties:
+                    location:
+                      type: string
+                      description: "Bucket location/region (GCP: us-east1, AWS: us-east-1, Azure: eastus)"
+                    storageClass:
+                      type: string
+                      enum: ["STANDARD", "INFREQUENT_ACCESS", "ARCHIVE", "COLD_ARCHIVE", "INTELLIGENT"]
+                      description: "Storage tier mapped per provider"
+                    versioning:
+                      type: boolean
+                      default: false
+                      description: "Enable object versioning"
+                    objectLockEnabled:
+                      type: boolean
+                      default: false
+                      description: "AWS only: Enable object lock at bucket creation"
+                    publicAccessPrevention:
+                      type: boolean
+                      default: true
+                      description: "Block public access to the bucket"
+                    uniformBucketLevelAccess:
+                      type: boolean
+                      default: true
+                      description: "GCP only: Enable uniform bucket-level access"
+                    lifecycleRules:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                          enabled:
+                            type: boolean
+                            default: true
+                          prefix:
+                            type: string
+                          transition:
+                            type: object
+                            properties:
+                              days:
+                                type: integer
+                              storageClass:
+                                type: string
+                          expiration:
+                            type: object
+                            properties:
+                              days:
+                                type: integer
+                              expiredObjectDeleteMarker:
+                                type: boolean
+                          noncurrentVersionExpiration:
+                            type: integer
+                    cors:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          allowedOrigins:
+                            type: array
+                            items:
+                              type: string
+                          allowedMethods:
+                            type: array
+                            items:
+                              type: string
+                          allowedHeaders:
+                            type: array
+                            items:
+                              type: string
+                          exposeHeaders:
+                            type: array
+                            items:
+                              type: string
+                          maxAgeSeconds:
+                            type: integer
+                    encryption:
+                      type: object
+                      properties:
+                        encryptionType:
+                          type: string
+                          enum: ["PROVIDER_MANAGED", "CUSTOMER_MANAGED"]
+                        kmsKeyId:
+                          type: string
+                    logging:
+                      type: object
+                      properties:
+                        targetBucket:
+                          type: string
+                        targetPrefix:
+                          type: string
+                    replication:
+                      type: object
+                      properties:
+                        destinationBucket:
+                          type: string
+                        destinationRegion:
+                          type: string
+                        prefix:
+                          type: string
+                    tags:
+                      type: object
+                      additionalProperties:
+                        type: string
+                    website:
+                      type: object
+                      properties:
+                        indexDocument:
+                          type: string
+                        errorDocument:
+                          type: string
+                        redirectAllRequestsTo:
+                          type: string
+                    notifications:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                          events:
+                            type: array
+                            items:
+                              type: string
+                              enum: ["OBJECT_CREATED", "OBJECT_DELETED", "OBJECT_ARCHIVED", "OBJECT_METADATA_UPDATED"]
+                          destination:
+                            type: object
+                            properties:
+                              destinationType:
+                                type: string
+                                enum: ["topic", "function", "queue"]
+                              target:
+                                type: string
+                          prefix:
+                            type: string
+                          suffix:
+                            type: string
+                    # Retention & Soft Delete
+                    retentionPolicy:
+                      type: object
+                      description: "Object retention/lock policy"
+                      properties:
+                        retentionDays:
+                          type: integer
+                          description: "Retention period in days"
+                        locked:
+                          type: boolean
+                          default: false
+                          description: "Lock the retention policy (cannot be shortened once locked)"
+                    softDelete:
+                      type: object
+                      description: "Soft delete policy for recovering deleted objects"
+                      properties:
+                        retentionDays:
+                          type: integer
+                          description: "Retention period for soft-deleted objects in days"
+                    # Advanced Options
+                    forceDestroy:
+                      type: boolean
+                      default: false
+                      description: "Delete all objects when bucket is deleted"
+                    requesterPays:
+                      type: boolean
+                      default: false
+                      description: "Requester pays for data transfer (GCP/AWS only)"
+                    # Azure-Specific
+                    azureAccountTier:
+                      type: string
+                      enum: ["Standard", "Premium"]
+                      description: "Azure: Account tier"
+                    azureReplicationType:
+                      type: string
+                      enum: ["LRS", "GRS", "RAGRS", "ZRS", "GZRS", "RAGZRS"]
+                      description: "Azure: Replication type"
+                    azureResourceGroup:
+                      type: string
+                      description: "Azure: Resource group name (required for Azure)"
+                    azureHttpsOnly:
+                      type: boolean
+                      default: true
+                      description: "Azure: Enable HTTPS traffic only"
+                    azureMinTlsVersion:
+                      type: string
+                      description: "Azure: Minimum TLS version"
+                    # GCP-Specific
+                    gcpProject:
+                      type: string
+                      description: "GCP: Project ID (if different from provider default)"
+                    gcpAutoclass:
+                      type: object
+                      description: "GCP: Enable autoclass (automatic storage class management)"
+                      properties:
+                        enabled:
+                          type: boolean
+                        terminalStorageClass:
+                          type: string
+                          description: "Terminal storage class (NEARLINE or ARCHIVE)"
+                    gcpRpo:
+                      type: string
+                      enum: ["DEFAULT", "ASYNC_TURBO"]
+                      description: "GCP: Recovery Point Objective for turbo replication"
+                accessControl:
+                  type: object
+                  properties:
+                    iamBindings:
+                      type: array
+                      items:
+                        type: object
+                        required: ["role", "members"]
+                        properties:
+                          role:
+                            type: string
+                            enum: ["objectViewer", "objectAdmin", "bucketAdmin", "objectCreator", "custom"]
+                          members:
+                            type: array
+                            items:
+                              type: string
+                          condition:
+                            type: object
+                            properties:
+                              title:
+                                type: string
+                              description:
+                                type: string
+                              expression:
+                                type: string
+                    bucketPolicy:
+                      type: object
+                      properties:
+                        policyDocument:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                    acl:
+                      type: string
+                      enum: ["private", "publicRead", "publicReadWrite", "authenticatedRead"]
+                providerConfigRef:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                writeConnectionSecretToRef:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                deletionPolicy:
+                  type: string
+                  enum: ["Delete", "Orphan"]
+                  default: "Delete"
+                labels:
+                  type: object
+                  additionalProperties:
+                    type: string
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: ["Pending", "Creating", "Ready", "Failed", "Deleting", "Updating"]
+                ready:
+                  type: boolean
+                synced:
+                  type: boolean
+                bucketName:
+                  type: string
+                endpoint:
+                  type: string
+                resourceId:
+                  type: string
+                managedResource:
+                  type: object
+                  properties:
+                    apiVersion:
+                      type: string
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                observedGeneration:
+                  type: integer
+                lastReconcileTime:
+                  type: string
+                message:
+                  type: string
+      subresources:
+        status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: platformapps.platform.yurikrupnik.com
+spec:
+  group: platform.yurikrupnik.com
+  names:
+    kind: PlatformApp
+    listKind: PlatformAppList
+    plural: platformapps
+    singular: platformapp
+    shortNames:
+      - papp
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Type
+          type: string
+          jsonPath: .spec.installationType
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: ["name", "installationType"]
+              properties:
+                name:
+                  type: string
+                namespace:
+                  type: string
+                installationType:
+                  type: string
+                  enum: ["helm", "kcl", "cue", "all"]
+                helm:
+                  type: object
+                  properties:
+                    chart:
+                      type: string
+                    repository:
+                      type: string
+                    version:
+                      type: string
+                    values:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    wait:
+                      type: boolean
+                    timeout:
+                      type: integer
+                kcl:
+                  type: object
+                  properties:
+                    source:
+                      type: string
+                    arguments:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                labels:
+                  type: object
+                  additionalProperties:
+                    type: string
+                annotations:
+                  type: object
+                  additionalProperties:
+                    type: string
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                message:
+                  type: string
+                lastReconcileTime:
+                  type: string
+                observedGeneration:
+                  type: integer
+      subresources:
+        status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: gitopsapps.platform.yurikrupnik.com
+spec:
+  group: platform.yurikrupnik.com
+  names:
+    kind: GitOpsApp
+    listKind: GitOpsAppList
+    plural: gitopsapps
+    singular: gitopsapp
+    shortNames:
+      - gapp
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Revision
+          type: string
+          jsonPath: .status.lastSyncCommit
+        - name: Suspended
+          type: boolean
+          jsonPath: .spec.suspend
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: ["gitRepository", "path"]
+              properties:
+                gitRepository:
+                  type: object
+                  required: ["url"]
+                  properties:
+                    url:
+                      type: string
+                    branch:
+                      type: string
+                    tag:
+                      type: string
+                    commit:
+                      type: string
+                    interval:
+                      type: string
+                    secretRef:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                path:
+                  type: string
+                interval:
+                  type: string
+                prune:
+                  type: boolean
+                suspend:
+                  type: boolean
+                targetNamespace:
+                  type: string
+                sourceType:
+                  type: string
+                  enum: ["kustomization", "helm"]
+                helm:
+                  type: object
+                  properties:
+                    chart:
+                      type: string
+                    valuesFile:
+                      type: string
+                    values:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    releaseName:
+                      type: string
+                dependsOn:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                lastSyncTime:
+                  type: string
+                lastSyncCommit:
+                  type: string
+                observedGeneration:
+                  type: integer
+      subresources:
+        status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: crossplaneresources.platform.yurikrupnik.com
+spec:
+  group: platform.yurikrupnik.com
+  names:
+    kind: CrossplaneResource
+    listKind: CrossplaneResourceList
+    plural: crossplaneresources
+    singular: crossplaneresource
+    shortNames:
+      - xres
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Composition
+          type: string
+          jsonPath: .spec.compositionRef.name
+        - name: Ready
+          type: boolean
+          jsonPath: .status.compositeResource.ready
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: ["compositionRef"]
+              properties:
+                compositionRef:
+                  type: object
+                  required: ["name"]
+                  properties:
+                    name:
+                      type: string
+                claimRef:
+                  type: object
+                  properties:
+                    apiVersion:
+                      type: string
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                parameters:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                writeConnectionSecretToRef:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                providerConfigRef:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                resourcePolicies:
+                  type: object
+                  properties:
+                    deletionPolicy:
+                      type: string
+                      enum: ["Delete", "Orphan"]
+                    updatePolicy:
+                      type: string
+                      enum: ["Automatic", "Manual"]
+                labels:
+                  type: object
+                  additionalProperties:
+                    type: string
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                compositeResource:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    ready:
+                      type: boolean
+                    synced:
+                      type: boolean
+                observedGeneration:
+                  type: integer
+                lastReconcileTime:
+                  type: string
+      subresources:
+        status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: externalsecretconfigs.platform.yurikrupnik.com
+spec:
+  group: platform.yurikrupnik.com
+  names:
+    kind: ExternalSecretConfig
+    listKind: ExternalSecretConfigList
+    plural: externalsecretconfigs
+    singular: externalsecretconfig
+    shortNames:
+      - esc
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Provider
+          type: string
+          jsonPath: .spec.provider.type
+        - name: Synced
+          type: boolean
+          jsonPath: .status.synced
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: ["provider"]
+              properties:
+                provider:
+                  type: object
+                  required: ["type", "name"]
+                  properties:
+                    type:
+                      type: string
+                      enum: ["gcp", "aws", "azure", "vault", "onepassword"]
+                    name:
+                      type: string
+                    gcp:
+                      type: object
+                      properties:
+                        projectId:
+                          type: string
+                        auth:
+                          type: object
+                          properties:
+                            secretRef:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                                key:
+                                  type: string
+                                namespace:
+                                  type: string
+                    aws:
+                      type: object
+                      properties:
+                        region:
+                          type: string
+                        service:
+                          type: string
+                          enum: ["SecretsManager", "ParameterStore"]
+                    azure:
+                      type: object
+                      properties:
+                        tenantId:
+                          type: string
+                        vaultUrl:
+                          type: string
+                    vault:
+                      type: object
+                      properties:
+                        server:
+                          type: string
+                        path:
+                          type: string
+                        version:
+                          type: string
+                secrets:
+                  type: array
+                  items:
+                    type: object
+                    required: ["name"]
+                    properties:
+                      name:
+                        type: string
+                      targetSecretName:
+                        type: string
+                      targetNamespace:
+                        type: string
+                      refreshInterval:
+                        type: string
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            secretKey:
+                              type: string
+                            remoteRef:
+                              type: object
+                              properties:
+                                key:
+                                  type: string
+                                property:
+                                  type: string
+                                version:
+                                  type: string
+                clusterScoped:
+                  type: boolean
+                refreshInterval:
+                  type: string
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                synced:
+                  type: boolean
+                secretStoreName:
+                  type: string
+                lastSyncTime:
+                  type: string
+                observedGeneration:
+                  type: integer
+      subresources:
+        status: {}

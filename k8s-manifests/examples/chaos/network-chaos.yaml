@@ -1,0 +1,129 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-partition
+  namespace: default
+spec:
+  action: partition
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: dotconfig
+  direction: to
+  target:
+    selector:
+      namespaces:
+        - default
+      labelSelectors:
+        app: redis
+    mode: one
+  duration: "30s"
+  scheduler:
+    cron: "@every 5m"
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-loss
+  namespace: default
+spec:
+  action: loss
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: dotconfig
+  loss:
+    loss: "25"
+    correlation: "25"
+  direction: to
+  duration: "1m"
+  scheduler:
+    cron: "@every 8m"
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-duplicate
+  namespace: default
+spec:
+  action: duplicate
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: dotconfig
+  duplicate:
+    duplicate: "10"
+  duration: "45s"
+  scheduler:
+    cron: "@every 12m"
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-corrupt
+  namespace: default
+spec:
+  action: corrupt
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: dotconfig
+  corrupt:
+    corrupt: "5"
+  direction: both
+  duration: "30s"
+  scheduler:
+    cron: "@every 15m"
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: dns-chaos
+  namespace: default
+spec:
+  action: dns
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: dotconfig
+  duration: "1m"
+  scheduler:
+    cron: "@every 10m"
+  dns:
+    dnsServer: "10.96.0.10"
+    podPatterns:
+      - "dotconfig-.*"
+    actions:
+      - ResponseWithRandomResponse
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-bandwidth
+  namespace: default
+spec:
+  action: bandwidth
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: dotconfig
+  bandwidth:
+    rate: "1mbps"
+    limit: 1048576
+    buffer: 10000
+  direction: both
+  duration: "2m"
+  scheduler:
+    cron: "@every 10m"

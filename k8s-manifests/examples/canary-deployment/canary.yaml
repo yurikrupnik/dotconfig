@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dotconfig-primary
+  namespace: default
+  labels:
+    app: dotconfig
+    version: primary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dotconfig
+      version: primary
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+      labels:
+        app: dotconfig
+        version: primary
+    spec:
+      containers:
+      - name: dotconfig
+        image: yurikrupnik/dotconfig:v1.0
+        ports:
+        - containerPort: 8080
+        env:
+        - name: DAPR_HTTP_PORT
+          value: "3500"
+        - name: FLAGSMITH_ENV_KEY
+          valueFrom:
+            secretKeyRef:
+              name: flagsmith-secret
+              key: env-key
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+---
+apiVersion: flagger.app/v1beta1
+kind: Canary
+metadata:
+  name: dotconfig
+  namespace: default
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: dotconfig
+  service:
+    port: 8080
+    targetPort: 8080
+  analysis:
+    interval: 1m
+    threshold: 5
+    maxWeight: 50
+    stepWeight: 10
+    metrics:
+    - name: request-success-rate
+      thresholdRange:
+        min: 99
+      interval: 1m
+    - name: request-duration
+      thresholdRange:
+        max: 500
+      interval: 1m
+    webhooks:
+    - name: load-test
+      url: http://flagger-loadtester/
+      timeout: 5s
+      metadata:
+        cmd: "hey -z 1m -q 10 -c 2 http://dotconfig-canary:8080/"
+  autoscalerRef:
+    apiVersion: keda.sh/v1alpha1
+    kind: ScaledObject
+    name: dotconfig-scaledobject

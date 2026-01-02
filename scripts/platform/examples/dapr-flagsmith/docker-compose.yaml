@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # Flagsmith server
+  flagsmith:
+    image: flagsmith/flagsmith:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - DJANGO_ALLOWED_HOSTS=*
+      - DATABASE_URL=postgres://postgres:password@db:5432/flagsmith
+      - DJANGO_SECRET_KEY=your-secret-key-here
+    depends_on:
+      - db
+      - redis
+
+  # PostgreSQL for Flagsmith
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=flagsmith
+    volumes:
+      - flagsmith-db:/var/lib/postgresql/data
+
+  # Redis for Dapr and Flagsmith
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  # Feature flags service
+  feature-flags:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - FLAGSMITH_API_KEY=${FLAGSMITH_API_KEY}
+      - FLAGSMITH_API_URL=http://flagsmith:8000/api/v1/
+      - CACHE_TTL_SECONDS=60
+    depends_on:
+      - flagsmith
+      - redis
+
+  # Dapr sidecar for feature-flags
+  feature-flags-dapr:
+    image: daprio/daprd:latest
+    command: [
+      "./daprd",
+      "--app-id", "feature-flags",
+      "--app-port", "3000",
+      "--dapr-http-port", "3500",
+      "--components-path", "/components"
+    ]
+    volumes:
+      - ./components:/components
+    network_mode: "service:feature-flags"
+    depends_on:
+      - feature-flags
+
+volumes:
+  flagsmith-db:

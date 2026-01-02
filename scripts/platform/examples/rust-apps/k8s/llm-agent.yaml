@@ -1,0 +1,119 @@
+# LLM Agent Kubernetes Deployment
+apiVersion: v1
+kind: Secret
+metadata:
+  name: llm-agent-secrets
+type: Opaque
+stringData:
+  openrouter-api-key: "${OPENROUTER_API_KEY}"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: llm-agent
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-agent
+  labels:
+    app: llm-agent
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: llm-agent
+  template:
+    metadata:
+      labels:
+        app: llm-agent
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "llm-agent"
+        dapr.io/app-port: "3001"
+    spec:
+      serviceAccountName: llm-agent
+      containers:
+        - name: llm-agent
+          image: ghcr.io/yurikrupnik/llm-agent:latest
+          ports:
+            - containerPort: 3001
+              name: http
+          env:
+            - name: PORT
+              value: "3001"
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-agent-secrets
+                  key: openrouter-api-key
+            - name: DEFAULT_MODEL
+              value: "anthropic/claude-3.5-sonnet"
+            - name: FALLBACK_MODEL
+              value: "openai/gpt-4o"
+            - name: MAX_TOKENS
+              value: "4096"
+            - name: RUST_LOG
+              value: "info"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-agent
+spec:
+  selector:
+    app: llm-agent
+  ports:
+    - port: 80
+      targetPort: 3001
+      name: http
+---
+# KEDA ScaledObject for LLM Agent
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: llm-agent-scaler
+  labels:
+    app: llm-agent
+spec:
+  scaleTargetRef:
+    name: llm-agent
+  pollingInterval: 15
+  cooldownPeriod: 120
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  idleReplicaCount: 2
+  triggers:
+    # Scale based on Redis queue for agent requests
+    - type: redis
+      metadata:
+        address: redis.default.svc.cluster.local:6379
+        listName: agent-requests
+        listLength: "3"
+        activationListLength: "1"
+    # Scale based on Prometheus metrics
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.monitoring.svc.cluster.local:9090
+        metricName: llm_agent_active_requests
+        query: sum(llm_agent_active_requests{app="llm-agent"})
+        threshold: "5"

@@ -8,19 +8,21 @@ def cleanup_local [] {
     rm -rf tmp/secrets/local
 }
 
-export def create []: record<name: string, verbose: bool> -> nothing {
+export def create []: record<name: string, verbose: bool, ingress: bool, workers: int> -> nothing {
     let name = $in.name
     let verbose = $in.verbose
+    let ingress = $in.ingress
+    let workers = $in.workers
 
     if (cluster-exists $name) {
         log info $"Kind cluster '($name)' already exists  skipping creation."
         return
     }
 
-    log info $"Local Kind cluster creation: ($name)"
+    log info $"Local Kind cluster creation: ($name) \(workers: ($workers), ingress: ($ingress)\)"
 
     let tmp = (_tmpfile $"kind-config-($env.USER)")
-    let kcl_response = (kcl run ~/dotconfig/scripts/kcl/stam/main.k -D workers=2 -D ingress=true -D name=$name | from yaml)
+    let kcl_response = (kcl run ~/dotconfig/scripts/kcl/stam/main.k -D workers=($workers) -D ingress=($ingress) -D name=($name) | from yaml)
     let config = $kcl_response | get items.0
 
     $config | to yaml | save -f $tmp --force
@@ -34,7 +36,6 @@ export def create []: record<name: string, verbose: bool> -> nothing {
     kubectl cluster-info --context $"kind-($name)"
     kubectl wait --for=condition=Ready nodes --all --timeout=180s
     kubectl -n kube-system rollout status deploy/coredns --timeout=180s
-    kubectl cluster-info --context $"kind-($name)"
 
     rm -f $tmp
 }

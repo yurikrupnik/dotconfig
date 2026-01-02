@@ -1,0 +1,16 @@
+{
+  "name": "dotconfig-ci",
+  "engineVersion": "v0.15.1",
+  "sdk": "go",
+  "source": "dagger",
+  "dependencies": [
+    {
+      "name": "rust",
+      "source": "github.com/purpleclay/daggerverse/rust@v0.6.0"
+    },
+    {
+      "name": "wolfi",
+      "source": "github.com/shykes/daggerverse/wolfi@v0.1.3"
+    }
+  ]
+}

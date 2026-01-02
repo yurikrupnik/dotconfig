@@ -1,0 +1,132 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: dotconfig-deployment
+spec:
+  entrypoint: deployment-pipeline
+  volumes:
+    - name: workdir
+      emptyDir: {}
+  templates:
+    - name: deployment-pipeline
+      dag:
+        tasks:
+          - name: build
+            template: build-image
+          - name: deploy-staging
+            template: deploy
+            arguments:
+              parameters:
+                - name: environment
+                  value: staging
+            depends: "build"
+          - name: test-staging
+            template: smoke-tests
+            arguments:
+              parameters:
+                - name: environment
+                  value: staging
+            depends: "deploy-staging"
+          - name: chaos-test
+            template: chaos
+            depends: "test-staging"
+          - name: deploy-production
+            template: deploy
+            arguments:
+              parameters:
+                - name: environment
+                  value: production
+            depends: "chaos-test"
+          - name: monitor-canary
+            template: monitor-canary
+            depends: "deploy-production"
+
+    - name: build-image
+      container:
+        image: gcr.io/kaniko-project/executor:latest
+        command: ["/kaniko/executor"]
+        args:
+          - "--dockerfile=Dockerfile"
+          - "--context=git://github.com/yurikrupnik/dotconfig.git#main"
+          - "--destination=ghcr.io/yurikrupnik/dotconfig:{{workflow.creationTimestamp.Y}}-{{workflow.creationTimestamp.m}}-{{workflow.creationTimestamp.d}}"
+        volumeMounts:
+          - name: workdir
+            mountPath: /workspace
+
+    - name: deploy
+      inputs:
+        parameters:
+          - name: environment
+      container:
+        image: bitnami/kubectl:latest
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            kubectl set image deployment/dotconfig dotconfig=ghcr.io/yurikrupnik/dotconfig:{{workflow.creationTimestamp.Y}}-{{workflow.creationTimestamp.m}}-{{workflow.creationTimestamp.d}} -n {{inputs.parameters.environment}}
+            kubectl rollout status deployment/dotconfig -n {{inputs.parameters.environment}} --timeout=300s
+
+    - name: smoke-tests
+      inputs:
+        parameters:
+          - name: environment
+      container:
+        image: curlimages/curl:latest
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            echo "Running smoke tests..."
+            kubectl wait --for=condition=available --timeout=60s deployment/dotconfig -n {{inputs.parameters.environment}}
+            curl -f http://dotconfig.{{inputs.parameters.environment}}.svc.cluster.local:8080/health
+            echo "Smoke tests passed!"
+
+    - name: chaos
+      container:
+        image: bitnami/kubectl:latest
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            echo "Applying chaos experiments..."
+            kubectl apply -f /etc/config/chaos/pod-chaos.yaml
+            sleep 60
+            kubectl wait --for=condition=available --timeout=120s deployment/dotconfig -n staging
+            kubectl delete -f /etc/config/chaos/pod-chaos.yaml --ignore-not-found=true
+            echo "Chaos tests passed!"
+        volumeMounts:
+          - name: chaos-manifests
+            mountPath: /etc/config/chaos
+      volumes:
+        - name: chaos-manifests
+          configMap:
+            name: chaos-manifests
+
+    - name: monitor-canary
+      container:
+        image: bitnami/kubectl:latest
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            echo "Monitoring canary deployment..."
+            kubectl wait canary dotconfig -n production --for=jsonpath='{.status.phase}'=Succeeded --timeout=15m || exit 1
+            echo "Canary deployment successful!"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chaos-manifests
+data:
+  pod-chaos.yaml: |
+    apiVersion: chaos-mesh.org/v1alpha1
+    kind: PodChaos
+    metadata:
+      name: pod-failure
+      namespace: staging
+    spec:
+      action: pod-failure
+      mode: one
+      selector:
+        namespaces:
+          - staging
+        labelSelectors:
+          app: dotconfig
+      duration: "30s"

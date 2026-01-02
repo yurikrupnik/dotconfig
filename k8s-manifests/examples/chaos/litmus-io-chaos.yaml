@@ -1,0 +1,246 @@
+# Litmus IO Chaos Experiments
+# Equivalent to io-chaos.yaml from Chaos Mesh
+
+---
+# Experiment 1: Pod IO Stress (equivalent to io-latency)
+# Note: Litmus uses disk-fill as primary IO chaos, doesn't have exact latency equivalent
+# Using custom chaos experiment approach
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: pod-io-stress-chaos
+  namespace: default
+spec:
+  annotationCheck: "false"
+  engineState: "active"
+  appinfo:
+    appns: default
+    applabel: "app=dotconfig"
+    appkind: deployment
+  chaosServiceAccount: pod-delete-sa
+  experiments:
+  - name: pod-io-stress
+    spec:
+      components:
+        env:
+        - name: TOTAL_CHAOS_DURATION
+          value: "30"
+        - name: FILESYSTEM_UTILIZATION_PERCENTAGE
+          value: "10" # Limited to avoid filling disk
+        - name: VOLUME_MOUNT_PATH
+          value: "/tmp"
+        - name: PODS_AFFECTED_PERC
+          value: "100"
+      probe: []
+---
+# CronJob for IO stress every 5 minutes
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: io-stress-chaos-cron
+  namespace: default
+spec:
+  schedule: "*/5 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pod-delete-sa
+          containers:
+          - name: chaos-runner
+            image: litmuschaos/chaos-runner:latest
+            command:
+            - sh
+            - -c
+            - |
+              kubectl apply -f - <<EOF
+              apiVersion: litmuschaos.io/v1alpha1
+              kind: ChaosEngine
+              metadata:
+                name: io-stress-chaos-$(date +%s)
+                namespace: default
+              spec:
+                annotationCheck: "false"
+                engineState: "active"
+                appinfo:
+                  appns: default
+                  applabel: "app=dotconfig"
+                  appkind: deployment
+                chaosServiceAccount: pod-delete-sa
+                jobCleanUpPolicy: "delete"
+                experiments:
+                - name: pod-io-stress
+                  spec:
+                    components:
+                      env:
+                      - name: TOTAL_CHAOS_DURATION
+                        value: "30"
+                      - name: FILESYSTEM_UTILIZATION_PERCENTAGE
+                        value: "10"
+                      - name: VOLUME_MOUNT_PATH
+                        value: "/tmp"
+              EOF
+              sleep 40
+          restartPolicy: OnFailure
+---
+# Experiment 2: Disk Fill (simulating io-fault-write)
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: disk-fill-chaos
+  namespace: default
+spec:
+  annotationCheck: "false"
+  engineState: "active"
+  appinfo:
+    appns: default
+    applabel: "app=dotconfig"
+    appkind: deployment
+  chaosServiceAccount: pod-delete-sa
+  experiments:
+  - name: disk-fill
+    spec:
+      components:
+        env:
+        - name: TOTAL_CHAOS_DURATION
+          value: "10"
+        - name: FILL_PERCENTAGE
+          value: "20" # Conservative to avoid issues
+        - name: TARGET_DIRECTORY
+          value: "/var/log"
+        - name: PODS_AFFECTED_PERC
+          value: "100"
+        - name: EPHEMERAL_STORAGE_MEBIBYTES
+          value: "100"
+      probe: []
+---
+# CronJob for disk fill every 15 minutes
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: disk-fill-chaos-cron
+  namespace: default
+spec:
+  schedule: "*/15 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pod-delete-sa
+          containers:
+          - name: chaos-runner
+            image: litmuschaos/chaos-runner:latest
+            command:
+            - sh
+            - -c
+            - |
+              kubectl apply -f - <<EOF
+              apiVersion: litmuschaos.io/v1alpha1
+              kind: ChaosEngine
+              metadata:
+                name: disk-fill-chaos-$(date +%s)
+                namespace: default
+              spec:
+                annotationCheck: "false"
+                engineState: "active"
+                appinfo:
+                  appns: default
+                  applabel: "app=dotconfig"
+                  appkind: deployment
+                chaosServiceAccount: pod-delete-sa
+                jobCleanUpPolicy: "delete"
+                experiments:
+                - name: disk-fill
+                  spec:
+                    components:
+                      env:
+                      - name: TOTAL_CHAOS_DURATION
+                        value: "10"
+                      - name: FILL_PERCENTAGE
+                        value: "20"
+                      - name: TARGET_DIRECTORY
+                        value: "/var/log"
+              EOF
+              sleep 20
+          restartPolicy: OnFailure
+---
+# Note: Litmus doesn't have direct equivalents for:
+# - io-fault-read (errno injection)
+# - io-limit (rate limiting)
+# - io-override (path override)
+#
+# These would require custom chaos experiments or using node-level chaos
+# Below is a custom experiment template for advanced IO scenarios
+
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosExperiment
+metadata:
+  name: custom-io-latency
+  namespace: default
+  labels:
+    instance: litmus
+    app.kubernetes.io/part-of: litmus
+spec:
+  definition:
+    scope: Namespaced
+    permissions:
+    - apiGroups: [""]
+      resources: ["pods"]
+      verbs: ["create", "delete", "get", "list", "patch", "update"]
+    - apiGroups: [""]
+      resources: ["pods/exec"]
+      verbs: ["get", "list", "create"]
+    image: "litmuschaos/go-runner:latest"
+    imagePullPolicy: Always
+    args:
+    - -c
+    - ./experiments -name custom-io-latency
+    command:
+    - /bin/bash
+    env:
+    - name: TOTAL_CHAOS_DURATION
+      value: "30"
+    - name: CHAOS_INTERVAL
+      value: "10"
+    - name: RAMP_TIME
+      value: ""
+    - name: LIB
+      value: "litmus"
+    - name: TARGET_CONTAINER
+      value: ""
+    labels:
+      name: custom-io-latency
+      app.kubernetes.io/part-of: litmus
+      app.kubernetes.io/component: experiment-job
+---
+# Documentation for missing Litmus features
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litmus-io-chaos-notes
+  namespace: default
+data:
+  README.md: |
+    # Litmus IO Chaos Limitations
+    
+    Litmus Chaos has limited IO chaos experiments compared to Chaos Mesh:
+    
+    ## Available in Litmus:
+    - pod-io-stress: General IO stress testing
+    - disk-fill: Fill disk space to simulate storage issues
+    
+    ## NOT Available in Litmus (available in Chaos Mesh):
+    - IO Latency injection (io-latency with specific ms delays)
+    - IO Fault injection with errno codes (io-fault-read, io-fault-write)
+    - IO Rate limiting (io-limit with MB/s constraints)
+    - IO Path override (io-override)
+    
+    ## Workarounds:
+    1. Use node-level chaos with custom scripts
+    2. Create custom ChaosExperiments using litmus SDK
+    3. Use container-level fault injection tools (pumba, toxiproxy)
+    4. Consider keeping Chaos Mesh for advanced IO chaos scenarios
+    
+    ## Recommendation:
+    For comprehensive IO chaos testing, Chaos Mesh provides superior capabilities.
+    Consider a hybrid approach using both tools.

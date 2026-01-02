@@ -1,0 +1,103 @@
+# OpenRouter Configuration
+# LLM routing and fallback settings
+
+openrouter:
+  baseUrl: https://openrouter.ai/api/v1
+
+  # Default model settings
+  defaults:
+    model: anthropic/claude-3.5-sonnet
+    maxTokens: 4096
+    temperature: 0.7
+
+  # Model routing rules
+  routing:
+    # High-quality reasoning tasks
+    complex:
+      primary: anthropic/claude-3.5-sonnet
+      fallback:
+        - openai/gpt-4-turbo
+        - anthropic/claude-3-opus
+      maxTokens: 8192
+      temperature: 0.7
+
+    # Fast/cheap tasks
+    simple:
+      primary: anthropic/claude-3-haiku
+      fallback:
+        - openai/gpt-3.5-turbo
+        - mistralai/mistral-7b-instruct
+      maxTokens: 2048
+      temperature: 0.5
+
+    # Code generation and review
+    coding:
+      primary: anthropic/claude-3.5-sonnet
+      fallback:
+        - openai/gpt-4-turbo
+        - deepseek/deepseek-coder
+      maxTokens: 8192
+      temperature: 0.3
+
+    # Long context tasks
+    long_context:
+      primary: anthropic/claude-3.5-sonnet
+      fallback:
+        - google/gemini-pro-1.5
+        - anthropic/claude-3-opus
+      maxTokens: 16384
+      temperature: 0.7
+
+    # Creative writing
+    creative:
+      primary: anthropic/claude-3-opus
+      fallback:
+        - openai/gpt-4
+        - anthropic/claude-3.5-sonnet
+      maxTokens: 4096
+      temperature: 0.9
+
+  # Rate limiting
+  rateLimits:
+    requestsPerMinute: 60
+    tokensPerMinute: 100000
+    dailyBudgetUSD: 50.0
+
+  # Retry configuration
+  retry:
+    maxAttempts: 3
+    initialDelayMs: 1000
+    maxDelayMs: 10000
+    backoffMultiplier: 2
+
+  # Model cost tracking (USD per 1M tokens)
+  costs:
+    anthropic/claude-3-opus:
+      input: 15.0
+      output: 75.0
+    anthropic/claude-3.5-sonnet:
+      input: 3.0
+      output: 15.0
+    anthropic/claude-3-haiku:
+      input: 0.25
+      output: 1.25
+    openai/gpt-4-turbo:
+      input: 10.0
+      output: 30.0
+    openai/gpt-3.5-turbo:
+      input: 0.5
+      output: 1.5
+    google/gemini-pro-1.5:
+      input: 3.5
+      output: 10.5
+    deepseek/deepseek-coder:
+      input: 0.14
+      output: 0.28
+    mistralai/mistral-7b-instruct:
+      input: 0.25
+      output: 0.25
+
+  # Headers for requests
+  headers:
+    HTTP-Referer: https://github.com/yurikrupnik/dotconfig
+    X-Title: Skills Platform

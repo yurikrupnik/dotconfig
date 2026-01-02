@@ -1,0 +1,68 @@
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws
+spec:
+  package: crossplane-contrib/provider-aws:v0.39.0
+  providerConfigRef:
+    name: aws-provider-config
+---
+apiVersion: pkg.crossplane.io/v1
+kind: ProviderConfig
+metadata:
+  name: aws-provider-config
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: aws-creds
+      key: credentials
+---
+apiVersion: s3.aws.crossplane.io/v1beta1
+kind: Bucket
+metadata:
+  name: dotconfig-backup-bucket
+spec:
+  forProvider:
+    location: us-east-1
+    publicAccess:
+      blockPublicAcls: true
+      blockPublicPolicy: true
+      ignorePublicAcls: true
+      restrictPublicBuckets: true
+  providerConfigRef:
+    name: aws-provider-config
+---
+apiVersion: rds.aws.crossplane.io/v1beta1
+kind: Instance
+metadata:
+  name: dotconfig-db
+spec:
+  forProvider:
+    region: us-east-1
+    dbInstanceClass: db.t3.micro
+    engine: postgres
+    engineVersion: "15.3"
+    allocatedStorage: 20
+    masterUsername: dbadmin
+    masterUserPasswordSecretRef:
+      namespace: crossplane-system
+      name: db-password
+      key: password
+  providerConfigRef:
+    name: aws-provider-config
+---
+apiVersion: rds.aws.crossplane.io/v1beta1
+kind: DBSubnetGroup
+metadata:
+  name: dotconfig-db-subnet
+spec:
+  forProvider:
+    region: us-east-1
+    description: "Database subnet group for dotconfig"
+    subnetIdsRef:
+      - name: subnet-1
+      - name: subnet-2
+  providerConfigRef:
+    name: aws-provider-config

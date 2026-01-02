@@ -1,0 +1,100 @@
+---
+# Jaeger - Distributed Tracing Platform
+# Installed via PlatformApp operator using Helm
+apiVersion: platform.yurikrupnik.com/v1alpha1
+kind: PlatformApp
+metadata:
+  name: jaeger
+  namespace: observability
+spec:
+  name: jaeger
+  namespace: observability
+  installationType: helm
+  helm:
+    chart: jaeger
+    repository: https://jaegertracing.github.io/helm-charts
+    version: "3.1.0"
+    wait: true
+    timeout: 600
+    values:
+      # Deployment strategy - use all-in-one for dev/test
+      provisionDataStore:
+        cassandra: false
+        elasticsearch: false
+        kafka: false
+
+      # All-in-one deployment (collector + query + agent in one)
+      allInOne:
+        enabled: true
+        replicas: 1
+        image:
+          tag: "1.57"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        # OTLP is enabled by default in newer Jaeger versions
+
+      # Storage - in-memory for dev (use elasticsearch/cassandra for prod)
+      storage:
+        type: memory
+
+      # Collector configuration
+      collector:
+        enabled: false  # Using all-in-one
+
+      # Query UI
+      query:
+        enabled: false  # Using all-in-one
+
+      # Agent
+      agent:
+        enabled: false  # Using all-in-one
+
+      # Spark dependencies (for service graph)
+      spark:
+        enabled: false
+
+      # Hotrod sample app (disabled)
+      hotrod:
+        enabled: false
+
+      # Ingester
+      ingester:
+        enabled: false
+
+      # ServiceMonitor for Prometheus
+      serviceMonitor:
+        enabled: true
+---
+# Jaeger with Elasticsearch (production config - commented out)
+# apiVersion: platform.yurikrupnik.com/v1alpha1
+# kind: PlatformApp
+# metadata:
+#   name: jaeger-prod
+#   namespace: observability
+# spec:
+#   name: jaeger
+#   namespace: observability
+#   installationType: helm
+#   helm:
+#     chart: jaeger
+#     repository: https://jaegertracing.github.io/helm-charts
+#     version: "3.1.0"
+#     values:
+#       provisionDataStore:
+#         elasticsearch: true
+#       storage:
+#         type: elasticsearch
+#       elasticsearch:
+#         replicas: 3
+#         minimumMasterNodes: 2
+#       collector:
+#         enabled: true
+#         replicas: 2
+#       query:
+#         enabled: true
+#         replicas: 2
