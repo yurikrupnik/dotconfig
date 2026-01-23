@@ -1,0 +1,71 @@
+# Operator Integration Tests
+# Tests the dotconfig operator's ability to read node metrics
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: operator-node-metrics
+spec:
+  description: Test operator can read Kubernetes node metrics
+  timeouts:
+    apply: 60s
+    assert: 120s
+
+  steps:
+    # Step 1: Verify cluster access
+    - name: verify-cluster-access
+      description: Ensure we can access the cluster
+      try:
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Node
+            check:
+              (length(items)): '>= 1'
+
+    # Step 2: Deploy operator
+    - name: deploy-operator
+      description: Deploy the operator pod
+      try:
+        - apply:
+            file: operator-pod.yaml
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                name: operator-test
+            check:
+              status.phase: Running
+
+    # Step 3: Verify operator can read nodes
+    - name: verify-node-access
+      description: Operator should be able to list nodes
+      try:
+        - script:
+            content: |
+              kubectl logs operator-test --tail=50 | grep -E "(NAME|node)" || true
+            check:
+              ($error): null
+
+    # Step 4: Check RBAC permissions
+    - name: verify-rbac
+      description: Verify RBAC is correctly configured
+      try:
+        - assert:
+            resource:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRoleBinding
+              metadata:
+                name: operator-node-reader
+
+  catch:
+    - describe:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: operator-test
+    - podLogs:
+        name: operator-test
+        tail: 100

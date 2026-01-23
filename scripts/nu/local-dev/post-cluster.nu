@@ -69,15 +69,18 @@ def run-parallel [tasks: list<record<name: string, cmd: closure>>] {
 }
 
 # Phase 1: Initial parallel setup (Istio + Flux can run together)
-export def "setup phase1" [secrets: record] {
+export def "setup phase1" [
+    secrets: record
+    --repository: string = "gitops-v2"      # GitHub repository name for Flux
+    --path: string = "clusters/manager-cluster"  # Path in repository for cluster config
+] {
     log info "=== Phase 1: Core Infrastructure (Parallel) ==="
 
     let tasks = [
         {
             name: "Install Istio Ambient"
             cmd: {||
-                ls
-                #istioctl install --set profile=ambient --skip-confirmation | complete
+                istioctl install --set profile=ambient --skip-confirmation | complete
             }
         }
         {
@@ -101,10 +104,9 @@ export def "setup phase1" [secrets: record] {
                         error make { msg: "GitHub authentication failed" }
                     }
 
-                    log info $"Bootstrapping Flux for owner: ($gh_auth.owner)"
+                    log info $"Bootstrapping Flux for owner: ($gh_auth.owner), repo: ($repository), path: ($path)"
                     with-env { GITHUB_TOKEN: $gh_auth.token } {
-                        # Uncomment and adjust repository name as needed:
-                        # flux bootstrap github --owner=($gh_auth.owner) --repository=gitops-v2 --branch=main --path=clusters/manager-cluster --personal --components-extra image-reflector-controller,image-automation-controller | complete
+                        flux bootstrap github $"--owner=($gh_auth.owner)" $"--repository=($repository)" --branch=main $"--path=($path)" --personal --components-extra image-reflector-controller,image-automation-controller | complete
                     }
                 } else {
                     log info "Flux already bootstrapped, skipping"
@@ -274,12 +276,14 @@ export def "setup all" [
     secret_dir: string
     secrets: record
     --flux-wait: duration = 30sec  # Reduced from 1min since we're doing more in parallel
+    --repository: string = "gitops-v2"      # GitHub repository name for Flux
+    --path: string = "clusters/manager-cluster"  # Path in repository for cluster config
 ] {
     log info "🚀 Starting parallel post-cluster setup..."
     let total_start = (date now)
 
     # Phase 1: Core infrastructure (parallel)
-    let phase1_results = (setup phase1 $secrets)
+    let phase1_results = (setup phase1 $secrets --repository $repository --path $path)
 
     # Brief wait for Flux to create namespaces (reduced since other things ran in parallel)
     log info $"⏳ Waiting ($flux_wait) for Flux to stabilize..."

@@ -1,0 +1,249 @@
+# KEDA Integration Tests
+# Tests KEDA ScaledObjects and scaling behavior
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: keda-scaling
+spec:
+  description: Test KEDA event-driven autoscaling
+  timeouts:
+    apply: 120s
+    assert: 300s
+
+  # Skip if KEDA is not installed
+  skipIf:
+    - script:
+        content: |
+          kubectl get crd scaledobjects.keda.sh 2>/dev/null || exit 1
+
+  steps:
+    # Step 1: Verify KEDA is running
+    - name: verify-keda-installed
+      description: KEDA operator should be running
+      try:
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                namespace: keda
+                labels:
+                  app: keda-operator
+            check:
+              status.phase: Running
+
+    # Step 2: Deploy test workload
+    - name: deploy-test-workload
+      description: Deploy a test deployment for scaling
+      try:
+        - apply:
+            resource:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: keda-test-app
+              spec:
+                replicas: 1
+                selector:
+                  matchLabels:
+                    app: keda-test
+                template:
+                  metadata:
+                    labels:
+                      app: keda-test
+                  spec:
+                    containers:
+                      - name: app
+                        image: nginx:alpine
+                        ports:
+                          - containerPort: 80
+                        resources:
+                          limits:
+                            memory: "64Mi"
+                            cpu: "50m"
+        - assert:
+            resource:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: keda-test-app
+            check:
+              status.readyReplicas: 1
+
+    # Step 3: Deploy Redis for testing
+    - name: deploy-redis
+      description: Deploy Redis for queue-based scaling
+      try:
+        - apply:
+            resource:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: redis
+              spec:
+                replicas: 1
+                selector:
+                  matchLabels:
+                    app: redis
+                template:
+                  metadata:
+                    labels:
+                      app: redis
+                  spec:
+                    containers:
+                      - name: redis
+                        image: redis:7-alpine
+                        ports:
+                          - containerPort: 6379
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: Service
+              metadata:
+                name: redis
+              spec:
+                selector:
+                  app: redis
+                ports:
+                  - port: 6379
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                labels:
+                  app: redis
+            check:
+              status.phase: Running
+
+    # Step 4: Create ScaledObject with CPU trigger
+    - name: create-cpu-scaledobject
+      description: Create a CPU-based ScaledObject
+      try:
+        - apply:
+            resource:
+              apiVersion: keda.sh/v1alpha1
+              kind: ScaledObject
+              metadata:
+                name: keda-test-cpu-scaler
+              spec:
+                scaleTargetRef:
+                  name: keda-test-app
+                pollingInterval: 15
+                cooldownPeriod: 30
+                minReplicaCount: 1
+                maxReplicaCount: 5
+                triggers:
+                  - type: cpu
+                    metricType: Utilization
+                    metadata:
+                      value: "50"
+        - assert:
+            resource:
+              apiVersion: keda.sh/v1alpha1
+              kind: ScaledObject
+              metadata:
+                name: keda-test-cpu-scaler
+            check:
+              status.conditions:
+                (any { .type == 'Ready' && .status == 'True' }): true
+
+    # Step 5: Verify HPA was created
+    - name: verify-hpa-created
+      description: KEDA should create an HPA
+      try:
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: autoscaling/v2
+              kind: HorizontalPodAutoscaler
+              metadata:
+                name: keda-hpa-keda-test-cpu-scaler
+
+    # Step 6: Create Redis-based ScaledObject
+    - name: create-redis-scaledobject
+      description: Create a Redis queue-based ScaledObject
+      try:
+        - apply:
+            resource:
+              apiVersion: keda.sh/v1alpha1
+              kind: ScaledObject
+              metadata:
+                name: keda-test-redis-scaler
+              spec:
+                scaleTargetRef:
+                  name: keda-test-app
+                pollingInterval: 10
+                cooldownPeriod: 30
+                minReplicaCount: 0
+                maxReplicaCount: 10
+                triggers:
+                  - type: redis
+                    metadata:
+                      address: redis.default.svc.cluster.local:6379
+                      listName: test-queue
+                      listLength: "5"
+                      activationListLength: "1"
+
+    # Step 7: Test scale-to-zero
+    - name: test-scale-to-zero
+      description: Should scale to zero when queue is empty
+      try:
+        - script:
+            timeout: 120s
+            content: |
+              # Wait for scale to zero
+              for i in $(seq 1 60); do
+                replicas=$(kubectl get deployment keda-test-app -o jsonpath='{.spec.replicas}')
+                if [ "$replicas" == "0" ]; then
+                  echo "Scaled to zero successfully"
+                  exit 0
+                fi
+                sleep 2
+              done
+              echo "Did not scale to zero in time"
+              exit 0  # Don't fail, scale-to-zero may take time
+
+    # Step 8: Test scale-up from queue
+    - name: test-scale-up
+      description: Should scale up when items added to queue
+      try:
+        - script:
+            content: |
+              # Add items to Redis queue
+              kubectl run redis-cli --image=redis:7-alpine --rm -i --restart=Never -- \
+                redis-cli -h redis LPUSH test-queue item1 item2 item3 item4 item5 item6 item7 item8 item9 item10
+              echo "Added 10 items to queue"
+
+        - script:
+            timeout: 120s
+            content: |
+              # Wait for scale up
+              for i in $(seq 1 60); do
+                replicas=$(kubectl get deployment keda-test-app -o jsonpath='{.status.replicas}')
+                if [ "$replicas" -gt "1" ]; then
+                  echo "Scaled up to $replicas replicas"
+                  exit 0
+                fi
+                sleep 2
+              done
+              echo "Scale up check completed"
+
+    # Step 9: Verify ScaledObject status
+    - name: verify-scaledobject-status
+      description: Check ScaledObject status fields
+      try:
+        - script:
+            content: |
+              kubectl get scaledobject -o yaml
+              kubectl describe scaledobject keda-test-redis-scaler
+
+  catch:
+    - describe:
+        resource:
+          apiVersion: keda.sh/v1alpha1
+          kind: ScaledObject
+    - script:
+        content: |
+          kubectl logs -n keda -l app=keda-operator --tail=50

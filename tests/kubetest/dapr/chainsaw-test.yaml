@@ -1,0 +1,124 @@
+# Dapr Integration Tests
+# Tests Dapr components for the platform
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: dapr-components
+spec:
+  description: Test Dapr component configuration
+  timeouts:
+    apply: 60s
+    assert: 120s
+
+  # Skip if Dapr is not installed
+  skipIf:
+    - script:
+        content: |
+          kubectl get crd components.dapr.io 2>/dev/null || exit 1
+
+  steps:
+    # Step 1: Apply Dapr components
+    - name: apply-dapr-components
+      description: Deploy Dapr state store and pubsub components
+      try:
+        - apply:
+            file: ../../../scripts/platform/agents/config/dapr/statestore.yaml
+        - apply:
+            file: ../../../scripts/platform/agents/config/dapr/pubsub.yaml
+
+    # Step 2: Verify state store component
+    - name: verify-statestore
+      description: State store component should be created
+      try:
+        - assert:
+            resource:
+              apiVersion: dapr.io/v1alpha1
+              kind: Component
+              metadata:
+                name: statestore
+            check:
+              spec.type: state.redis
+
+    # Step 3: Verify pubsub component
+    - name: verify-pubsub
+      description: Pubsub component should be created
+      try:
+        - assert:
+            resource:
+              apiVersion: dapr.io/v1alpha1
+              kind: Component
+              metadata:
+                name: events
+            check:
+              spec.type: pubsub.redis
+
+    # Step 4: Deploy Redis for Dapr
+    - name: deploy-redis
+      description: Deploy Redis for Dapr components
+      try:
+        - apply:
+            resource:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: redis
+              spec:
+                replicas: 1
+                selector:
+                  matchLabels:
+                    app: redis
+                template:
+                  metadata:
+                    labels:
+                      app: redis
+                  spec:
+                    containers:
+                      - name: redis
+                        image: redis:7-alpine
+                        ports:
+                          - containerPort: 6379
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: Service
+              metadata:
+                name: redis
+              spec:
+                selector:
+                  app: redis
+                ports:
+                  - port: 6379
+                    targetPort: 6379
+
+    # Step 5: Verify Redis is running
+    - name: verify-redis
+      description: Redis should be running
+      try:
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                labels:
+                  app: redis
+            check:
+              status.phase: Running
+
+    # Step 6: Test Redis connectivity
+    - name: test-redis-connectivity
+      description: Should be able to connect to Redis
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              kubectl run redis-test --image=redis:7-alpine --rm -i --restart=Never -- \
+                redis-cli -h redis ping
+            check:
+              (contains($stdout, 'PONG')): true
+
+  catch:
+    - describe:
+        resource:
+          apiVersion: dapr.io/v1alpha1
+          kind: Component

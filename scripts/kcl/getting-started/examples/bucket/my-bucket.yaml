@@ -6,6 +6,7 @@ metadata:
   namespace: default
 spec:
   provider: gcp  # Options: gcp, aws, azure
+  id: my-bucket-id
   parameters:
     location: us-east1
     storageClass: STANDARD

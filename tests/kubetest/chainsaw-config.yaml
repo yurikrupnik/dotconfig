@@ -1,0 +1,39 @@
+# Chainsaw Configuration
+# https://kyverno.github.io/chainsaw/
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Configuration
+metadata:
+  name: dotconfig-tests
+spec:
+  # Test execution settings
+  timeouts:
+    apply: 30s
+    assert: 60s
+    cleanup: 30s
+    delete: 30s
+    error: 30s
+    exec: 60s
+
+  # Parallel test execution
+  parallel: 4
+
+  # Skip cleanup for debugging
+  skipDelete: false
+
+  # Fail fast on first error
+  failFast: false
+
+  # Report format
+  report:
+    format: JSON
+    name: chainsaw-report
+
+  # Namespace settings
+  namespace:
+    name: dotconfig-test
+    template:
+      metadata:
+        labels:
+          app.kubernetes.io/managed-by: chainsaw
+          test-run: "true"

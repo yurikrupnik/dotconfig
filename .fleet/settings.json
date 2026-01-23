@@ -1,0 +1,11 @@
+{
+  "editor.formatOnSave": true,
+  "editor.tabSize": 4,
+  "files.exclude": [
+    "**/target",
+    "**/.git",
+    "**/node_modules"
+  ],
+  "rust.features": ["web-ui", "tui"],
+  "git.enableSmartMode": true
+}

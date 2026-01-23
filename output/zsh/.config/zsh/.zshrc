@@ -18,7 +18,8 @@ eval "$(starship init zsh)"
 export STARSHIP_CONFIG=~/.config/starship/starship.toml
 # Zoxide
 eval "$(zoxide init --cmd cd zsh)"
-
+# Mise
+eval "$(mise activate bash)"
 # export CARAPACE_BRIDGES='zsh,fish,bash,inshellisense' # optional
 # zstyle ':completion:*' format $'\e[2;37mCompleting %d\e[m'
 # source <(carapace _carapace)

@@ -1,0 +1,176 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: dotconfig-pipeline
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: git-url
+      type: string
+      default: https://github.com/yurikrupnik/dotconfig.git
+    - name: git-revision
+      type: string
+      default: main
+    - name: image-name
+      type: string
+      default: ghcr.io/yurikrupnik/dotconfig
+  workspaces:
+    - name: shared-workspace
+      description: Shared workspace for the pipeline
+  tasks:
+    - name: fetch-repository
+      taskRef:
+        name: git-clone
+        kind: ClusterTask
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: url
+          value: $(params.git-url)
+        - name: revision
+          value: $(params.git-revision)
+
+    - name: build-push-image
+      taskRef:
+        name: buildah
+        kind: ClusterTask
+      runAfter:
+        - fetch-repository
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: IMAGE
+          value: "$(params.image-name):$(params.git-revision)"
+        - name: DOCKERFILE
+          value: ./Dockerfile
+        - name: CONTEXT
+          value: .
+        - name: TLSVERIFY
+          value: "false"
+
+    - name: apply-manifests
+      taskRef:
+        name: kubectl-deploy
+      runAfter:
+        - build-push-image
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: script
+          value: |
+            kubectl set image deployment/dotconfig dotconfig=$(params.image-name):$(params.git-revision) -n production
+            kubectl wait --for=condition=available --timeout=300s deployment/dotconfig -n production
+
+    - name: canary-test
+      taskRef:
+        name: kubectl-deploy
+      runAfter:
+        - apply-manifests
+      params:
+        - name: script
+          value: |
+            echo "Waiting for canary analysis..."
+            kubectl wait canary dotconfig -n production --for=jsonpath='{.status.phase}'=Succeeded --timeout=15m || exit 1
+
+    - name: chaos-test
+      taskRef:
+        name: kubectl-deploy
+      runAfter:
+        - canary-test
+      params:
+        - name: script
+          value: |
+            kubectl apply -f ./k8s-manifests/examples/chaos/pod-chaos.yaml
+            sleep 60
+            kubectl wait --for=condition=available --timeout=120s deployment/dotconfig -n production
+            kubectl delete -f ./k8s-manifests/examples/chaos/pod-chaos.yaml --ignore-not-found=true
+
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: dotconfig-trigger
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: git-revision
+      description: The git revision
+      default: main
+    - name: git-repo-url
+      description: The git repository url
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1
+      kind: PipelineRun
+      metadata:
+        generateName: dotconfig-pipeline-run-
+      spec:
+        pipelineRef:
+          name: dotconfig-pipeline
+        params:
+          - name: git-url
+            value: $(tt.params.git-repo-url)
+          - name: git-revision
+            value: $(tt.params.git-revision)
+        workspaces:
+          - name: shared-workspace
+            emptyDir: {}
+
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerBinding
+metadata:
+  name: dotconfig-binding
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: git-revision
+      value: $(body.head_commit.id)
+    - name: git-repo-url
+      value: $(body.repository.html_url)
+
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: dotconfig-listener
+  namespace: tekton-pipelines
+spec:
+  serviceAccountName: tekton-trigger
+  triggers:
+    - name: dotconfig-trigger
+      bindings:
+        - ref: dotconfig-binding
+      template:
+        ref: dotconfig-trigger
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tekton-trigger
+  namespace: tekton-pipelines
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tekton-role
+  namespace: tekton-pipelines
+rules:
+  - apiGroups: ["tekton.dev"]
+    resources: ["pipelines", "pipelineruns", "taskruns"]
+    verbs: ["create", "get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tekton-role-binding
+  namespace: tekton-pipelines
+subjects:
+  - kind: ServiceAccount
+    name: tekton-trigger
+roleRef:
+  kind: Role
+  name: tekton-role
+  apiGroup: rbac.authorization.k8s.io

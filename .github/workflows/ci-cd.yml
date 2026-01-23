@@ -1,0 +1,262 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run format check
+        run: cargo fmt -- --check
+
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Generate coverage
+        run: |
+          cargo install cargo-tarpaulin
+          cargo tarpaulin --out Xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./cobertura.xml
+
+  build:
+    name: Build Docker Image
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  deploy-staging:
+    name: Deploy to Staging
+    needs: build
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
+
+      - name: Update Kubernetes manifests
+        run: |
+          kubectl set image deployment/dotconfig dotconfig=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} -n staging
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/dotconfig -n staging --timeout=300s
+
+      - name: Run smoke tests
+        run: |
+          kubectl wait --for=condition=available --timeout=60s deployment/dotconfig -n staging
+          kubectl run smoke-test --image=curlimages/curl --rm -it --restart=Never -- curl -f http://dotconfig.staging.svc.cluster.local:8080/health
+
+  production-canary:
+    name: Canary Deployment to Production
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://dotconfig.example.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG_PROD }}
+
+      - name: Deploy canary
+        run: |
+          kubectl set image deployment/dotconfig dotconfig=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} -n production
+          echo "Canary deployment triggered"
+
+      - name: Monitor canary progress
+        run: |
+          echo "Waiting for Flagger canary analysis to complete..."
+          kubectl wait canary dotconfig -n production --for=jsonpath='{.status.phase}'=Succeeded --timeout=15m || exit 1
+
+      - name: Check canary status
+        run: |
+          kubectl get canary dotconfig -n production
+          kubectl describe canary dotconfig -n production
+
+  chaos-test:
+    name: Run Chaos Tests
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
+
+      - name: Apply chaos experiments
+        run: |
+          kubectl apply -f k8s-manifests/examples/chaos/pod-chaos.yaml
+
+      - name: Monitor application resilience
+        run: |
+          sleep 60
+          kubectl get pods -l app=dotconfig
+          kubectl logs -f deployment/dotconfig --max-log-requests=10 &
+          LOGS_PID=$!
+          sleep 30
+          kill $LOGS_PID
+
+      - name: Verify application health
+        run: |
+          kubectl wait --for=condition=available --timeout=120s deployment/dotconfig -n staging
+          kubectl run health-check --image=curlimages/curl --rm -it --restart=Never -- curl -f http://dotconfig.staging.svc.cluster.local:8080/health
+
+      - name: Clean up chaos
+        if: always()
+        run: |
+          kubectl delete -f k8s-manifests/examples/chaos/pod-chaos.yaml --ignore-not-found=true
+
+  security-scan:
+    name: Security Scanning
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Bandit
+        uses: PyCQA/bandit-action@v1
+        continue-on-error: true
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: auto
+
+      - name: Run Grype
+        uses: anchore/scan-action@v3
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          format: sarif
+          output: grype-results.sarif
+
+      - name: Upload Grype results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: grype-results.sarif
+
+  notify:
+    name: Notify
+    needs: [test, build, deploy-staging, production-canary, chaos-test, security-scan]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Slack notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: |
+            Pipeline status: ${{ job.status }}
+            Commit: ${{ github.sha }}
+            Author: ${{ github.actor }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

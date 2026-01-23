@@ -16,6 +16,12 @@ spec:
     version: "1.10.0"
     wait: true
     timeout: 600
+#    valuesInline: true
+#    valuesFrom:
+#      - configMapKeyRef:
+#          name: tempo-helm-values
+#      - secretKeyRef:
+#          name: tempo-helm-values
     values:
       # Tempo configuration
       tempo:

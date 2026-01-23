@@ -1,0 +1,101 @@
+# Deployment Integration Tests
+# Tests the dotconfig deployment and service
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: dotconfig-deployment
+spec:
+  description: Test dotconfig deployment lifecycle
+  timeouts:
+    apply: 120s
+    assert: 180s
+
+  steps:
+    # Step 1: Apply deployment
+    - name: apply-deployment
+      description: Deploy dotconfig application
+      try:
+        - apply:
+            file: ../../../k8s-manifests/app.yaml
+
+    # Step 2: Verify deployment is ready
+    - name: verify-deployment-ready
+      description: Deployment should have available replicas
+      try:
+        - assert:
+            resource:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: dotconfig
+            check:
+              status.availableReplicas: 1
+              status.readyReplicas: 1
+
+    # Step 3: Verify service exists
+    - name: verify-service
+      description: Service should be created
+      try:
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Service
+              metadata:
+                name: dotconfig
+            check:
+              spec.ports[0].port: 8080
+              spec.selector.app: dotconfig
+
+    # Step 4: Verify pods are running
+    - name: verify-pods-running
+      description: All pods should be in Running state
+      try:
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                labels:
+                  app: dotconfig
+            check:
+              status.phase: Running
+
+    # Step 5: Test service connectivity
+    - name: test-service-connectivity
+      description: Service should be reachable
+      try:
+        - script:
+            content: |
+              kubectl run curl-test --image=curlimages/curl --rm -i --restart=Never -- \
+                curl -s -o /dev/null -w "%{http_code}" http://dotconfig:8080/health || echo "000"
+            check:
+              (contains($stdout, '200')): true
+          catch:
+            - script:
+                content: |
+                  echo "Service connectivity test skipped - endpoint may not exist"
+
+    # Step 6: Verify CronJob
+    - name: verify-cronjob
+      description: CronJob should be created
+      try:
+        - assert:
+            resource:
+              apiVersion: batch/v1
+              kind: CronJob
+              metadata:
+                name: dotcoonfig-job
+            check:
+              spec.schedule: "* * * * *"
+
+  catch:
+    - describe:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: dotconfig
+    - podLogs:
+        selector: app=dotconfig
+        tail: 50

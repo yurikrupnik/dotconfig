@@ -1,0 +1,4 @@
+procs:
+  tasks: bacon zerg-tasks
+  vector: bacon zerg-vector
+  api: bacon zerg-api

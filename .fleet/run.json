@@ -1,0 +1,48 @@
+{
+  "configurations": [
+    {
+      "name": "Resource Stats - Collect",
+      "type": "cargo",
+      "program": "resource_stats_operator",
+      "args": ["collect", "--format", "table"],
+      "cargoArgs": ["--features", "web-ui"]
+    },
+    {
+      "name": "Resource Stats - Web Server",
+      "type": "cargo",
+      "program": "resource_stats_operator",
+      "args": ["serve", "--addr", "0.0.0.0:8080"],
+      "cargoArgs": ["--features", "web-ui"]
+    },
+    {
+      "name": "Resource Stats - Operator",
+      "type": "cargo",
+      "program": "resource_stats_operator",
+      "args": ["run", "--with-web"],
+      "cargoArgs": ["--features", "web-ui"]
+    },
+    {
+      "name": "Resource Stats - TUI",
+      "type": "cargo",
+      "program": "resource_stats_operator",
+      "args": ["tui"],
+      "cargoArgs": ["--features", "tui"]
+    },
+    {
+      "name": "Main CLI",
+      "type": "cargo",
+      "program": "dotconfig",
+      "args": []
+    },
+    {
+      "name": "Cargo Test",
+      "type": "cargo",
+      "cargoArgs": ["test"]
+    },
+    {
+      "name": "Cargo Check",
+      "type": "cargo",
+      "cargoArgs": ["check", "--all-features"]
+    }
+  ]
+}

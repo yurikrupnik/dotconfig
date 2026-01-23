@@ -1,0 +1,161 @@
+# Network Policy Tests
+# Tests network connectivity and policies
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: network-policies
+spec:
+  description: Test network policies and connectivity
+  timeouts:
+    apply: 60s
+    assert: 120s
+
+  steps:
+    # Step 1: Create test namespace with network policies
+    - name: setup-network-test
+      description: Setup network test environment
+      try:
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: Namespace
+              metadata:
+                name: network-test
+                labels:
+                  test: network
+
+    # Step 2: Deploy server pod
+    - name: deploy-server
+      description: Deploy a server pod
+      try:
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                name: server
+                namespace: network-test
+                labels:
+                  app: server
+              spec:
+                containers:
+                  - name: nginx
+                    image: nginx:alpine
+                    ports:
+                      - containerPort: 80
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: Service
+              metadata:
+                name: server
+                namespace: network-test
+              spec:
+                selector:
+                  app: server
+                ports:
+                  - port: 80
+                    targetPort: 80
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                name: server
+                namespace: network-test
+            check:
+              status.phase: Running
+
+    # Step 3: Test connectivity without policy
+    - name: test-open-connectivity
+      description: Should be able to connect without network policy
+      try:
+        - script:
+            content: |
+              kubectl run client-test --namespace=network-test \
+                --image=curlimages/curl --rm -i --restart=Never -- \
+                curl -s -o /dev/null -w "%{http_code}" http://server
+            check:
+              (contains($stdout, '200')): true
+
+    # Step 4: Apply deny-all network policy
+    - name: apply-deny-policy
+      description: Apply default deny network policy
+      try:
+        - apply:
+            resource:
+              apiVersion: networking.k8s.io/v1
+              kind: NetworkPolicy
+              metadata:
+                name: deny-all
+                namespace: network-test
+              spec:
+                podSelector: {}
+                policyTypes:
+                  - Ingress
+                  - Egress
+
+    # Step 5: Verify connectivity is blocked (may not work in all CNIs)
+    - name: test-blocked-connectivity
+      description: Connection should be blocked (CNI dependent)
+      try:
+        - script:
+            timeout: 15s
+            content: |
+              # This test may pass or timeout depending on CNI
+              kubectl run client-block-test --namespace=network-test \
+                --image=curlimages/curl --rm -i --restart=Never -- \
+                curl -s --connect-timeout 5 http://server || echo "blocked"
+            check:
+              # Accept either blocked or timeout
+              ($error != null || contains($stdout, 'blocked')): true
+          catch:
+            - script:
+                content: echo "Network policy test skipped - CNI may not support it"
+
+    # Step 6: Apply allow policy for specific pods
+    - name: apply-allow-policy
+      description: Allow traffic from labeled pods
+      try:
+        - apply:
+            resource:
+              apiVersion: networking.k8s.io/v1
+              kind: NetworkPolicy
+              metadata:
+                name: allow-client
+                namespace: network-test
+              spec:
+                podSelector:
+                  matchLabels:
+                    app: server
+                policyTypes:
+                  - Ingress
+                ingress:
+                  - from:
+                      - podSelector:
+                          matchLabels:
+                            role: client
+                    ports:
+                      - protocol: TCP
+                        port: 80
+
+    # Step 7: Test allowed connectivity
+    - name: test-allowed-connectivity
+      description: Labeled client should connect
+      try:
+        - script:
+            content: |
+              kubectl run allowed-client --namespace=network-test \
+                --image=curlimages/curl --rm -i --restart=Never \
+                --labels=role=client -- \
+                curl -s -o /dev/null -w "%{http_code}" http://server
+            check:
+              (contains($stdout, '200')): true
+
+  catch:
+    - describe:
+        resource:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          namespace: network-test
