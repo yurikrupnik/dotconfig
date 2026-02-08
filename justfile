@@ -11,25 +11,6 @@ up *args='':
   nu ~/dotconfig/scripts/nu/index.nu dev up {{args}}
 down *args='':
     nu ~/dotconfig/scripts/nu/index.nu dev down {{args}}
-rcli:
-    cargo run --bin dotconfig -- -h
-    cargo run --bin dotconfig compose -h
-bun-ag:
-    bun add -g @anthropic-ai/claude-code @openai/codex
-    bun pm ls -g
-    bun update -g
-    bun run ~/.bun/bin/claude
-    bun run ~/.bun/bin/claude
-#com:up
-#    cargo run --bin dotconfig compose up -h
-#com:down
-#    cargo run --bin dotconfig compose down -h
-#com:convert
-#    cargo run --bin dotconfig compose convert -h
-create-env: up rcli
-    #just up
-destroy-env: down rcli
-    #just up
 
 # Test commands
 test-rust:
