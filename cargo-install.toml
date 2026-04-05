@@ -22,6 +22,7 @@ wasm-pack
 # Development tools
 cargo-nextest
 bacon
+#deepwiki-rs
 
 # Code inspection & editing
 cargo-edit

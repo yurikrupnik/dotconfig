@@ -28,7 +28,7 @@ pub enum ClusterAction {
         #[arg(long)]
         healthy_only: bool,
 
-        /// Only show unhealthy clusters
+        /// Only show unhClusterActionealthy clusters
         #[arg(long)]
         unhealthy_only: bool,
     },
