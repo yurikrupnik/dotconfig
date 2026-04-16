@@ -7,9 +7,13 @@
 install:
 	@./install.sh
 
-## update: Update all packages and tools
+## update: Update all packages and tools (FORMAT=json|yaml|toml|table)
 update:
-	@./update.sh
+	@./update.sh $(FORMAT)
+
+## update-dry: Dry-run update to test reporting (FORMAT=json|yaml|toml|table)
+update-dry:
+	@./update.sh --dry-run $(FORMAT)
 
 ## generate: Generate shell configurations from config.toml
 generate:
@@ -45,11 +49,17 @@ clean:
 brew-install:
 	@brew bundle --file=brew/Brewfile
 
-## cargo-install: Install global Cargo packages
+## cargo-install: Install global Cargo packages (skips already-installed)
 cargo-install:
 	@command -v cargo-binstall >/dev/null 2>&1 || cargo install cargo-binstall
-	@cat cargo-install.toml | grep '^[a-z]' | while read pkg; do \
-		cargo binstall "$$pkg" --no-confirm || echo "Failed to install $$pkg"; \
+	@cargo_bin="$${CARGO_HOME:-$$HOME/.cargo}/bin"; \
+	grep '^[a-z]' cargo-install.toml | while read pkg; do \
+		alt="$${pkg%-cli}"; \
+		if [ -f "$$cargo_bin/$$pkg" ] || [ -f "$$cargo_bin/$$alt" ]; then \
+			echo "==> Cargo: $$pkg already installed, skipping"; \
+		else \
+			cargo binstall "$$pkg" --no-confirm || echo "Failed to install $$pkg"; \
+		fi; \
 	done
 
 ## npm-install: Install global npm/bun packages

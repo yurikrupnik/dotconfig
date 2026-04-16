@@ -1,0 +1,24 @@
+======================================
+  Update Report - 2026-04-13T15:43:57Z
+  Total Duration: 139s
+======================================
+
+STEP                                STATUS     DURATION   DETAILS
+---                                 ------     --------   -------
+Git pull                            success    0s         Already up to date. 
+Brew update                         success    3s         ==> Updating Homebrew... Already up-to-date. 
+Brew bundle                         success    1s         Using coderabbit Using postman Using httpie-desktop Using cm
+Brew upgrade                        success    2s          
+Brew cleanup                        success    4s         Warning: Skipping ariga/tap/atlas: most recent version v1.2.
+Rustup update                       success    0s            stable-aarch64-apple-darwin unchanged - rustc 1.94.1 (e40
+Cargo install: create-tauri-app     success    2s          INFO resolve: Resolving package: 'create-tauri-app'  INFO r
+Cargo install: cargo-edit           success    2s          INFO resolve: Resolving package: 'cargo-edit'  INFO resolve
+Cargo install: cargo-update         success    1s          INFO resolve: Resolving package: 'cargo-update'  INFO resol
+Cargo install: protobuf-codegen     success    2s          INFO resolve: Resolving package: 'protobuf-codegen'  INFO r
+Bun global update                   success    0s         bun update v1.3.12 (700fc117)  [1.00ms] done 
+Gcloud components update            success    0s         Beginning update. This process may take several minutes.  Al
+Shell config generate               success    0s         [39m2026-04-13T18:44:14.563|INF|Generated fish functions: /
+Shell config stow                   success    0s         [39m2026-04-13T18:44:14.722|INF|Running: stow -d /Users/yur
+Build dotconfig CLI                 success    122s           |     = note: `VaultToken` has a derived impl for the tr
+
+Report saved to: /Users/yurikrupnik/dotconfig/logs/update_2026-04-13_184357.txt

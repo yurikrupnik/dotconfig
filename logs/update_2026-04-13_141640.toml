@@ -1,0 +1,87 @@
+timestamp = "2026-04-13T11:16:40Z"
+total_duration = "0s"
+
+[[steps]]
+name = "Git pull"
+status = "success"
+duration = "0s"
+details = "Already up to date. "
+
+[[steps]]
+name = "Brew update"
+status = "success"
+duration = "0s"
+details = "Updated 3 taps "
+
+[[steps]]
+name = "Brew bundle"
+status = "success"
+duration = "0s"
+details = "Using Brewfile, 42 dependencies satisfied "
+
+[[steps]]
+name = "Brew upgrade"
+status = "success"
+duration = "0s"
+details = "Upgraded 2 packages: ripgrep 14.1->14.2, fd 10.1->10.2 "
+
+[[steps]]
+name = "Brew cleanup"
+status = "success"
+duration = "0s"
+details = "Removed 5 old versions "
+
+[[steps]]
+name = "Rustup update"
+status = "success"
+duration = "0s"
+details = "stable-aarch64-apple-darwin updated to 1.82.0 "
+
+[[steps]]
+name = "Cargo install: bat"
+status = "success"
+duration = "0s"
+details = "bat v0.24.0 installed "
+
+[[steps]]
+name = "Cargo install: eza"
+status = "success"
+duration = "0s"
+details = "eza v0.20.0 installed "
+
+[[steps]]
+name = "Bun global update"
+status = "success"
+duration = "0s"
+details = "Updated 4 global packages "
+
+[[steps]]
+name = "Gcloud update"
+status = "success"
+duration = "0s"
+details = "All components up to date "
+
+[[steps]]
+name = "Shell config generate"
+status = "success"
+duration = "0s"
+details = "Generated .bashrc .zshrc .config/fish/config.fish "
+
+[[steps]]
+name = "Shell config stow"
+status = "success"
+duration = "0s"
+details = "Stowed 3 configs "
+
+[[steps]]
+name = "Build dotconfig CLI"
+status = "success"
+duration = "0s"
+details = "Compiling dotconfig v0.1.0 (release) "
+
+[[steps]]
+name = "Simulated failure"
+status = "failed"
+duration = "0s"
+details = " "
+

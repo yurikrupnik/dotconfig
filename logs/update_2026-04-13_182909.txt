@@ -1,0 +1,24 @@
+======================================
+  Update Report - 2026-04-13T15:29:08Z
+  Total Duration: 21s
+======================================
+
+STEP                                STATUS     DURATION   DETAILS
+---                                 ------     --------   -------
+Git pull                            success    0s         Already up to date. 
+Brew update                         failed     7s         fatal: invalid upstream 'origin/' fatal: 'origin/' is not a 
+Brew bundle                         success    1s         Using coderabbit Using postman Using httpie-desktop Using cm
+Brew upgrade                        success    2s          
+Brew cleanup                        success    4s         Warning: Skipping ariga/tap/atlas: most recent version v1.2.
+Rustup update                       success    1s            stable-aarch64-apple-darwin unchanged - rustc 1.94.1 (e40
+Cargo install: create-tauri-app     success    1s          INFO resolve: Resolving package: 'create-tauri-app'  INFO r
+Cargo install: cargo-edit           success    1s          INFO resolve: Resolving package: 'cargo-edit'  INFO resolve
+Cargo install: cargo-update         success    1s          INFO resolve: Resolving package: 'cargo-update'  INFO resol
+Cargo install: protobuf-codegen     success    1s          INFO resolve: Resolving package: 'protobuf-codegen'  INFO r
+Bun global update                   success    0s         bun update v1.3.12 (700fc117)  [1.00ms] done 
+Gcloud components update            success    0s         Beginning update. This process may take several minutes.  Al
+Shell config generate               success    0s         [39m2026-04-13T18:29:28.734|INF|Generated fish functions: /
+Shell config stow                   success    0s         [39m2026-04-13T18:29:28.896|INF|Running: stow -d /Users/yur
+Build dotconfig CLI                 failed     2s           = note: clang: error: unable to execute command: posix_spa
+
+Report saved to: /Users/yurikrupnik/dotconfig/logs/update_2026-04-13_182909.txt

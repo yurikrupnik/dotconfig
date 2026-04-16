@@ -1,0 +1,50 @@
+======================================
+  Update Report - 2026-04-13T15:21:10Z
+  Total Duration: 87s
+======================================
+
+STEP                                STATUS     DURATION   DETAILS
+---                                 ------     --------   -------
+Git pull                            success    0s         Already up to date. 
+Brew update                         success    10s        ==> Updating Homebrew... Already up-to-date. 
+Brew bundle                         success    2s         Using coderabbit Using postman Using httpie-desktop Using cm
+Brew upgrade                        success    14s        ==> Pouring luajit--2.1.1774896198.arm64_tahoe.bottle.tar.gz
+Brew cleanup                        success    7s         Warning: Skipping ariga/tap/atlas: most recent version v1.2.
+Rustup update                       success    0s            stable-aarch64-apple-darwin unchanged - rustc 1.94.1 (e40
+Cargo install: cargo-binstall       success    5s          INFO resolve: Resolving package: 'cargo-binstall'  INFO res
+Cargo install: cargo-generate       success    1s          INFO resolve: Resolving package: 'cargo-generate'  INFO res
+Cargo install: create-tauri-app     success    1s          INFO resolve: Resolving package: 'create-tauri-app'  INFO r
+Cargo install: cargo-make           success    2s          INFO resolve: Resolving package: 'cargo-make'  INFO resolve
+Cargo install: trunk                success    2s          INFO resolve: Resolving package: 'trunk'  INFO resolve: tru
+Cargo install: cargo-run-script     success    1s          INFO resolve: Resolving package: 'cargo-run-script'  INFO r
+Cargo install: cargo-leptos         success    2s          INFO resolve: Resolving package: 'cargo-leptos'  INFO resol
+Cargo install: salvo-cli            success    2s          INFO resolve: Resolving package: 'salvo-cli'  INFO resolve:
+Cargo install: wasm-pack            success    2s          INFO resolve: Resolving package: 'wasm-pack'  INFO resolve:
+Cargo install: cargo-nextest        success    2s          INFO resolve: Resolving package: 'cargo-nextest'  INFO reso
+Cargo install: bacon                success    1s          INFO resolve: Resolving package: 'bacon'  INFO resolve: bac
+Cargo install: cargo-edit           success    2s          INFO resolve: Resolving package: 'cargo-edit'  INFO resolve
+Cargo install: cargo-expand         success    1s          INFO resolve: Resolving package: 'cargo-expand'  INFO resol
+Cargo install: cargo-modules        success    2s          INFO resolve: Resolving package: 'cargo-modules'  INFO reso
+Cargo install: cargo-readme         success    2s          INFO resolve: Resolving package: 'cargo-readme'  INFO resol
+Cargo install: cargo-clippy         failed     1s          INFO resolve: Resolving package: 'cargo-clippy' ERROR Fatal
+Cargo install: cargo-fmt            failed     1s          INFO resolve: Resolving package: 'cargo-fmt' ERROR Fatal er
+Cargo install: cargo-tarpaulin      success    1s          INFO resolve: Resolving package: 'cargo-tarpaulin'  INFO re
+Cargo install: cargo-sort           success    2s          INFO resolve: Resolving package: 'cargo-sort'  INFO resolve
+Cargo install: checker              success    1s          INFO resolve: Resolving package: 'checker'  INFO resolve: c
+Cargo install: cargo-outdated       success    2s          INFO resolve: Resolving package: 'cargo-outdated'  INFO res
+Cargo install: cargo-tree           success    2s          INFO resolve: Resolving package: 'cargo-tree'  INFO resolve
+Cargo install: cargo-audit          success    2s          INFO resolve: Resolving package: 'cargo-audit'  INFO resolv
+Cargo install: cargo-update         success    1s          INFO resolve: Resolving package: 'cargo-update'  INFO resol
+Cargo install: cargo-release        success    1s          INFO resolve: Resolving package: 'cargo-release'  INFO reso
+Cargo install: cargo-bloat          success    2s          INFO resolve: Resolving package: 'cargo-bloat'  INFO resolv
+Cargo install: sccache              success    1s          INFO resolve: Resolving package: 'sccache'  INFO resolve: s
+Cargo install: sqlx-cli             success    1s          INFO resolve: Resolving package: 'sqlx-cli'  INFO resolve: 
+Cargo install: protobuf-codegen     success    1s          INFO resolve: Resolving package: 'protobuf-codegen'  INFO r
+Cargo install: cross                success    1s          INFO resolve: Resolving package: 'cross'  INFO resolve: cro
+Bun global update                   success    0s         bun update v1.3.12 (700fc117)  [2.00ms] done 
+Gcloud components update            success    2s         Beginning update. This process may take several minutes.  Al
+Shell config generate               success    0s         [39m2026-04-13T18:22:37.409|INF|Generated fish functions: /
+Shell config stow                   success    0s         [39m2026-04-13T18:22:37.662|INF|Running: stow -d /Users/yur
+Build dotconfig CLI                 failed     1s           = note: clang: error: unable to execute command: posix_spa
+
+Report saved to: /Users/yurikrupnik/dotconfig/logs/update_2026-04-13_182110.txt
