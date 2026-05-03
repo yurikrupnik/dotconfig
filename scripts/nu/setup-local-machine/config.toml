@@ -9,15 +9,16 @@ u = 'update'
 #alias fzfp='fzf --preview="bat --style numbers --color=always {}"'
 #alias d=docker
 drmi='docker rmi $(docker images -aq) -f'
-dclean='docker system prune -f && docker volume prune -f'
-#alias g=gcloud
-#alias pu=pulumi
+dsp='docker system prune -f && docker volume prune -f'
+pu="pulumi"
 b = "bun"
 c = "cargo"
-cdoc = "cargo doc"
+cdo = "cargo doc"
 #alias cdoco=cargo doc --open
 gs = "git status"
 ga = "git add"
+g = "gcloud"
+gal = "gcloud auth login"
 #claude = "bun run ~/.bun/bin/claude"
 
 

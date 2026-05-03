@@ -4,6 +4,7 @@
 #    just --list
 #    cargo run --bin dotconfig -- -h --debug
 car:
+    cargo run --bin dotconfig -- -h
     cargo run --bin resource-stats-operator -- collect
     cargo run --features full --bin resource-stats-operator -- crds
     just up
@@ -37,11 +38,17 @@ toolchain-targets:
 toolchain-info:
     ./.cargo/bin/toolchain-info.sh
 
+# Install workspace-local CLI binaries to ~/.cargo/bin
+# (cargo-install.toml handles crates.io packages; this handles in-tree crates)
+install-bins:
+    cargo install --path crates/pg-cli
+
 # One-time setup on a new machine
 setup-rust:
     ./.cargo/bin/rustup-bootstrap.sh
     just toolchain-install
     just toolchain-info
+    just install-bins
 cargo run:
     cargo run --bin dotconfig shit do-it -n aris
     cargo run --bin operator

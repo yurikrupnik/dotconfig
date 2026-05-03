@@ -1,0 +1,24 @@
+[package]
+name = "kube-tui"
+version = "0.1.0"
+edition = "2021"
+description = "k9s-like TUI for Kubernetes cluster management"
+
+[[bin]]
+name = "kube-tui"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+chrono = "0.4"
+crossterm = "0.29"
+futures = "0.3"
+k8s-openapi = { version = "0.27", features = ["latest"] }
+kube = { version = "3.1.0", features = ["config", "runtime"] }
+ratatui = "0.30"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+tokio = { version = "1.51", features = ["rt-multi-thread", "macros", "process", "io-util"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

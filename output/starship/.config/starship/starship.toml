@@ -85,8 +85,8 @@ disabled = false
 disabled = false
 
 [gcloud]
-disabled = true
-format = '[$symbol$active-($project)-($account@$domain)(\($region\))]($style) ' # '[$symbol$active]($style) '
+disabled = false
+format = '[$symbol($account@$domain)](bold yellow)[ | ($project)](bold cyan)[ (\($region\))](bold green) '
 style = 'bold yellow'
 
 [package]

@@ -13,10 +13,12 @@ create-tauri-app
 cargo-make
 trunk
 cargo-run-script
+zesh
 
 # Web frameworks & tools
 cargo-leptos
 salvo-cli
+
 wasm-pack
 
 # Development tools

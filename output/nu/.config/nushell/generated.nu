@@ -7,15 +7,18 @@ export alias lsl = eza --no-permissions --no-user --no-time --long
 export def drmi [] {
     ^docker rmi (^docker images -aq | str trim) -f
 }
-export def dclean [] {
+export def dsp [] {
     ^docker system prune -f
     ^docker volume prune -f
 }
+export alias pu = pulumi
 export alias b = bun
 export alias c = cargo
-export alias cdoc = cargo doc
+export alias cdo = cargo doc
 export alias gs = git status
 export alias ga = git add
+export alias g = gcloud
+export alias gal = gcloud auth login
 
 # Functions
 # Update system packages

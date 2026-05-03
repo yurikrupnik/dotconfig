@@ -6,12 +6,15 @@ alias k='kubectl'
 alias lsl='eza --no-permissions --no-user --no-time --long'
 alias u='update'
 alias drmi='docker rmi $(docker images -aq) -f'
-alias dclean='docker system prune -f && docker volume prune -f'
+alias dsp='docker system prune -f && docker volume prune -f'
+alias pu='pulumi'
 alias b='bun'
 alias c='cargo'
-alias cdoc='cargo doc'
+alias cdo='cargo doc'
 alias gs='git status'
 alias ga='git add'
+alias g='gcloud'
+alias gal='gcloud auth login'
 
 # Functions
 update() {

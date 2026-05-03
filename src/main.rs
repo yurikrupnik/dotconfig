@@ -8,7 +8,7 @@ mod state;
 mod traits;
 mod utils;
 
-use actions::{ClusterAction, CodeGraphAction, ComposeAction, DashboardAction, ShitAction};
+use actions::{ClusterAction, CodeGraphAction, ComposeAction, DashboardAction, FluxAction, GcloudAction, ShitAction};
 use app::App;
 use clap::{CommandFactory, Parser, Subcommand};
 use commands::RunCommand;
@@ -39,6 +39,16 @@ pub enum Commands {
     CodeGraph {
         #[command(subcommand)]
         action: CodeGraphAction,
+    },
+    /// Generate Flux CD resources from Docker Compose files
+    Flux {
+        #[command(subcommand)]
+        action: FluxAction,
+    },
+    /// Google Cloud authentication management
+    Gcloud {
+        #[command(subcommand)]
+        action: GcloudAction,
     },
     Completions {
         #[arg(value_enum)]
@@ -141,6 +151,8 @@ async fn main() -> anyhow::Result<()> {
         Commands::Shit { action } => action.run(&app).await,
         Commands::Dashboard { action } => action.run(&app).await,
         Commands::CodeGraph { action } => action.run(&app).await,
+        Commands::Flux { action } => action.run(&app).await,
+        Commands::Gcloud { action } => action.run(&app).await,
     }
 }
 

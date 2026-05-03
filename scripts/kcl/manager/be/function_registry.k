@@ -42,7 +42,15 @@ create_secret = lambda input: any -> corev1.Secret {
     }
 }
 
-create_cluster_secret_store = lambda input: any -> es.ClusterSecretStore {
+schema ClusterSecretStoraParams:
+    name: str
+    projectID: str
+    namespaces?: str
+    secretKey?: str
+    secretName?: str
+
+
+create_cluster_secret_store = lambda input: ClusterSecretStoraParams -> es.ClusterSecretStore {
     es.ClusterSecretStore {
         metadata: {
             name: input.name

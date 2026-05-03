@@ -185,16 +185,16 @@ services:
       - platform-network
 
   # Chaos Mesh (simplified for local dev)
-#  chaos-dashboard:
-#    image: chaos-mesh/chaos-dashboard:latest
-#    container_name: chaos-dashboard
-#    ports:
-#      - "2333:2333"
-#    networks:
-#      - platform-network
-#    environment:
-#      - LISTEN_HOST=0.0.0.0
-#      - LISTEN_PORT=2333
+  chaos-dashboard:
+    image: chaos-mesh/chaos-dashboard:latest
+    container_name: chaos-dashboard
+    ports:
+      - "2333:2333"
+    networks:
+      - platform-network
+    environment:
+      - LISTEN_HOST=0.0.0.0
+      - LISTEN_PORT=2333
 
   # Loki for log aggregation
   loki:

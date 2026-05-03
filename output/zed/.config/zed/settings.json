@@ -1,5 +1,15 @@
 {
-	"disable_ai": true,
+	"cli_default_open_behavior": "new_window",
+ "outline_panel": {
+  "dock": "left"
+ },
+ "collaboration_panel": {
+  "dock": "left"
+ },
+ "git_panel": {
+  "dock": "left"
+ },
+ "disable_ai": true,
 	// "icon_them": "Catppuccin Mocha",
 	"tab_size": 4,
 	"ui_font_family": ".SystemUIFont",
@@ -11,7 +21,8 @@
 	"context_servers": {},
 	"icon_theme": "Zed (Default)",
 	"agent": {
-		"default_profile": "ask",
+		"dock": "right",
+  "default_profile": "ask",
 		"profiles": {
 			"local": {
 				"name": "local",
@@ -60,7 +71,8 @@
 		"play_sound_when_agent_done": false,
 	},
 	"ui_font_size": 18,
-	"project_panel": { "entry_spacing": "standard" },
+	"project_panel": { "dock": "left",
+                    "entry_spacing": "standard" },
 	"format_on_save": "on",
 	"buffer_font_size": 24,
 	"theme": {

@@ -1,0 +1,114 @@
+layout {
+    // ─── Templates ──────────────────────────────────────────────────
+    default_tab_template {
+        pane size=1 borderless=true {
+            plugin location="zellij:tab-bar"
+        }
+        children
+        pane size=1 borderless=true {
+            plugin location="zellij:status-bar"
+        }
+    }
+
+    // Reusable workspace: code + k8s + host info
+    pane_template name="repo_workspace" {
+        pane split_direction="vertical" {
+            // Left: git + files
+            pane split_direction="horizontal" size="55%" {
+                pane name="git" command="lazygit"
+                pane name="files" command="yazi" size="35%"
+            }
+            // Right: k8s resources + shell
+            pane split_direction="horizontal" size="45%" {
+                pane name="k8s" command="kubetui"
+                pane name="shell"
+            }
+        }
+    }
+
+    // ─── System ─────────────────────────────────────────────────────
+    tab name="System" focus=true {
+        pane split_direction="vertical" {
+            pane name="activity" command="btm" size="55%"
+            pane split_direction="horizontal" size="45%" {
+                pane name="clusters" command="dotconfig" {
+                    args "cluster" "picker"
+                }
+                pane name="context-check" command="dotconfig" {
+                    args "cluster" "check" "--timeout" "30"
+                }
+            }
+        }
+    }
+
+    // ─── Kubernetes ─────────────────────────────────────────────────
+    tab name="k9s" {
+        pane name="k9s" command="k9s"
+    }
+
+    tab name="Operator" {
+        pane split_direction="vertical" {
+            pane name="operator-logs" command="kubectl" size="55%" {
+                args "logs" "-f" "-l" "app=platform-operator" "--all-containers" "--tail=100"
+            }
+            pane split_direction="horizontal" size="45%" {
+                pane name="crds" command="kubectl" {
+                    args "get" "platformapps,gitopsapps,clusters" "-A" "-w"
+                }
+                pane name="events" command="kubectl" {
+                    args "get" "events" "-A" "-w" "--sort-by=.lastTimestamp"
+                }
+            }
+        }
+    }
+
+    // ─── FinOps ─────────────────────────────────────────────────────
+    tab name="FinOps" {
+        pane split_direction="vertical" {
+            pane name="cost" command="dotconfig" size="55%" {
+                args "cluster" "check"
+            }
+            pane split_direction="horizontal" size="45%" {
+                pane name="nodes" command="kubectl" {
+                    args "top" "nodes"
+                }
+                pane name="pods" command="kubectl" {
+                    args "top" "pods" "-A" "--sort-by=cpu"
+                }
+            }
+        }
+    }
+
+    // ─── Databases ──────────────────────────────────────────────────
+    tab name="Databases" {
+        pane split_direction="vertical" {
+            pane name="db-resources" command="kubectl" size="55%" {
+                args "get" "clusters.postgresql.cnpg.io,perconaservermongodb,redis" "-A" "-w"
+            }
+            pane name="db-shell"
+        }
+    }
+
+    // ─── CI/CD ──────────────────────────────────────────────────────
+    tab name="CI" {
+        pane split_direction="vertical" {
+            pane name="gh-runs" command="gh" size="55%" {
+                args "run" "list" "--limit" "15"
+            }
+            pane name="gh-shell"
+        }
+    }
+
+    // ─── Repos ──────────────────────────────────────────────────────
+    tab name="dotconfig" cwd="/Users/yurikrupnik/dotconfig" {
+        repo_workspace
+    }
+
+    tab name="nexty" cwd="/Users/yurikrupnik/code/nexty" {
+        repo_workspace
+    }
+
+    tab name="paidevo" cwd="/Users/yurikrupnik/code/paidevo" {
+        repo_workspace
+    }
+}
