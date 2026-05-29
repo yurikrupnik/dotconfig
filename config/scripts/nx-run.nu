@@ -1,3 +1,6 @@
+#!/usr/bin/env nu
+
+# Run an Nx command on all projects, capped at $cpu (default: all available CPUs).
 export def "main" [
   --cpu(-c): string = ""
   --target(-t): string = "build"

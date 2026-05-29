@@ -77,27 +77,40 @@ section "Stowed symlinks resolve into dotconfig"
 check_stow() {
     local path="$1"
     if [ ! -e "$path" ] && [ ! -L "$path" ]; then
-        warn "$path not present (shell may be unstowed)"
+        warn "$path not present (package may be unstowed)"
         return
     fi
-    if [ ! -L "$path" ]; then
-        bad "$path exists but is not a symlink (stow conflict?)"
+    if [ -L "$path" ]; then
+        # Tree-folded: whole directory or file is a single symlink.
+        local resolved
+        resolved="$(readlink "$path")"
+        case "$resolved" in
+            *dotconfig/*) ok "$path → ${resolved##*dotconfig/}" ;;
+            *) bad "$path → $resolved (not from dotconfig)" ;;
+        esac
         return
     fi
-    local resolved
-    resolved="$(readlink "$path")"
-    case "$resolved" in
-        *dotconfig/output/*) ok "$path → ${resolved##*dotconfig/}" ;;
-        *) bad "$path → $resolved (not from dotconfig/output)" ;;
-    esac
+    if [ -d "$path" ]; then
+        # Unfolded: real directory whose contents are symlinks into dotconfig.
+        local stowed
+        stowed="$(find "$path" -maxdepth 1 -type l -lname '*dotconfig*' | head -1)"
+        if [ -n "$stowed" ]; then
+            ok "$path/ (unfolded; e.g. ${stowed##$path/} → $(readlink "$stowed"))"
+        else
+            bad "$path is a directory but contains no symlinks into dotconfig"
+        fi
+        return
+    fi
+    bad "$path is a regular file (stow conflict?)"
 }
 
 check_stow "$HOME/.zshenv"
 check_stow "$HOME/.config/zsh"
-check_stow "$HOME/.config/fish"
 check_stow "$HOME/.config/nushell"
-check_stow "$HOME/.config/bash"
 check_stow "$HOME/.config/starship"
+check_stow "$HOME/.config/zed"
+check_stow "$HOME/.local/bin/up"
+check_stow "$HOME/.local/bin/csort"
 
 # 5. Generated output freshness
 section "Generated output freshness"

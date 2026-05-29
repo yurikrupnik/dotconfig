@@ -3,6 +3,8 @@
 
 set shell := ["bash", "-cu"]
 
+shells := "nu scripts/nu/setup-local-machine/shells.nu"
+
 default:
     @just --list
 
@@ -10,28 +12,24 @@ default:
 install:
     ./install.sh
 
-# Backup existing dotfiles before applying new configs
-backup:
-    ./backup.sh
-
-# Generate shell configs from config.toml
+# Generate shell configs and bin/ scripts from config/
 generate:
-    nu scripts/nu/setup-local-machine/shells.nu generate
+    {{shells}} generate
 
 # Symlink generated configs into $HOME (via GNU stow)
 stow:
-    nu scripts/nu/setup-local-machine/shells.nu stow
+    {{shells}} stow
 
 # Remove symlinked configs from $HOME
 unstow:
-    nu scripts/nu/setup-local-machine/shells.nu unstow
+    {{shells}} unstow
 
 # Generate + stow in one step
 regen: generate stow
 
 # Show what stow would do without making changes
 stow-dry:
-    nu scripts/nu/setup-local-machine/shells.nu stow --dry-run
+    {{shells}} stow --dry-run
 
 # Update brew packages from Brewfile
 brew-install:
@@ -40,6 +38,10 @@ brew-install:
 # Install/update global cargo packages via cargo-liner
 cargo-install:
     cargo liner ship --no-fail-fast
+
+# Install global node packages from config/node/package.json
+node-install:
+    cd config/node && bun install --global
 
 # Verify the install is healthy (commands, symlinks, freshness)
 doctor:

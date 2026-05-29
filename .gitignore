@@ -22,17 +22,17 @@ Thumbs.db
 
 # Local configuration overrides
 local/
-*.local
+*.local.json
+*.local.yaml
+*.local.yml
 
 # Backup files
 *.backup
 *.bak
 dotconfig-backup-*/
 
-# Shell runtime state (not config)
-/output/zsh/.config/zsh/.zcompdump
-/output/zsh/.config/zsh/.zsh_history
-/output/bash/.config/bash/.bash_history
+# Generator output — rebuilt from config/ by `nu shells.nu generate`
+/output/
 
 # Misc
 .gemini/

@@ -39,7 +39,6 @@ checker = "*"
 cargo-outdated = "*"
 cargo-tree = "*"
 cargo-audit = "*"
-cargo-update = "*"
 
 # Release & deployment
 cargo-release = "*"

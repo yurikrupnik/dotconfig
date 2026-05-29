@@ -11,12 +11,12 @@ Steps:
   1. Install Homebrew (if missing)
   2. brew bundle --file=config/brew/Brewfile
   3. rustup update
-  4. Generate shell configs from config/shell/config.toml
-  5. Stow generated configs into \$HOME
-  6. Install cargo-binstall, cargo-liner
-  7. cargo liner ship (installs config/cargo/liner.toml packages)
-  8. bun/npm install --global from config/node/global-packages.json
-  9. Run scripts/nu/setup-local-machine/index.nu (optional cloud tools)
+  4. Verify nushell is on PATH
+  5. just regen — generate shell configs + bin/ scripts and stow into \$HOME
+  6. Install cargo-binstall (if missing)
+  7. Install cargo-liner (if missing)
+  8. Link cargo-liner config and run 'cargo liner ship'
+  9. bun/npm install --global from config/node/global-packages.json
 
 After install: run 'just doctor' to verify, then 'u' (from your shell) for periodic refreshes.
 EOF
@@ -83,28 +83,23 @@ if ! command -v nu &> /dev/null; then
     exit 1
 fi
 
-# Step 5: Generate shell configurations
-log_info "Generating shell configurations..."
-cd "$HOME/dotconfig/scripts/nu/setup-local-machine"
-nu shells.nu generate
+# Step 5: Generate shell configs + stow them
+log_info "Generating + stowing shell configurations..."
+(cd "$HOME/dotconfig" && just regen)
 
-# Step 6: Stow configurations
-log_info "Stowing configurations..."
-nu shells.nu stow
-
-# Step 7: Install cargo-binstall (for faster binary installations)
+# Step 6: Install cargo-binstall (for faster binary installations)
 if ! command -v cargo-binstall &> /dev/null; then
     log_info "Installing cargo-binstall..."
     cargo install cargo-binstall
 fi
 
-# Step 8: Install cargo-liner (declarative manager for global cargo packages)
+# Step 7: Install cargo-liner (declarative manager for global cargo packages)
 if ! command -v cargo-liner &> /dev/null; then
     log_info "Installing cargo-liner..."
     cargo binstall cargo-liner --no-confirm
 fi
 
-# Step 9: Symlink cargo-liner config and install global cargo packages
+# Step 8: Symlink cargo-liner config and install global cargo packages
 CARGO_HOME_DIR="${CARGO_HOME:-$HOME/.cargo}"
 LINER_SRC="$HOME/dotconfig/config/cargo/liner.toml"
 LINER_DEST="$CARGO_HOME_DIR/liner.toml"
@@ -114,31 +109,12 @@ if [ -f "$LINER_SRC" ]; then
         ln -sfn "$LINER_SRC" "$LINER_DEST"
     fi
     log_info "Installing global Cargo packages via cargo-liner..."
-    cargo liner ship --no-fail-fast || log_warn "Some cargo packages failed to install"
+    (cd "$HOME/dotconfig" && just cargo-install) || log_warn "Some cargo packages failed to install"
 fi
 
-# Step 10: Install global npm/bun packages (if global-packages.json exists)
-if [ -f "$HOME/dotconfig/config/node/global-packages.json" ]; then
-    log_info "Installing global npm/bun packages..."
-
-    if command -v bun &> /dev/null; then
-        # Use bun (faster)
-        cd "$HOME/dotconfig/config/node"
-        bun install --global || log_warn "Failed to install some global packages"
-    elif command -v npm &> /dev/null; then
-        # Fallback to npm
-        cd "$HOME/dotconfig/config/node"
-        npm install --global || log_warn "Failed to install some global packages"
-    else
-        log_warn "Neither bun nor npm found. Skipping global package installation"
-    fi
-fi
-
-# Step 11: Run additional setup (cloud tools, etc.)
-if [ -f "$HOME/dotconfig/scripts/nu/setup-local-machine/index.nu" ]; then
-    log_info "Running additional setup tasks..."
-    nu "$HOME/dotconfig/scripts/nu/setup-local-machine/index.nu" || log_warn "Some setup tasks failed"
-fi
+# Step 9: Install global node packages via bun (installed by Brewfile in step 2)
+log_info "Installing global node packages..."
+(cd "$HOME/dotconfig" && just node-install) || log_warn "Failed to install some global node packages"
 
 log_info "Installation complete!"
 echo ""

@@ -21,12 +21,6 @@ $env.config = {
         algorithm: "fuzzy"
     }
 
-    # File completions
-    filesize: {
-        metric: true
-        format: "auto"
-    }
-
     # Cursor shape
     cursor_shape: {
         emacs: line
@@ -80,12 +74,12 @@ if ('~/.cache/zoxide/init.nu' | path expand | path exists) {
 
 # Direnv
 if ('~/.cache/direnv/init.nu' | path expand | path exists) {
-    use ~/.cache/direnv/init.nu
+    source ~/.cache/direnv/init.nu
 }
 
 # Source generated configuration (aliases, functions, environment variables)
 if ('~/.config/nushell/generated.nu' | path expand | path exists) {
-    use ~/.config/nushell/generated.nu *
+    source ~/.config/nushell/generated.nu
 }
 
 # Keybindings

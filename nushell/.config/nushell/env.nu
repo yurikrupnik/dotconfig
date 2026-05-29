@@ -53,7 +53,7 @@ if (which zoxide | is-not-empty) {
 # Direnv
 if (which direnv | is-not-empty) {
     mkdir ~/.cache/direnv
-    let direnv_hook = r#"
+    let direnv_hook = r#'
 # Direnv integration for Nushell
 # This sets up hooks to automatically load direnv when changing directories
 
@@ -95,11 +95,7 @@ $env.config = ($env.config | upsert hooks {|config|
         }
     }
 })
-"#
+'#
     $direnv_hook | save -f ~/.cache/direnv/init.nu
 }
 
-# Source generated configuration
-if ($"($env.HOME)/.config/nushell/generated.nu" | path exists) {
-    # Note: This will be sourced in config.nu to ensure proper loading order
-}
