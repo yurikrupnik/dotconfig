@@ -1,127 +1,50 @@
 # https://just.systems
+# Dotfiles task runner. For details on what each script does, see README.md.
 
-#default:
-#    just --list
-#    cargo run --bin dotconfig -- -h --debug
-car:
-    cargo run --bin dotconfig -- -h
-    cargo run --bin resource-stats-operator -- collect
-    cargo run --features full --bin resource-stats-operator -- crds
-    just up
-up *args='':
-  nu ~/dotconfig/scripts/nu/index.nu dev up {{args}}
-down *args='':
-    nu ~/dotconfig/scripts/nu/index.nu dev down {{args}}
+set shell := ["bash", "-cu"]
 
-# Test commands
-test-rust:
-    cargo test --all
-    cargo release
-    cargo audit --json
-    cargo check
-test-nu:
-    nu scripts/nu/tests/resolve_compose_files_test.nu
-test: test-rust test-nu
-    cargo modules structure
-    echo "All tests passed!"
+default:
+    @just --list
 
-# Toolchain management
-toolchain-install:
-    ./.cargo/bin/toolchain-install.sh
+# Fresh-machine bootstrap (brew, rust, cargo-liner, shells, stow)
+install:
+    ./install.sh
 
-toolchain-update:
-    ./.cargo/bin/toolchain-update.sh
+# Backup existing dotfiles before applying new configs
+backup:
+    ./backup.sh
 
-toolchain-targets:
-    ./.cargo/bin/toolchain-ensure-targets.sh
+# Generate shell configs from config.toml
+generate:
+    nu scripts/nu/setup-local-machine/shells.nu generate
 
-toolchain-info:
-    ./.cargo/bin/toolchain-info.sh
+# Symlink generated configs into $HOME (via GNU stow)
+stow:
+    nu scripts/nu/setup-local-machine/shells.nu stow
 
-# Install workspace-local CLI binaries to ~/.cargo/bin
-# (cargo-install.toml handles crates.io packages; this handles in-tree crates)
-install-bins:
-    cargo install --path crates/pg-cli
+# Remove symlinked configs from $HOME
+unstow:
+    nu scripts/nu/setup-local-machine/shells.nu unstow
 
-# One-time setup on a new machine
-setup-rust:
-    ./.cargo/bin/rustup-bootstrap.sh
-    just toolchain-install
-    just toolchain-info
-    just install-bins
-cargo run:
-    cargo run --bin dotconfig shit do-it -n aris
-    cargo run --bin operator
-# CI-ready setup
-ci-rust-setup:
-    just setup-rust
-# Create minimal cluster (no additional components)
-create-cluster-minimal name="minimal" providers="aws,gcp":
-    nu ~/dotconfig/scripts/nu/index.nu -h
-    nu ~/dotconfig/scripts/nu/index.nu kcl init --path scripts/kcl/stam
-    @echo "Creating minimal cluster: {{name}}"
-    @echo "Creating minimal cluster: {{providers}}"
+# Generate + stow in one step
+regen: generate stow
 
-# =============================================================================
-# API Server
-# =============================================================================
+# Show what stow would do without making changes
+stow-dry:
+    nu scripts/nu/setup-local-machine/shells.nu stow --dry-run
 
-# Run API server locally
-api-dev:
-    cd apps/api && cargo run --bin api-server
+# Update brew packages from Brewfile
+brew-install:
+    brew bundle --file=config/brew/Brewfile
 
-# Run API server with hot reload
-api-watch:
-    cd apps/api && cargo watch -x 'run --bin api-server'
+# Install/update global cargo packages via cargo-liner
+cargo-install:
+    cargo liner ship --no-fail-fast
 
-# Build API server
-api-build:
-    cd apps/api && cargo build --release --bin api-server
+# Verify the install is healthy (commands, symlinks, freshness)
+doctor:
+    ./scripts/doctor.sh
 
-# Test API server
-api-test:
-    cd apps/api && cargo test
-
-# Build API Docker image
-api-docker-build tag="latest":
-    docker build -t ghcr.io/yurikrupnik/api-server:{{tag}} -f apps/api/Dockerfile .
-
-# Deploy API to K8s
-api-k8s-deploy:
-    kubectl apply -k apps/api/k8s/
-
-# Delete API from K8s
-api-k8s-delete:
-    kubectl delete -k apps/api/k8s/ --ignore-not-found
-
-# =============================================================================
-# Tauri Apps
-# =============================================================================
-
-# Run web-app (Leptos + Tauri)
-tauri-web-dev:
-    cd web-app && cargo tauri dev
-
-# Run native-app (SolidJS + Tauri)
-tauri-native-dev:
-    cd app/native-app && cargo tauri dev
-
-# Build web-app for desktop
-tauri-web-build:
-    cd web-app && cargo tauri build
-
-# Build native-app for desktop
-tauri-native-build:
-    cd app/native-app && cargo tauri build
-
-# =============================================================================
-# Full Stack Development
-# =============================================================================
-
-# Run API + web-app frontend (browser mode)
-dev-web: api-dev
-    cd web-app && trunk serve
-
-# Run API + native-app frontend (browser mode)
-dev-native: api-dev
-    cd app/native-app && bun run dev
+# Preview what `u` would refresh (read-only)
+outdated:
+    ./scripts/outdated.sh

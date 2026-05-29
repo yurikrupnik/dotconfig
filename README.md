@@ -1,368 +1,173 @@
-# .config
+# dotconfig
 
-Enterprise cloud-native platform for dotconfig with comprehensive observability, feature flags, chaos engineering, and progressive delivery.
+Personal dotfiles and machine setup. One source of truth for shell configs, packages, and tooling — applied via GNU stow.
 
-## 🚀 Quick Start
+## Quick Start
 
-### Local Development
-
-```bash
-# Start all services locally
-docker compose up -d
-
-# Access services
-# Application: http://localhost:8080
-# Flagsmith UI: http://localhost:3000
-# Grafana: http://localhost:3001 (admin/admin)
-# Prometheus: http://localhost:9090
-# Jaeger: http://localhost:16686
-
-# View logs
-docker compose logs -f dotconfig-app
-```
-
-### Kubernetes Deployment
+### Fresh Machine
 
 ```bash
-# Install entire platform stack
-nu scripts/nu/platform/stack.nu install-all
-
-# Deploy example application
-kubectl apply -f k8s-manifests/examples/
-
-# Check status
-kubectl get pods,canaries,scaledobjects
+git clone https://github.com/yurikrupnik/dotconfig.git ~/dotconfig
+cd ~/dotconfig
+./install.sh
 ```
 
-## 📁 Structure
+This:
+1. Installs Homebrew (if missing) and all packages from `config/brew/Brewfile`
+2. Updates the Rust toolchain
+3. Generates shell configs from `config/shell/config.toml` into `output/`
+4. Symlinks `output/` into `$HOME` via GNU stow
+5. Bootstraps `cargo-binstall` + `cargo-liner` and installs global cargo tools from `config/cargo/liner.toml`
+6. Installs global npm/bun packages from `config/node/global-packages.json`
+7. Runs optional cloud-tool setup (`scripts/nu/setup-local-machine/index.nu`)
+
+After install, run `just doctor` to verify everything is wired correctly.
+
+### One-liner (from anywhere)
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/yurikrupnik/dotconfig/main/bootstrap.sh)
+```
+
+`bootstrap.sh` clones the repo to `~/dotconfig` and runs `./install.sh`.
+
+### Existing Machine (migration)
+
+If you already have dotfiles symlinked elsewhere, remove the old symlinks first so stow doesn't conflict:
+
+```bash
+rm -rf ~/.zshenv ~/.config/{zsh,fish,nushell,bash,starship}
+./install.sh
+```
+
+Use `./backup.sh` first if you want a snapshot of your current dotfiles.
+
+## Daily Commands
+
+```bash
+u                           # Refresh installed packages (brew + rust + cargo + node + gcloud) and restow shells
+                            #   — shell function from config.toml, available in zsh/fish/nu/bash
+
+just                        # List all recipes
+just doctor                 # Verify install health (symlinks, freshness, deps)
+just outdated               # Preview what `u` would refresh
+
+just regen                  # Regenerate shell configs from config.toml + stow
+just stow / unstow          # Re-apply or remove stowed symlinks
+just stow-dry               # Preview stow operations
+just backup                 # Snapshot current dotfiles to ~/dotconfig-backup-<ts>/
+```
+
+The `just` recipes are thin wrappers around bash scripts and `nu shells.nu` commands — see [`justfile`](justfile). `u` is the daily refresher; `./install.sh` is for fresh machines.
+
+## What Gets Managed
+
+| Component | Source of truth | Destination |
+|-----------|-----------------|-------------|
+| Shell aliases / functions / env | `config/shell/config.toml` | Generated per-shell |
+| Brew packages | `config/brew/Brewfile` | System |
+| Cargo tools | `config/cargo/liner.toml` | `~/.cargo/bin/` (via [cargo-liner](https://docs.rs/cargo-liner), symlinked to `$CARGO_HOME/liner.toml`) |
+| npm/bun globals | `config/node/global-packages.json` | Global node modules |
+| zsh config | `output/zsh/` | `~/.zshenv`, `~/.config/zsh/` |
+| fish config | `output/fish/` | `~/.config/fish/` |
+| nushell config | `output/nu/` | `~/.config/nushell/` |
+| bash config | `output/bash/` | `~/.config/bash/` |
+| starship prompt | `output/starship/` | `~/.config/starship/` |
+| zellij layouts | `zellij/layouts/` | (loaded by zellij directly) |
+
+## How It Works
+
+1. **`config.toml`** is the single source of truth for shell aliases, functions, and environment variables.
+2. **`shells.nu generate`** reads `config.toml` and writes shell-specific files into `output/<shell>/`.
+3. **`shells.nu stow`** uses GNU stow to symlink everything under `output/<shell>/` into `$HOME`.
+4. **`config/brew/Brewfile`**, **`config/cargo/liner.toml`**, and **`config/node/global-packages.json`** declare packages installed by `./install.sh` and refreshed by the `u` shell function.
+
+## Customization
+
+### Add a shell alias or function
+
+Edit `config/shell/config.toml`:
+
+```toml
+[aliases]
+k = "kubectl"
+lg = "lazygit"
+
+[functions.greet]
+description = "Print a greeting"
+command = "echo Hello, $1"
+args = ["name"]
+```
+
+Then regenerate:
+
+```bash
+just regen
+```
+
+### Add packages
+
+```bash
+# Homebrew — add to config/brew/Brewfile
+echo 'brew "neovim"' >> config/brew/Brewfile
+brew bundle --file=config/brew/Brewfile
+
+# Cargo — add to config/cargo/liner.toml under [packages]
+# Example: cargo-watch = "*"
+cargo liner ship
+
+# npm/bun — add to config/node/global-packages.json
+cd config/node && bun install --global  # or: npm install --global
+```
+
+## Testing changes safely
+
+The best test is just running `./install.sh` — it's idempotent. For full isolation:
+
+```bash
+docker run -it --rm -v "$(pwd):/dotconfig" ubuntu:latest bash
+# inside the container:
+cd /dotconfig && ./install.sh
+```
+
+## File Structure
 
 ```
 dotconfig/
-├── docker-compose.yml              # Local dev environment
-├── scripts/nu/platform/          # Platform management scripts
-│   └── stack.nu                 # Platform component installers
-├── config/                       # Configuration files
-│   ├── grafana/                  # Grafana dashboards & provisioning
-│   ├── prometheus/               # Prometheus config & alerts
-│   ├── loki/                    # Log aggregation
-│   └── promtail/                # Log collector
-├── k8s-manifests/               # Kubernetes manifests
-│   ├── examples/                 # Example configurations
-│   │   ├── dapr-flagsmith/      # Dapr + Flagsmith integration
-│   │   ├── canary-deployment/   # Flagger + KEDA examples
-│   │   ├── chaos/               # Chaos experiments
-│   │   └── crossplane/          # Cloud resource definitions
-│   └── keda/                    # KEDA scaler examples
-├── src/                          # Rust application source
-├── .github/                      # CI/CD workflows
-│   └── workflows/               # GitHub Actions
-├── tests/                        # Integration tests
-└── docs/                         # Documentation
+├── install.sh                          # Fresh machine bootstrap
+├── bootstrap.sh                        # Clone + install (for curl piping)
+├── backup.sh                           # Snapshot current dotfiles
+├── justfile                            # Task runner (wraps the above)
+├── .editorconfig                       # Cross-editor formatting
+├── config/                             # Declarative manifests (sources of truth)
+│   ├── brew/Brewfile                   # Homebrew packages
+│   ├── cargo/liner.toml                # Global cargo tools (symlinked to $CARGO_HOME/liner.toml)
+│   ├── node/global-packages.json       # Global npm/bun packages
+│   └── shell/config.toml               # Shell aliases / functions / env
+├── scripts/
+│   ├── doctor.sh                       # Health check (commands, symlinks, freshness)
+│   ├── outdated.sh                     # Preview pending updates (brew/rust/node)
+│   └── nu/setup-local-machine/
+│       ├── shells.nu                   # Reads shell/config.toml; generates + stows
+│       ├── index.nu                    # Optional cloud-tool setup
+│       ├── mcp.nu                      # MCP server config generator (optional)
+│       ├── nx.nu                       # Nx workspace helpers (optional)
+│       └── security.nu                 # Security-related setup (optional)
+├── output/                             # Generated shell configs (stowed from here)
+│   └── zsh/  fish/  nu/  bash/  starship/  zed/
+└── zellij/layouts/                     # Zellij terminal layouts
 ```
 
-## 🎯 Platform Components
+## Command Runners
 
-### Service Mesh & Progressive Delivery
-- **Istio** - Service mesh with mTLS and traffic management
-- **Flagger** - Progressive delivery with canary deployments
-- **KEDA** - Event-driven autoscaling
+- **`./install.sh`, `./backup.sh`, `./bootstrap.sh`** — pure bash, always available; all support `-h`/`--help`
+- **`u`** — shell function from `config/shell/config.toml`; daily refresh of installed packages
+- **`./scripts/doctor.sh`, `./scripts/outdated.sh`** — health check + update preview, no deps
+- **`just <recipe>`** — short aliases for daily commands; requires `brew install just`
 
-### Feature Flags
-- **Flagsmith** - Feature flag management
-- **Dapr** - Distributed application runtime
+There is no Makefile — the bash scripts are the canonical entry points; `just` is just for ergonomics.
 
-### Observability
-- **Prometheus** - Metrics collection
-- **Grafana** - Dashboards and visualization
-- **Jaeger** - Distributed tracing
-- **Loki** - Log aggregation
-- **Kiali** - Service mesh observability
+## Supported Platforms
 
-### Chaos Engineering
-- **Chaos Mesh** - Chaos testing platform
-- Various experiments: pod, network, IO, stress
-
-### Cloud Resources
-- **Crossplane** - Cloud resource management
-- Support for AWS, GCP, Azure resources
-
-### CI/CD
-- **GitHub Actions** - Automated pipelines
-- **Tekton** - Kubernetes-native pipelines
-- **Argo Workflows** - Workflow automation
-
-### Messaging & Data
-- **NATS** - Message queue with JetStream
-- **Redis** - State store
-- **MinIO** - Object storage
-- **ClickHouse** - Data warehouse
-
-## 📚 Documentation
-
-### Getting Started
-- [Platform Quick Start](PLATFORM_QUICKSTART.md) - 5 minute quick start
-- [Local Development](LOCAL_DEV.md) - Local dev guide
-- [Platform Guide](PLATFORM.md) - Complete platform documentation
-
-### Examples & Configurations
-- [Example Manifests](k8s-manifests/examples/README.md) - Kubernetes examples
-- [Chaos Experiments](k8s-manifests/examples/chaos/README.md) - Chaos scenarios
-- [CI/CD Workflows](.github/CI-CD.md) - Pipeline documentation
-
-### Component Guides
-- [KEDA Scalers](k8s-manifests/keda/README.md) - Autoscaling examples
-- [Dapr Integration](k8s-manifests/examples/dapr-flagsmith/) - Dapr components
-- [Canary Deployment](k8s-manifests/examples/canary-deployment/) - Flagger examples
-
-## 🎮 Common Commands
-
-### Platform Management
-
-```bash
-# Check platform status
-nu scripts/nu/platform/stack.nu status
-
-# Install specific components
-nu scripts/nu/platform/stack.nu install-component istio
-nu scripts/nu/platform/stack.nu install-component flagsmith
-nu scripts/nu/platform/stack.nu install-component chaos-mesh
-
-# Install all components
-nu scripts/nu/platform/stack.nu install-all
-
-# Uninstall components
-nu scripts/nu/platform/stack.nu uninstall-component chaos-mesh
-```
-
-### Feature Flags
-
-```bash
-# Access Flagsmith UI
-open http://localhost:3000
-
-# Test feature flags
-curl http://localhost:8080/feature-flags
-```
-
-### Progressive Deployment
-
-```bash
-# Trigger canary deployment
-kubectl set image deployment/dotconfig dotconfig=v2.0
-
-# Monitor canary progress
-kubectl get canary dotconfig -w
-```
-
-### Chaos Testing
-
-```bash
-# Apply chaos experiments
-kubectl apply -f k8s-manifests/examples/chaos/
-
-# Monitor resilience
-kubectl logs -f deployment/dotconfig
-```
-
-### Observability
-
-```bash
-# View metrics
-open http://localhost:9090
-
-# View dashboards
-open http://localhost:3001
-
-# View traces
-open http://localhost:16686
-
-# View service mesh
-open http://localhost:20001/kiali
-```
-
-## 🔧 Configuration
-
-### Environment Variables
-
-Edit `docker-compose.yml` to customize:
-
-```yaml
-environment:
-  - RUST_LOG=info
-  - FLAGSMITH_API_URL=http://flagsmith-api:8000/api/v1
-  - FLAGSMITH_ENV_KEY=local
-```
-
-### Platform Stack Script
-
-The `scripts/nu/platform/stack.nu` script provides a layered installation approach:
-
-- **Layer 0**: Core infrastructure (Istio, Gateway API)
-- **Layer 1**: GitOps & CI/CD (FluxCD, Crossplane, Tekton)
-- **Layer 2**: Progressive delivery (Flagger, Argo Rollouts)
-- **Layer 3**: Data & Integration (Dapr)
-- **Layer 4**: Observability (Prometheus, Grafana, Kiali, Jaeger)
-- **Layer 5**: Chaos Engineering (Chaos Mesh)
-- **Layer 6**: Data Platform (MinIO, ClickHouse, NATS)
-- **Layer 7**: Feature Flags (Flagsmith)
-
-## 🧪 Testing
-
-```bash
-# Run unit tests
-cargo test
-
-# Run integration tests
-kubectl apply -f tests/kubetest/
-
-# Run load tests
-k6 run tests/k6/full-stack.test.js
-
-# Run chaos tests
-kubectl apply -f k8s-manifests/examples/chaos/
-```
-
-## 📊 Monitoring & Debugging
-
-### Check Application Health
-
-```bash
-# Pod status
-kubectl get pods -l app=dotconfig
-
-# Application logs
-kubectl logs -f deployment/dotconfig
-
-# Dapr sidecar logs
-kubectl logs -f deployment/dotconfig -c daprd
-
-# Health check
-curl http://localhost:8080/health
-```
-
-### Check Platform Components
-
-```bash
-# Platform status
-nu scripts/nu/platform/stack.nu status
-
-# Component logs
-kubectl logs -n istio-system deployment/istiod
-kubectl logs -n monitoring deployment/prometheus-stack-kube-prom-operator
-kubectl logs -n chaos-mesh deployment/chaos-controller-manager
-```
-
-### Metrics & Traces
-
-```bash
-# Application metrics
-curl http://localhost:8080/metrics
-
-# Dapr metrics
-curl http://localhost:3500/v1.0/metrics
-
-# Prometheus metrics
-curl http://localhost:9090/api/v1/query?query=up
-```
-
-## 🔄 CI/CD
-
-### GitHub Actions Pipeline
-
-The CI/CD pipeline includes:
-- Automated testing (unit, integration, chaos)
-- Multi-arch Docker builds
-- Vulnerability scanning
-- Staging deployment with chaos tests
-- Production canary deployments
-
-```bash
-# View pipeline status
-gh run list
-
-# View specific run
-gh run view <run-id>
-
-# Trigger manual workflow
-gh workflow run ci-cd.yml
-```
-
-### Tekton Pipeline
-
-Kubernetes-native pipeline with:
-- Git triggers
-- Build, deploy, test, chaos stages
-- Argo Workflow integration
-
-## 🛠️ Troubleshooting
-
-### Services Not Starting
-
-```bash
-# Docker Compose
-docker compose logs
-kubectl get events
-
-# Kubernetes
-kubectl describe pod <pod-name>
-kubectl get events --field-selector involvedObject.kind=Pod
-```
-
-### Port Conflicts
-
-Change ports in `docker-compose.yml`:
-
-```yaml
-ports:
-  - "3002:3000"  # Change Grafana to 3002
-```
-
-### Chaos Experiments Running Too Long
-
-```bash
-# Pause chaos
-kubectl patch podchaos dotconfig-pod-failure -p '{"spec":{"pause":true}}'
-
-# Delete chaos
-kubectl delete podchaos, networkchaos --all
-
-# Restart deployment
-kubectl rollout restart deployment/dotconfig
-```
-
-### Canary Deployment Stuck
-
-```bash
-# Check Flagger logs
-kubectl logs -n istio-system deployment/flagger
-
-# Check canary status
-kubectl get canary dotconfig -o yaml
-
-# Describe canary
-kubectl describe canary dotconfig
-```
-
-## 🤝 Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## 📜 License
-
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## 🔗 Resources
-
-- [Dapr Documentation](https://docs.dapr.io/)
-- [Istio Documentation](https://istio.io/latest/docs/)
-- [Flagger Documentation](https://flagger.app/)
-- [Flagsmith Documentation](https://docs.flagsmith.com/)
-- [KEDA Documentation](https://keda.sh/docs/)
-- [Chaos Mesh Documentation](https://chaos-mesh.org/docs/)
-- [Crossplane Documentation](https://docs.crossplane.io/)
-- [FluxCD Documentation](https://fluxcd.io/docs/)
-
-## 📞 Support
-
-- Issues: [GitHub Issues](https://github.com/yurikrupnik/dotconfig/issues)
-- Discussions: [GitHub Discussions](https://github.com/yurikrupnik/dotconfig/discussions)
+- macOS (Apple Silicon and Intel)
+- Linux (via Homebrew on Linux)

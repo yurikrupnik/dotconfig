@@ -19,13 +19,16 @@ alias gal='gcloud auth login'
 # Functions
 update() {
     brew update
-    brew bundle --file ~/dotconfig/brew/Brewfile --upgrade
-    brew bundle cleanup --file ~/dotconfig/brew/Brewfile --force
+    brew bundle --file ~/dotconfig/config/brew/Brewfile
+    brew upgrade
     brew cleanup
     rustup update
+    cargo liner ship --no-fail-fast
     cargo install-update -a
-    gcloud components update
-    nu ~/dotconfig/scripts/nu/setup-local-machine/shells.nu generate "$@"
+    bun update --global
+    gcloud components update --quiet
+    nu ~/dotconfig/scripts/nu/setup-local-machine/shells.nu generate
+    nu ~/dotconfig/scripts/nu/setup-local-machine/shells.nu stow
 }
 
 sort() {

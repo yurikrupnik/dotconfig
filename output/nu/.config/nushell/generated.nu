@@ -21,16 +21,19 @@ export alias g = gcloud
 export alias gal = gcloud auth login
 
 # Functions
-# Update system packages
-export def u [...args] {
+# Refresh installed packages on this machine
+export def u [] {
     ^brew update
-    ^brew bundle --file ~/dotconfig/brew/Brewfile --upgrade
-    ^brew bundle cleanup --file ~/dotconfig/brew/Brewfile --force
+    ^brew bundle --file ~/dotconfig/config/brew/Brewfile
+    ^brew upgrade
     ^brew cleanup
     ^rustup update
+    ^cargo liner ship --no-fail-fast
     ^cargo install-update -a
-    ^gcloud components update
-    ^nu ~/dotconfig/scripts/nu/setup-local-machine/shells.nu generate ...$args
+    ^bun update --global
+    ^gcloud components update --quiet
+    ^nu ~/dotconfig/scripts/nu/setup-local-machine/shells.nu generate
+    ^nu ~/dotconfig/scripts/nu/setup-local-machine/shells.nu stow
 }
 
 export def sort [] {

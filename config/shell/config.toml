@@ -1,0 +1,87 @@
+[aliases]
+lg = 'lazygit'
+k = "kubectl"
+#alias kx=kubectx
+lsl = 'eza --no-permissions --no-user --no-time --long'
+u = 'update'
+#ls='eza --no-permissions --no-user --no-time'
+#alias cat='bat --paging never --style plain'
+#alias fzfp='fzf --preview="bat --style numbers --color=always {}"'
+#alias d=docker
+drmi='docker rmi $(docker images -aq) -f'
+dsp='docker system prune -f && docker volume prune -f'
+pu="pulumi"
+b = "bun"
+c = "cargo"
+cdo = "cargo doc"
+#alias cdoco=cargo doc --open
+gs = "git status"
+ga = "git add"
+g = "gcloud"
+gal = "gcloud auth login"
+#claude = "bun run ~/.bun/bin/claude"
+
+
+#[functions.knd]
+#description = "Switch kubectl namespace"
+#commands = [
+#    "if ! kubectl config current-context >/dev/null 2>&1; then echo 'No kubectl context set. Run: kubectl config use-context <context>'; return 1; fi",
+#    "kubectl config set-context --current --namespace={arg}"
+#]
+#args = ["namespace"]
+
+[functions.update]
+description = "Refresh installed packages on this machine"
+commands = [
+    "brew update",
+    "brew bundle --file ~/dotconfig/config/brew/Brewfile",
+    "brew upgrade",
+    "brew cleanup",
+    "rustup update",
+    "cargo liner ship --no-fail-fast",
+    "cargo install-update -a",
+    "bun update --global",
+    "gcloud components update --quiet",
+    "nu ~/dotconfig/scripts/nu/setup-local-machine/shells.nu generate",
+    "nu ~/dotconfig/scripts/nu/setup-local-machine/shells.nu stow"
+]
+
+[functions.sort]
+commands = [
+    "cargo fmt",
+    "cargo sort --workspace"
+]
+[functions.generate]
+description = "Run generate shells commands, supports zsh, fish and nu scripts."
+commands = [
+    "nu ~/dotconfig/scripts/nu/setup-local-machine/shells.nu generate \"$@\""
+]
+
+[functions.nx-run]
+description = "Run Nx command on all projects"
+commands = [
+    "nu ~/dotconfig/scripts/nu/setup-local-machine/nx.nu \"$@\""
+]
+
+[functions.mcp]
+description = "Generate MCP server configuration file"
+commands = [
+    "nu ~/dotconfig/scripts/nu/setup-local-machine/mcp.nu \"$@\""
+]
+
+[environment]
+EDITOR = "zed"
+BROWSER = "open"
+
+SHIT_TEXT = "omg"
+SHIT = true
+AI = "claude"
+
+PROJECT = "rust"
+TYPE = "be" # fe, devops, data, cli, operator, ci - tekton
+CLOUD_GPROJECT = "playground-447016"
+CLOUD_GACOUNT = "krupnik.yuri@gmail.com"
+CLOUD_GREGION = "me-west1"
+CLOUD = "gcp"
+CONTAINER_REGISTRY = "docker.com/yurikrupnik"
+CONTAINER_REGISTRY_BACKUP = "me-west1-docker.pkg.dev/playground-447016/containers" # AWS or GCP

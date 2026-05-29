@@ -355,7 +355,7 @@ def generate_nushell [config: record, output_dir: string] {
 }
 
 export def "main generate" [
-    --config-path: string = "~/dotconfig/scripts/nu/setup-local-machine/config.toml"
+    --config-path: string = "~/dotconfig/config/shell/config.toml"
     --zsh-dir: string = "~/dotconfig/output/zsh/.config/zsh"
     --fish-dir: string = "~/dotconfig/output/fish/.config/fish"
     --nu-dir: string = "~/dotconfig/output/nu/.config/nushell"

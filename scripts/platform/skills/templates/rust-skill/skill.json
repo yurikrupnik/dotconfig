@@ -1,9 +1,0 @@
-{
-  "name": "{{skill_name}}",
-  "version": "0.1.0",
-  "type": "rust",
-  "description": "{{description}}",
-  "entry": "./target/release/{{skill_name}}",
-  "capabilities": [],
-  "config": {}
-}

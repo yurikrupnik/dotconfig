@@ -1,9 +1,0 @@
-{
-  "name": "{{skill_name}}",
-  "version": "0.1.0",
-  "type": "nushell",
-  "description": "{{description}}",
-  "entry": "./skill.nu",
-  "capabilities": [],
-  "config": {}
-}

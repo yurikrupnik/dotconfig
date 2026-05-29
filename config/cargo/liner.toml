@@ -1,0 +1,62 @@
+# cargo-liner config - global cargo packages
+# Docs: https://docs.rs/cargo-liner
+# Symlinked from install.sh to $CARGO_HOME/liner.toml
+#
+# Run `cargo liner ship` to install/update everything below.
+
+[packages]
+# Project scaffolding & generators
+cargo-generate = "*"
+create-tauri-app = "*"
+
+# Build tools & task runners
+cargo-make = "*"
+trunk = "*"
+cargo-run-script = "*"
+zesh = "*"
+
+# Web frameworks & tools
+cargo-leptos = "*"
+salvo-cli = "*"
+wasm-pack = "*"
+
+# Development tools
+cargo-nextest = "*"
+bacon = "*"
+
+# Code inspection & editing
+cargo-edit = "*"
+cargo-expand = "*"
+cargo-modules = "*"
+cargo-readme = "*"
+
+# Code quality & testing
+cargo-tarpaulin = "*"
+cargo-sort = "*"
+checker = "*"
+
+# Dependency management
+cargo-outdated = "*"
+cargo-tree = "*"
+cargo-audit = "*"
+cargo-update = "*"
+
+# Release & deployment
+cargo-release = "*"
+cargo-bloat = "*"
+sccache = "*"
+
+# Database tools
+sqlx-cli = "*"
+
+# Protocol buffers
+protobuf-codegen = "*"
+
+# Cross-compilation
+cross = "*"
+
+[defaults.ship]
+# Use cargo-binstall when available (much faster than compiling from source)
+binstall = "auto"
+# Don't fail entire run if one package fails
+no-fail-fast = true

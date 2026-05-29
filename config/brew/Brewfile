@@ -1,0 +1,132 @@
+tap "kcl-lang/tap"
+brew "kcl-lang/tap/kcl"                  # KCL — configuration language for cloud-native
+tap "KusionStack/tap"
+brew "KusionStack/tap/kusion"            # Kusion — app delivery engine for k8s/cloud
+tap "ariga/tap"
+brew "ariga/tap/atlas"                   # Atlas — database schema-as-code & migrations
+tap "siderolabs/tap"
+brew "siderolabs/tap/talosctl"           # talosctl — CLI for Talos Linux (k8s OS)
+tap "fluxcd/tap"
+brew "fluxcd/tap/flux"                   # Flux — GitOps controller for Kubernetes
+brew "metalbear-co/mirrord/mirrord"      # mirrord — run local process in a remote k8s pod context
+
+# brew "1password-cli"
+# brew "broot"
+tap "dapr/tap"
+brew "dapr/tap/dapr-cli"                 # Dapr — distributed application runtime CLI
+tap "hashicorp/tap"
+brew "hashicorp/tap/vault"               # Vault — secrets management
+brew "hashicorp/tap/terraform"           # Terraform — infrastructure as code
+brew "qemu"                              # QEMU — generic machine emulator / virtualizer
+brew "tbls"                              # tbls — generate database documentation
+brew "mise"                              # mise — polyglot runtime/version manager (Node, Python, …)
+brew "mprocs"                            # mprocs — run multiple commands in parallel in a TUI
+brew "pnpm"
+brew "cloc"                              # cloc — count lines of code by language
+brew "lefthook"                          # lefthook — fast polyglot git hooks manager
+brew "opencode"                          # opencode — AI coding agent in the terminal
+brew "pgcli"                             # pgcli — Postgres CLI with autocomplete & syntax highlighting
+brew "yazi"                              # yazi — blazing-fast terminal file manager
+brew "wrk"                               # wrk — modern HTTP benchmarking tool
+brew "direnv"                            # direnv — per-directory environment variables
+brew "ffmpeg"                            # ffmpeg — audio/video processing toolkit
+brew "zoxide"                            # zoxide — smarter `cd` (frecency-based jumper)
+brew "jq"                                # jq — command-line JSON processor
+brew "poppler"                           # poppler — PDF rendering library (pdftotext, pdftoppm, …)
+brew "fd"                                # fd — simple, fast alternative to `find`
+brew "ripgrep"                           # ripgrep (rg) — fast recursive grep
+brew "p7zip"                             # p7zip — 7-Zip archive utility
+brew "ImageMagick"                       # ImageMagick — image manipulation toolkit
+brew "jj"                                # Jujutsu — git-compatible VCS with better UX
+brew "hey"                               # hey — HTTP load generator
+brew "bottom"                            # bottom (btm) — graphical system/process monitor TUI
+brew "nx"                                # Nx — monorepo build system
+brew "zenith"                            # zenith — cross-platform top/htop alternative with charts
+# AI agents
+# brew "gemini-cli"
+cask "codex"                             # Codex — OpenAI coding agent desktop app
+cask "claude-code"                       # Claude Code — Anthropic's coding agent CLI/app
+
+brew "yq"                                # yq — YAML/JSON/XML processor (jq for YAML)
+brew "doctl"                             # doctl — DigitalOcean CLI
+brew "zellij"                            # zellij — terminal workspace / multiplexer
+brew "ollama"                            # ollama — run local LLMs
+# brew "devbox"
+brew "rbenv"                             # rbenv — Ruby version manager
+brew "httpie"                            # HTTPie — human-friendly HTTP client
+brew "htop"                              # htop — interactive process viewer
+brew "upbound/tap/up"                    # up — Upbound CLI for Crossplane control planes
+brew "protobuf"                          # protobuf — Protocol Buffers compiler (protoc) & libs
+brew "istioctl"                          # istioctl — Istio service mesh CLI
+brew "crossplane"                        # crossplane — cloud infra via Kubernetes APIs
+brew "stefanprodan/tap/timoni"           # timoni — CUE-based package manager for Kubernetes
+brew "deno"                              # Deno — secure JS/TS runtime
+brew "oven-sh/bun/bun"                   # Bun — JS runtime, bundler, package manager
+brew "buf"                               # buf — modern Protobuf tooling (lint, breaking, generate)
+brew "k6"                                # k6 — developer-centric load testing
+brew "just"                              # just — command runner (Justfile, like make)
+brew "testkube"                          # Testkube — Kubernetes-native test orchestrator
+brew "popeye"                            # popeye — Kubernetes cluster sanitizer / linter
+brew "kubent"                            # kubent — find deprecated Kubernetes API usage
+brew "argo"                              # argo — Argo Workflows CLI
+brew "uv"                                # uv — fast Python package & project manager
+brew "vals"                              # vals — secrets/config value loader (Helm-friendly)
+brew "kubescape"                         # kubescape — Kubernetes security & compliance scanner
+brew "bacon"                             # bacon — background Rust code checker
+brew "nushell"                           # nushell — structured-data shell
+brew "fzf"                               # fzf — general-purpose fuzzy finder
+brew "bat"                               # bat — `cat` with syntax highlighting & git integration
+brew "go-task"                           # task — task runner (Taskfile.yml)
+brew "kustomize"                         # kustomize — template-free Kubernetes manifest customization
+brew "stow"                              # GNU Stow — symlink farm manager (dotfiles)
+brew "starship"                          # Starship — minimal, fast cross-shell prompt
+brew "vcluster"                          # vcluster — virtual Kubernetes clusters inside a cluster
+brew "kubevela"                          # KubeVela — modern application delivery on Kubernetes
+brew "kubeseal"                          # kubeseal — CLI for Bitnami Sealed Secrets
+brew "k9s"                               # k9s — Kubernetes cluster TUI
+brew "kind"                              # kind — local Kubernetes clusters using Docker nodes
+brew "gh"                                # gh — GitHub CLI
+brew "lazygit"                           # lazygit — terminal UI for git
+brew "argocd"                            # argocd — Argo CD CLI (GitOps for k8s)
+brew "zig"                               # Zig — systems programming language & build toolchain
+brew "node"                              # Node.js runtime
+brew "tokei"                             # tokei — fast lines-of-code counter
+brew "awscli"                            # AWS CLI
+brew "helm"                              # Helm — Kubernetes package manager
+brew "kompose"                           # kompose — convert docker-compose to Kubernetes manifests
+brew "minikube"                          # minikube — local Kubernetes
+brew "kubectx"                           # kubectx/kubens — switch k8s contexts & namespaces
+brew "pulumi"                            # Pulumi — infrastructure as code in real languages
+brew "tilt"                              # Tilt — local Kubernetes dev environments
+brew "trivy"                             # Trivy — vulnerability & misconfig scanner
+brew "tlrc"                              # tlrc — Rust client for tldr (simplified man pages)
+brew "duf"                               # duf — disk usage / free utility TUI
+brew "eza"                               # eza — modern replacement for `ls`
+brew "langgraph-cli"                     # LangGraph CLI — build/run LangGraph LLM apps
+brew "tektoncd-cli"                      # tkn — Tekton Pipelines CLI
+cask "raycast"                           # Raycast — macOS launcher & productivity app
+cask "visual-studio-code"                # VS Code — editor
+cask "warp"                              # Warp — modern terminal
+cask "discord"                           # Discord — chat
+cask "mongodb-compass"                   # MongoDB Compass — MongoDB GUI
+cask "microsoft-teams"                   # Microsoft Teams — chat / meetings
+cask "zoom"                              # Zoom — video conferencing
+cask "obsidian"                          # Obsidian — local-first markdown notes
+cask "pgadmin4"                          # pgAdmin 4 — PostgreSQL GUI
+cask "medis"                             # Medis — Redis GUI
+cask "redis-insight"                     # RedisInsight — official Redis GUI
+cask "lm-studio"                         # LM Studio — desktop GUI for local LLMs
+cask "zed"                               # Zed — fast collaborative editor
+cask "google-chrome"                     # Google Chrome — browser
+cask "slack"                             # Slack — chat
+cask "chatgpt"                           # ChatGPT — desktop app
+cask "claude"                            # Claude — desktop app
+cask "tg-pro"                            # TG Pro — Mac fan & temperature monitor
+cask "1password"                         # 1Password — password manager
+cask "lens"                              # Lens — Kubernetes desktop IDE
+cask "coderabbit"                        # CodeRabbit — AI code review
+cask "postman"                           # Postman — API client
+cask "httpie-desktop"                    # HTTPie Desktop — API client GUI
+# cask "gcloud-cli"
+# cask "docker"
+# cask "jetbrains-toolbox"

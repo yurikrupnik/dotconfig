@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Bootstrap script for dotconfig - can be run via curl
-set -e
+set -euo pipefail
 
-REPO_URL="${DOTCONFIG_REPO:-https://github.com/yourusername/dotconfig.git}"
+REPO_URL="${DOTCONFIG_REPO:-https://github.com/yurikrupnik/dotconfig.git}"
 INSTALL_DIR="${DOTCONFIG_DIR:-$HOME/dotconfig}"
 
 echo "Bootstrapping dotconfig..."

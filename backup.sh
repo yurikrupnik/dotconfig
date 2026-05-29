@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Backup existing configurations before installation
-set -e
+set -euo pipefail
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -22,7 +22,8 @@ CONFIGS=(
     ".config/zsh"
     ".config/fish"
     ".config/nushell"
-    ".config/starship.toml"
+    ".config/bash"
+    ".config/starship"
 )
 
 for config in "${CONFIGS[@]}"; do
@@ -37,7 +38,7 @@ done
 cat > "$BACKUP_DIR/restore.sh" << 'EOF'
 #!/usr/bin/env bash
 # Restore backup
-set -e
+set -euo pipefail
 
 BACKUP_DIR="$(cd "$(dirname "$0")" && pwd)"
 echo "Restoring from: $BACKUP_DIR"

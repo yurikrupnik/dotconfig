@@ -7,18 +7,18 @@
 ehthumbs.db
 Thumbs.db
 .env
-/target
-/dist
 /tmp
+
 # Temporary files
 *.tmp
 *.temp
 *.log
 
-# Editor files
+# Editor / IDE
 *.swp
 *.swo
 *~
+.idea/
 
 # Local configuration overrides
 local/
@@ -28,8 +28,12 @@ local/
 *.backup
 *.bak
 dotconfig-backup-*/
+
+# Shell runtime state (not config)
 /output/zsh/.config/zsh/.zcompdump
 /output/zsh/.config/zsh/.zsh_history
 /output/bash/.config/bash/.bash_history
+
+# Misc
 .gemini/
 gha-creds-*.json

@@ -2,6 +2,7 @@
 
 format = """
 $username\
+${custom.gh_user}\
 $directory\
 $git_branch\
 $git_status\
@@ -79,7 +80,8 @@ format = 'via [$symbol$state](bold purple) '
 
 # Start of Disabled
 [aws]
-disabled = false
+disabled = true
+format = '(on [$symbol$profile]($style) )'
 
 [azure]
 disabled = false
@@ -130,3 +132,11 @@ disabled = false
 ssh_only = false
 format = '@[$localipv4](bold red) '
 disabled = true
+
+[custom.gh_user]
+description = "Active GitHub user (managed via gh CLI)"
+command = "gh config get -h github.com user"
+when = "command -v gh >/dev/null 2>&1 && gh config get -h github.com user >/dev/null 2>&1"
+format = '[ $output]($style) '
+style = 'bold purple'
+ignore_timeout = true
