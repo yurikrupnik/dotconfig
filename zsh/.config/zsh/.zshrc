@@ -30,19 +30,15 @@ eval "$(mise activate bash)"
 export PROTO_HOME="$HOME/.proto";
 export PATH="$PROTO_HOME/shims:$PROTO_HOME/bin:$PATH";
 
-# XDG Base Directory Specification
-export XDG_CONFIG_HOME="$HOME/.config"
-
-export LANG=en_US.UTF-8
 export PATH="$HOME/go/bin:$PATH"
 export PATH="/usr/local/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$HOME/.bun/bin:$PATH"
 export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
 
-# Added by Toolbox App
-export PATH="$PATH:/Users/yurikrupnik/Library/Application Support/JetBrains/Toolbox/scripts"
-export KUBE_EDITOR=zed
+# Added by Toolbox App (per-machine; guarded so it's a no-op when JetBrains absent)
+JETBRAINS_SCRIPTS="$HOME/Library/Application Support/JetBrains/Toolbox/scripts"
+[ -d "$JETBRAINS_SCRIPTS" ] && export PATH="$PATH:$JETBRAINS_SCRIPTS"
 # export TERMINAL=WarpTerminal
 
 HISTSIZE=5000

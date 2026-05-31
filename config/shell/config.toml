@@ -71,8 +71,20 @@ commands = [
 
 [environment]
 EDITOR = "zed"
+KUBE_EDITOR = "zed"
 BROWSER = "open"
 AI = "claude"
 
 PROJECT = "rust"
 TYPE = "be" # fe, devops, data, cli, operator, ci - tekton
+
+# Locale / XDG (consolidated from hand-written zshrc + env.nu)
+LANG = "en_US.UTF-8"
+XDG_CONFIG_HOME = "$HOME/.config"
+
+# Homebrew behavior: `up` handles updates and cleanup explicitly, so suppress
+# brew's implicit auto-update and post-install cleanup for predictable runs.
+# HOMEBREW_BUNDLE_FILE lets bare `brew bundle` work from any directory.
+HOMEBREW_NO_AUTO_UPDATE = "1"
+HOMEBREW_NO_INSTALL_CLEANUP = "1"
+HOMEBREW_BUNDLE_FILE = "$DOTCONFIG_DIR/config/brew/Brewfile"

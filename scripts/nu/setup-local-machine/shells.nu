@@ -13,6 +13,7 @@ def main [] {}
 
 # Repo root, derived from this file's location: <repo>/scripts/nu/setup-local-machine/shells.nu
 const REPO_DIR = path self | path dirname | path dirname | path dirname | path dirname
+const REPO_NAME = $REPO_DIR | path basename
 
 # Hand-written stow packages that live at the top of the repo (not under output/).
 # output/ is for generator output only; anything you hand-edit goes here.
@@ -29,6 +30,63 @@ def zsh_q [s: string]: nothing -> string {
 # closing sequence is '# — vanishingly rare in shell values. Safe for env values.
 def nu_q [s: string]: nothing -> string {
     $"r#'($s)'#"
+}
+
+# Whitelist of shell variables env values may reference. Anything outside this
+# list is rejected at generation time so `$TYPO_NAME` can't sneak through.
+const ENV_ALLOWED_REFS = ['HOME', 'DOTCONFIG_DIR']
+
+def validate_env_refs [s: string, label: string]: nothing -> nothing {
+    let refs = $s | parse -r '\$([A-Za-z_][A-Za-z0-9_]*)' | get capture0
+    let bad = $refs | where { |v| $v not-in $ENV_ALLOWED_REFS }
+    if ($bad | length) > 0 {
+        error make { msg: $"($label): value '($s)' references unsupported variable $($bad | first); only $HOME and $DOTCONFIG_DIR are allowed in env values." }
+    }
+}
+
+# Emit a zsh env value. Single-quoted (verbatim) by default; double-quoted when
+# the value references $HOME/$DOTCONFIG_DIR so the shell expands them at source.
+def zsh_env [key: string, val: any]: nothing -> string {
+    let s = if ($val | describe) == "bool" {
+        if $val { "true" } else { "false" }
+    } else {
+        $val
+    }
+    if ($s | str contains '$') {
+        validate_env_refs $s $"environment.($key)"
+        for ch in ['"' '`' '\\'] {
+            if ($s | str contains $ch) {
+                error make { msg: $"environment.($key): value '($s)' contains '($ch)', which conflicts with double-quoted shell expansion." }
+            }
+        }
+        $"\"($s)\""
+    } else {
+        zsh_q $s
+    }
+}
+
+# Emit a nu env value. Raw string by default; interpolated $"…" with $env.X
+# substitution when the value references $HOME/$DOTCONFIG_DIR.
+def nu_env [key: string, val: any]: nothing -> string {
+    if ($val | describe) == "bool" {
+        if $val { "true" } else { "false" }
+    } else {
+        let s = $val
+        if ($s | str contains '$') {
+            validate_env_refs $s $"environment.($key)"
+            for ch in ['"' '`' '\\' '(' ')'] {
+                if ($s | str contains $ch) {
+                    error make { msg: $"environment.($key): value '($s)' contains '($ch)', which conflicts with nu interpolation." }
+                }
+            }
+            let converted = $s
+                | str replace -a '$HOME' '($env.HOME)'
+                | str replace -a '$DOTCONFIG_DIR' '($env.DOTCONFIG_DIR)'
+            $"$\"($converted)\""
+        } else {
+            nu_q $s
+        }
+    }
 }
 
 # zsh: aliases + env only. Functions become bash scripts on PATH (see generate_bin_scripts).
@@ -51,13 +109,10 @@ def generate_zsh [config: record, output_dir: string] {
 
     if "environment" in $config {
         $content = $content + "# Environment Variables\n"
+        $content = $content + (": \"${DOTCONFIG_DIR:=$HOME/" + $REPO_NAME + "}\"\n")
+        $content = $content + "export DOTCONFIG_DIR\n"
         for entry in ($config.environment | transpose key value) {
-            let val = if ($entry.value | describe) == "bool" {
-                if $entry.value { "true" } else { "false" }
-            } else {
-                $entry.value
-            }
-            $content = $content + $"export ($entry.key)=(zsh_q $val)\n"
+            $content = $content + $"export ($entry.key)=(zsh_env $entry.key $entry.value)\n"
         }
     }
 
@@ -101,13 +156,9 @@ def generate_nushell [config: record, output_dir: string] {
 
     if "environment" in $config {
         $content = $content + "# Environment Variables\n"
+        $content = $content + ('$env.DOTCONFIG_DIR = ($env.DOTCONFIG_DIR? | default $"($env.HOME)/' + $REPO_NAME + '")' + "\n")
         for entry in ($config.environment | transpose key value) {
-            let val = if ($entry.value | describe) == "bool" {
-                $entry.value
-            } else {
-                nu_q $entry.value
-            }
-            $content = $content + $"$env.($entry.key) = ($val)\n"
+            $content = $content + $"$env.($entry.key) = (nu_env $entry.key $entry.value)\n"
         }
     }
 
@@ -129,11 +180,10 @@ def generate_bin_scripts [config: record, output_dir: string] {
         let func = $entry.value
         let script_path = $output_dir | path join $name
 
-        let dotconfig = $REPO_DIR | path expand
         mut content = "#!/usr/bin/env bash\n"
         $content = $content + "# Generated from config.toml — do not edit by hand.\n"
         $content = $content + "set -euo pipefail\n"
-        $content = $content + $"DOTCONFIG_DIR=\"${DOTCONFIG_DIR:-($dotconfig)}\"\n"
+        $content = $content + $"DOTCONFIG_DIR=\"${DOTCONFIG_DIR:-$HOME/($REPO_NAME)}\"\n"
         if "description" in $func {
             $content = $content + $"# ($func.description)\n"
         }

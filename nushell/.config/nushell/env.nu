@@ -1,15 +1,6 @@
 # Nushell environment configuration
 # Based on zsh setup - see https://www.youtube.com/watch?v=KBh8lM3jeeE&t=36s
 
-# XDG Base Directory Specification
-$env.XDG_CONFIG_HOME = $"($env.HOME)/.config"
-
-# Language and locale
-$env.LANG = "en_US.UTF-8"
-
-# Editor
-$env.KUBE_EDITOR = "zed"
-
 # PATH setup
 $env.PATH = ($env.PATH | split row (char esep) | prepend [
     $"($env.HOME)/go/bin"

@@ -131,6 +131,19 @@ check_freshness() {
 check_freshness "output/zsh" "$DOTCONFIG_DIR/output/zsh/.config/zsh/generated.zsh"
 check_freshness "output/nu"  "$DOTCONFIG_DIR/output/nu/.config/nushell/generated.nu"
 
+# 6. No hardcoded /Users/<username> in tracked files (output/ is gitignored,
+#    so generated absolute paths don't trip this check).
+section "No hardcoded user-specific paths"
+if command -v git >/dev/null 2>&1 && [ -d "$DOTCONFIG_DIR/.git" ]; then
+    hits=$(cd "$DOTCONFIG_DIR" && git ls-files -z | xargs -0 grep -lE "/Users/[a-zA-Z][a-zA-Z0-9_-]+" 2>/dev/null || true)
+    if [ -n "$hits" ]; then
+        bad "Hardcoded /Users/<username> in tracked files:"
+        echo "$hits" | sed 's/^/    /'
+    else
+        ok "No hardcoded /Users/<username> in tracked files"
+    fi
+fi
+
 # Summary
 echo ""
 if [ $FAIL -eq 0 ]; then
