@@ -46,7 +46,7 @@ section "Config manifests"
 for f in \
     "$DOTCONFIG_DIR/config/brew/Brewfile" \
     "$DOTCONFIG_DIR/config/cargo/liner.toml" \
-    "$DOTCONFIG_DIR/config/node/global-packages.json" \
+    "$DOTCONFIG_DIR/config/node/package.json" \
     "$DOTCONFIG_DIR/config/shell/config.toml"; do
     if [ -f "$f" ]; then
         ok "${f#$DOTCONFIG_DIR/}"
@@ -115,16 +115,21 @@ check_stow "$HOME/.local/bin/csort"
 # 5. Generated output freshness
 section "Generated output freshness"
 CONFIG_TOML="$DOTCONFIG_DIR/config/shell/config.toml"
-ZSH_GEN="$DOTCONFIG_DIR/output/zsh/.config/zsh/generated.zsh"
-if [ -f "$CONFIG_TOML" ] && [ -f "$ZSH_GEN" ]; then
-    if [ "$CONFIG_TOML" -nt "$ZSH_GEN" ]; then
-        warn "config.toml is newer than output/ — run 'just regen'"
-    else
-        ok "output/ is up-to-date with config.toml"
+check_freshness() {
+    local label="$1"
+    local gen_file="$2"
+    if [ -f "$CONFIG_TOML" ] && [ -f "$gen_file" ]; then
+        if [ "$CONFIG_TOML" -nt "$gen_file" ]; then
+            warn "$label is stale (config.toml newer) — run 'just regen'"
+        else
+            ok "$label is up-to-date with config.toml"
+        fi
+    elif [ ! -f "$gen_file" ]; then
+        bad "$label has not been generated — run 'just generate'"
     fi
-elif [ ! -f "$ZSH_GEN" ]; then
-    bad "output/ has not been generated — run 'just generate'"
-fi
+}
+check_freshness "output/zsh" "$DOTCONFIG_DIR/output/zsh/.config/zsh/generated.zsh"
+check_freshness "output/nu"  "$DOTCONFIG_DIR/output/nu/.config/nushell/generated.nu"
 
 # Summary
 echo ""

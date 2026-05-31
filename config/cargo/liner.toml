@@ -22,7 +22,6 @@ wasm-pack = "*"
 
 # Development tools
 cargo-nextest = "*"
-bacon = "*"
 
 # Code inspection & editing
 cargo-edit = "*"

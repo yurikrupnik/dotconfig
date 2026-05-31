@@ -11,11 +11,25 @@ def load_config [config_path: string]: nothing -> record {
 
 def main [] {}
 
-const REPO_DIR = "~/dotconfig"
+# Repo root, derived from this file's location: <repo>/scripts/nu/setup-local-machine/shells.nu
+const REPO_DIR = path self | path dirname | path dirname | path dirname | path dirname
 
 # Hand-written stow packages that live at the top of the repo (not under output/).
 # output/ is for generator output only; anything you hand-edit goes here.
 const HAND_WRITTEN_PACKAGES = ["zellij", "zed", "starship", "zsh", "nushell"]
+
+# Wrap a string as a zsh single-quoted literal. Closes-and-reopens to embed `'`:
+# `it's me` → `'it'\''s me'`. Safe for any value, including shell metacharacters.
+def zsh_q [s: string]: nothing -> string {
+    let escaped = $s | str replace -a "'" "'\\''"
+    $"'($escaped)'"
+}
+
+# Wrap a string as a nushell raw string. r#'…'# has no escape rules; the only
+# closing sequence is '# — vanishingly rare in shell values. Safe for env values.
+def nu_q [s: string]: nothing -> string {
+    $"r#'($s)'#"
+}
 
 # zsh: aliases + env only. Functions become bash scripts on PATH (see generate_bin_scripts).
 def generate_zsh [config: record, output_dir: string] {
@@ -27,7 +41,10 @@ def generate_zsh [config: record, output_dir: string] {
     if "aliases" in $config {
         $content = $content + "# Aliases\n"
         for entry in ($config.aliases | transpose key value) {
-            $content = $content + $"alias ($entry.key)='($entry.value)'\n"
+            if ($entry.value | str contains "'") {
+                error make { msg: $"alias '($entry.key)' contains a single quote. Shell aliases are textual substitution — even properly escaped, the body re-parses at call time and fails. Move it to [functions.($entry.key)] in config.toml; the generated bash script handles embedded quotes correctly." }
+            }
+            $content = $content + $"alias ($entry.key)=(zsh_q $entry.value)\n"
         }
         $content = $content + "\n"
     }
@@ -40,7 +57,7 @@ def generate_zsh [config: record, output_dir: string] {
             } else {
                 $entry.value
             }
-            $content = $content + $"export ($entry.key)='($val)'\n"
+            $content = $content + $"export ($entry.key)=(zsh_q $val)\n"
         }
     }
 
@@ -59,6 +76,9 @@ def generate_nushell [config: record, output_dir: string] {
         $content = $content + "# Aliases\n"
         for entry in ($config.aliases | transpose key value) {
             let val = $entry.value
+            if ($val | str contains "'") {
+                error make { msg: $"alias '($entry.key)' contains a single quote, which can't be safely emitted as a bare nushell alias. Move it to [functions.($entry.key)] in config.toml — bash handles embedded quotes via the generated script on PATH." }
+            }
             let has_subshell = $val | str contains '$('
             let has_andand = $val | str contains '&&'
 
@@ -85,7 +105,7 @@ def generate_nushell [config: record, output_dir: string] {
             let val = if ($entry.value | describe) == "bool" {
                 $entry.value
             } else {
-                $"'($entry.value)'"
+                nu_q $entry.value
             }
             $content = $content + $"$env.($entry.key) = ($val)\n"
         }
@@ -109,9 +129,11 @@ def generate_bin_scripts [config: record, output_dir: string] {
         let func = $entry.value
         let script_path = $output_dir | path join $name
 
+        let dotconfig = $REPO_DIR | path expand
         mut content = "#!/usr/bin/env bash\n"
         $content = $content + "# Generated from config.toml — do not edit by hand.\n"
         $content = $content + "set -euo pipefail\n"
+        $content = $content + $"DOTCONFIG_DIR=\"${DOTCONFIG_DIR:-($dotconfig)}\"\n"
         if "description" in $func {
             $content = $content + $"# ($func.description)\n"
         }

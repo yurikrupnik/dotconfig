@@ -39,9 +39,9 @@ brew-install:
 cargo-install:
     cargo liner ship --no-fail-fast
 
-# Install global node packages from config/node/package.json
+# Install/refresh global node packages declared in config/node/package.json
 node-install:
-    cd config/node && bun install --global
+    cd config/node && bun add --global $(jq -r '.dependencies | to_entries[] | "\(.key)@\(.value)"' package.json)
 
 # Verify the install is healthy (commands, symlinks, freshness)
 doctor:

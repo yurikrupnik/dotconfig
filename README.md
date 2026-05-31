@@ -18,7 +18,7 @@ This:
 3. Generates shell configs and `bin/` scripts from `config/` into `output/`
 4. Symlinks `output/` and hand-written packages into `$HOME` via GNU stow
 5. Bootstraps `cargo-binstall` + `cargo-liner` and installs global cargo tools from `config/cargo/liner.toml`
-6. Installs global npm/bun packages from `config/node/global-packages.json`
+6. Installs global npm/bun packages from `config/node/package.json`
 
 After install, run `just doctor` to verify everything is wired correctly.
 
@@ -55,7 +55,7 @@ just stow-dry               # Preview stow operations
 | Hand-written scripts (any language) | [`config/scripts/`](config/scripts/README.md) | `~/.local/bin/<name>` |
 | Brew packages | `config/brew/Brewfile` | System |
 | Cargo tools | `config/cargo/liner.toml` | `~/.cargo/bin/` (via [cargo-liner](https://docs.rs/cargo-liner), symlinked from `$CARGO_HOME/liner.toml`) |
-| npm/bun globals | `config/node/global-packages.json` | Global node modules |
+| npm/bun globals | `config/node/package.json` | Global node modules |
 | zsh config (hand) | `zsh/` | `~/.zshenv`, `~/.config/zsh/.zshrc` |
 | zsh config (generated) | `output/zsh/` | `~/.config/zsh/generated.zsh` |
 | nushell config (hand) | `nushell/` | `~/.config/nushell/config.nu`, `env.nu` |
@@ -79,7 +79,7 @@ The pipeline:
    - each subdir of `output/` (generated packages: `bin`, `zsh`, `nu`)
    - each entry of `HAND_WRITTEN_PACKAGES` at the top of the repo (currently `zellij`, `zed`, `starship`, `zsh`, `nushell`)
    …into `$HOME`. Hand-written and generated packages happily share target directories (e.g. `~/.config/zsh/` ends up with `.zshrc` linked from `zsh/` and `generated.zsh` linked from `output/zsh/`).
-3. `config/brew/Brewfile`, `config/cargo/liner.toml`, and `config/node/global-packages.json` declare packages installed by `./install.sh` and refreshed by `u`/`up`.
+3. `config/brew/Brewfile`, `config/cargo/liner.toml`, and `config/node/package.json` declare packages installed by `./install.sh` and refreshed by `u`/`up`.
 
 **On a fresh clone**, `output/` does not exist. `./install.sh` runs `generate` before `stow`, so it bootstraps correctly. If you ever run `just stow` directly on a fresh clone, you'll see an error pointing at `just generate`.
 
@@ -106,7 +106,7 @@ brew bundle --file=config/brew/Brewfile
 # Cargo — add to config/cargo/liner.toml under [packages]
 cargo liner ship
 
-# npm/bun — add to config/node/global-packages.json
+# npm/bun — add to config/node/package.json
 cd config/node && bun install --global
 ```
 
@@ -131,7 +131,7 @@ dotconfig/
 ├── config/                             # Source of truth (hand-edited)
 │   ├── brew/Brewfile                   # Homebrew packages
 │   ├── cargo/liner.toml                # Global cargo tools
-│   ├── node/global-packages.json       # Global npm/bun packages
+│   ├── node/package.json               # Global npm/bun packages
 │   ├── shell/
 │   │   ├── config.toml                 # Aliases / env / sequence-of-command functions
 │   │   └── README.md                   # When to use [functions.X]
@@ -157,7 +157,7 @@ dotconfig/
 │   └── env.nu
 ├── starship/.config/starship/          # Hand-written starship prompt
 ├── zed/.config/zed/                    # Hand-written Zed config
-└── zellij/layouts/                     # Zellij terminal layouts
+└── zellij/.config/zellij/layouts/      # Zellij terminal layouts (empty; add .kdl files as needed)
 ```
 
 ## Command Runners
@@ -172,4 +172,3 @@ There is no Makefile — the bash scripts are the canonical entry points; `just`
 ## Supported Platforms
 
 - macOS (Apple Silicon and Intel)
-- Linux (via Homebrew on Linux)

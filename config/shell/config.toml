@@ -47,15 +47,15 @@ gal = "gcloud auth login"
 description = "Refresh installed packages on this machine"
 commands = [
     "brew update",
-    "just -f $HOME/dotconfig/justfile brew-install",
+    "just -f $DOTCONFIG_DIR/justfile brew-install",
     "brew upgrade",
     "brew cleanup",
     "rustup update",
-    "just -f $HOME/dotconfig/justfile cargo-install",
-#    "just -f $HOME/dotconfig/justfile node-install",
-#    "bun update --global --latest",
+    "just -f $DOTCONFIG_DIR/justfile cargo-install",
+    "just -f $DOTCONFIG_DIR/justfile node-install",
+    "bun update --global --latest",
     "gcloud components update --quiet",
-    "just -f $HOME/dotconfig/justfile regen"
+    "just -f $DOTCONFIG_DIR/justfile regen"
 ]
 
 [functions.csort]
@@ -76,9 +76,3 @@ AI = "claude"
 
 PROJECT = "rust"
 TYPE = "be" # fe, devops, data, cli, operator, ci - tekton
-CLOUD_GPROJECT = "playground-447016"
-CLOUD_GACOUNT = "krupnik.yuri@gmail.com"
-CLOUD_GREGION = "me-west1"
-CLOUD = "gcp"
-CONTAINER_REGISTRY = "docker.com/yurikrupnik"
-CONTAINER_REGISTRY_BACKUP = "me-west1-docker.pkg.dev/playground-447016/containers" # AWS or GCP

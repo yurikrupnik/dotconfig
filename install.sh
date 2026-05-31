@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Repo root. Derive from this script's location; allow env override.
+DOTCONFIG_DIR="${DOTCONFIG_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+
 usage() {
     cat <<EOF
 Usage: ./install.sh [-h|--help]
@@ -16,7 +19,7 @@ Steps:
   6. Install cargo-binstall (if missing)
   7. Install cargo-liner (if missing)
   8. Link cargo-liner config and run 'cargo liner ship'
-  9. bun/npm install --global from config/node/global-packages.json
+  9. bun/npm install --global from config/node/package.json
 
 After install: run 'just doctor' to verify, then 'u' (from your shell) for periodic refreshes.
 EOF
@@ -66,7 +69,7 @@ fi
 
 # Step 2: Install packages via Brewfile
 log_info "Installing packages from Brewfile..."
-brew bundle --file="$HOME/dotconfig/config/brew/Brewfile" || log_warn "Some brew packages failed to install"
+(cd "$DOTCONFIG_DIR" && just brew-install) || log_warn "Some brew packages failed to install"
 
 # Step 3: Ensure Rust toolchain is up to date
 if command -v rustup &> /dev/null; then
@@ -85,7 +88,7 @@ fi
 
 # Step 5: Generate shell configs + stow them
 log_info "Generating + stowing shell configurations..."
-(cd "$HOME/dotconfig" && just regen)
+(cd "$DOTCONFIG_DIR" && just regen)
 
 # Step 6: Install cargo-binstall (for faster binary installations)
 if ! command -v cargo-binstall &> /dev/null; then
@@ -101,7 +104,7 @@ fi
 
 # Step 8: Symlink cargo-liner config and install global cargo packages
 CARGO_HOME_DIR="${CARGO_HOME:-$HOME/.cargo}"
-LINER_SRC="$HOME/dotconfig/config/cargo/liner.toml"
+LINER_SRC="$DOTCONFIG_DIR/config/cargo/liner.toml"
 LINER_DEST="$CARGO_HOME_DIR/liner.toml"
 if [ -f "$LINER_SRC" ]; then
     if [ ! -L "$LINER_DEST" ] || [ "$(readlink "$LINER_DEST")" != "$LINER_SRC" ]; then
@@ -109,18 +112,18 @@ if [ -f "$LINER_SRC" ]; then
         ln -sfn "$LINER_SRC" "$LINER_DEST"
     fi
     log_info "Installing global Cargo packages via cargo-liner..."
-    (cd "$HOME/dotconfig" && just cargo-install) || log_warn "Some cargo packages failed to install"
+    (cd "$DOTCONFIG_DIR" && just cargo-install) || log_warn "Some cargo packages failed to install"
 fi
 
 # Step 9: Install global node packages via bun (installed by Brewfile in step 2)
 log_info "Installing global node packages..."
-(cd "$HOME/dotconfig" && just node-install) || log_warn "Failed to install some global node packages"
+(cd "$DOTCONFIG_DIR" && just node-install) || log_warn "Failed to install some global node packages"
 
 log_info "Installation complete!"
 echo ""
 log_info "Next steps:"
 echo "  1. Restart your shell or run: source ~/.zshenv"
-echo "  2. Your generated shell configurations live in: $HOME/dotconfig/output/"
+echo "  2. Your generated shell configurations live in: $DOTCONFIG_DIR/output/"
 echo "  3. Run 'just doctor' to verify everything is wired correctly"
 echo ""
 log_warn "Note: Some changes require a full shell restart to take effect"

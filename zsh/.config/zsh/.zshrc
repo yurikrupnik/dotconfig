@@ -37,16 +37,16 @@ export LANG=en_US.UTF-8
 export PATH="$HOME/go/bin:$PATH"
 export PATH="/usr/local/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.bun/bin:$PATH"
 export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
 
 # Added by Toolbox App
 export PATH="$PATH:/Users/yurikrupnik/Library/Application Support/JetBrains/Toolbox/scripts"
-export EDITOR=zed
 export KUBE_EDITOR=zed
 # export TERMINAL=WarpTerminal
 
-HISTSIDE=5000
-SAVEHIST=$HISTSIDE
+HISTSIZE=5000
+SAVEHIST=$HISTSIZE
 HISTDUP=erase
 setopt appendhistory
 setopt sharehistory

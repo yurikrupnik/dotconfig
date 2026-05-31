@@ -10,7 +10,6 @@ $git_commit\
 $gcloud\
 $aws\
 $azure\
-$nix_shell\
 $bun\
 $zig\
 $python\
@@ -19,7 +18,6 @@ $lua\
 $fill\
 $cmd_duration $time\
 $kubernetes $namespace\
-$nix_shell\
 $line_break\
 $character
 """

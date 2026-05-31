@@ -8,7 +8,6 @@ $env.XDG_CONFIG_HOME = $"($env.HOME)/.config"
 $env.LANG = "en_US.UTF-8"
 
 # Editor
-$env.EDITOR = "zed"
 $env.KUBE_EDITOR = "zed"
 
 # PATH setup
@@ -16,6 +15,7 @@ $env.PATH = ($env.PATH | split row (char esep) | prepend [
     $"($env.HOME)/go/bin"
     "/usr/local/bin"
     $"($env.HOME)/.local/bin"
+    $"($env.HOME)/.bun/bin"
     $"($env.HOME)/.krew/bin"
     $"($env.HOME)/Library/Application Support/JetBrains/Toolbox/scripts"
 ])
