@@ -2,14 +2,14 @@
 lg = 'lazygit'
 k = "kubectl"
 #alias kx=kubectx
+ls = 'eza --no-permissions --no-user --no-time'
 lsl = 'eza --no-permissions --no-user --no-time --long'
 u = 'up'
-#ls='eza --no-permissions --no-user --no-time'
-#alias cat='bat --paging never --style plain'
+cat = 'bat --paging never --style plain'
 #alias fzfp='fzf --preview="bat --style numbers --color=always {}"'
 #alias d=docker
 drmi='docker rmi $(docker images -aq) -f'
-dsp='docker volume prune -f && docker system prune -f'
+dsp='docker system prune -af && docker volume prune -af'
 pu="pulumi"
 b = "bun"
 c = "cargo"
@@ -19,6 +19,20 @@ gs = "git status"
 ga = "git add"
 g = "gcloud"
 gal = "gcloud auth login"
+
+# Starter pack — uncomment to try, drop the ones you dislike
+#find = 'fd'                          # fd — flag syntax differs from BSD find
+#grep = 'rg'                          # ripgrep — flag syntax differs from grep
+#top  = 'btm'                         # bottom — TUI process viewer
+#df   = 'duf'                         # duf — disk usage TUI
+#kx   = 'kubectx'                     # switch kubectl context
+#kn   = 'kubens'                      # switch kubectl namespace
+#kk   = 'k9s'                         # k9s cluster TUI
+#fm   = 'yazi'                        # terminal file manager
+#zj   = 'zellij'                      # terminal multiplexer
+#h    = 'http'                        # httpie
+#y    = 'yq'                          # YAML/JSON processor
+#loc  = 'tokei --sort code -e target -e node_modules -e dist -e build -e .next -e .nx'  # lines of code, ignoring build dirs
 
 
 #[functions.knd]
@@ -38,8 +52,8 @@ commands = [
     "brew cleanup",
     "rustup update",
     "just -f $HOME/dotconfig/justfile cargo-install",
-    "just -f $HOME/dotconfig/justfile node-install",
-    "bun update --global --latest",
+#    "just -f $HOME/dotconfig/justfile node-install",
+#    "bun update --global --latest",
     "gcloud components update --quiet",
     "just -f $HOME/dotconfig/justfile regen"
 ]
