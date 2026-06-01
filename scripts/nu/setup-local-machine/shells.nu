@@ -17,7 +17,7 @@ const REPO_NAME = $REPO_DIR | path basename
 
 # Hand-written stow packages that live at the top of the repo (not under output/).
 # output/ is for generator output only; anything you hand-edit goes here.
-const HAND_WRITTEN_PACKAGES = ["zellij", "zed", "starship", "zsh", "nushell"]
+const HAND_WRITTEN_PACKAGES = ["zellij", "zed", "starship", "zsh", "nushell", "pnpm", "bun"]
 
 # Wrap a string as a zsh single-quoted literal. Closes-and-reopens to embed `'`:
 # `it's me` → `'it'\''s me'`. Safe for any value, including shell metacharacters.

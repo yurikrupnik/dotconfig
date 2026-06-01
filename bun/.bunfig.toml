@@ -1,0 +1,14 @@
+# Supply-chain hardening for bun. Lives in ~/.bunfig.toml (global config).
+# Reference: https://www.youtube.com/watch?v=Wq6yMdt11LM
+
+[install]
+# Block installing versions less than 7 days old (value is in seconds).
+# Override per-install with: bun add <pkg> --minimum-release-age=0
+minimumReleaseAge = 604800
+
+# Skip preinstall/install/postinstall/prepare scripts for every package,
+# including ones in bun's curated trustedDependencies list. The vast majority
+# of supply-chain payloads execute via lifecycle scripts; this kills that path.
+# Opt back in per-package via "trustedDependencies" in package.json + flip
+# ignoreScripts off for that project's local bunfig.toml.
+ignoreScripts = true

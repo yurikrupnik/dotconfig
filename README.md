@@ -56,6 +56,8 @@ just stow-dry               # Preview stow operations
 | Brew packages | `config/brew/Brewfile` | System |
 | Cargo tools | `config/cargo/liner.toml` | `~/.cargo/bin/` (via [cargo-liner](https://docs.rs/cargo-liner), symlinked from `$CARGO_HOME/liner.toml`) |
 | npm/bun globals | `config/node/package.json` | Global node modules |
+| pnpm config (supply-chain hardening) | `pnpm/` | `~/.config/pnpm/config.yaml` |
+| bun config (supply-chain hardening) | `bun/` | `~/.bunfig.toml` |
 | zsh config (hand) | `zsh/` | `~/.zshenv`, `~/.config/zsh/.zshrc` |
 | zsh config (generated) | `output/zsh/` | `~/.config/zsh/generated.zsh` |
 | nushell config (hand) | `nushell/` | `~/.config/nushell/config.nu`, `env.nu` |
@@ -77,11 +79,21 @@ The pipeline:
 1. `shells.nu generate` reads `config/shell/config.toml` and `config/scripts/*` and writes everything to `output/`. It also prunes stale entries — if you delete a `[functions.X]` block or a script, the matching executable in `output/bin/` and the dangling symlink in `~/.local/bin/` are removed automatically.
 2. `shells.nu stow` uses GNU stow with `--no-folding` to symlink:
    - each subdir of `output/` (generated packages: `bin`, `zsh`, `nu`)
-   - each entry of `HAND_WRITTEN_PACKAGES` at the top of the repo (currently `zellij`, `zed`, `starship`, `zsh`, `nushell`)
+   - each entry of `HAND_WRITTEN_PACKAGES` at the top of the repo (currently `zellij`, `zed`, `starship`, `zsh`, `nushell`, `pnpm`, `bun`)
    …into `$HOME`. Hand-written and generated packages happily share target directories (e.g. `~/.config/zsh/` ends up with `.zshrc` linked from `zsh/` and `generated.zsh` linked from `output/zsh/`).
 3. `config/brew/Brewfile`, `config/cargo/liner.toml`, and `config/node/package.json` declare packages installed by `./install.sh` and refreshed by `u`/`up`.
 
 **On a fresh clone**, `output/` does not exist. `./install.sh` runs `generate` before `stow`, so it bootstraps correctly. If you ever run `just stow` directly on a fresh clone, you'll see an error pointing at `just generate`.
+
+## Supply-chain hardening
+
+Two layers, defense in depth:
+
+1. **Package-manager config** ([`pnpm/.config/pnpm/config.yaml`](pnpm/.config/pnpm/config.yaml), [`bun/.bunfig.toml`](bun/.bunfig.toml)) — 7-day minimum release age (skip versions <1 week old, catches >90% of supply-chain attacks since they're flagged within hours), no lifecycle scripts in bun (`ignoreScripts = true`), no git/tarball sources in pnpm transitive deps (`blockExoticSubdeps`), and `trustPolicy: no-downgrade` so a package losing its trusted-publisher signature fails install.
+2. **[Socket Firewall](https://github.com/SocketDev/sfw-free) (`sfw`) at install time** — `config/shell/config.toml` aliases `pnpm`, `bun`, `cargo`, and `uv` through `sfw <name>`, which proxies the package manager's HTTP traffic and blocks human-confirmed malware before it reaches disk. Bypass per-command with the bare binary path (e.g. `/opt/homebrew/bin/bun add foo`). Aliases only fire in interactive shells, so `install.sh` and `just <recipe>` workflows run un-proxied.
+3. **`upkg` batch update flow** ([`config/scripts/upkg.nu`](config/scripts/upkg.nu)) — when updating project deps, runs OSV-Scanner pre/post, gates new versions through `ncu --cooldown 7`, passes `--ignore-scripts` to every PM, and (with `--paranoid` or `--with-sfw`) wraps install calls through `sfw`. The `socket` CLI is installed globally and runs in `--paranoid` mode for a post-install risk audit.
+
+Inspired by [this video](https://www.youtube.com/watch?v=Wq6yMdt11LM).
 
 ## Adding new functionality
 
@@ -157,7 +169,9 @@ dotconfig/
 │   └── env.nu
 ├── starship/.config/starship/          # Hand-written starship prompt
 ├── zed/.config/zed/                    # Hand-written Zed config
-└── zellij/.config/zellij/layouts/      # Zellij terminal layouts (empty; add .kdl files as needed)
+├── zellij/.config/zellij/layouts/      # Zellij terminal layouts (empty; add .kdl files as needed)
+├── pnpm/.config/pnpm/config.yaml       # pnpm supply-chain hardening (min release age, no exotic subdeps, trust policy)
+└── bun/.bunfig.toml                    # bun supply-chain hardening (min release age, ignore lifecycle scripts)
 ```
 
 ## Command Runners

@@ -15,6 +15,13 @@
 #   --allow-scripts     allow npm/bun/pnpm lifecycle scripts during install
 #   --with-vet          add cargo-vet to cargo flow
 #   --with-socket       use Socket CLI if installed
+#   --with-sfw          wrap install-time commands with `sfw` (Socket Firewall)
+#                          when available — proxies cargo/bun/pnpm/uv fetches
+#                          and blocks confirmed-malicious packages. Auto-on in
+#                          --paranoid mode.
+#   --only <list>       comma-separated ecosystems to run: cargo,node,uv.
+#                          default: all detected. e.g. --only cargo,uv skips
+#                          the node step entirely.
 #
 # Detects Cargo.toml, package.json, pyproject.toml across the repo (walks Nx libs/apps).
 # Emits a machine-readable diagnosis block on failure for AI consumption.
@@ -34,6 +41,39 @@ def has-cmd [name: string]: nothing -> bool {
 def find-manifests [name: string]: nothing -> list<string> {
     glob $"**/($name)" --exclude $PRUNE_GLOBS
     | each { |p| $p | into string }
+}
+
+# Cargo.toml is a workspace root iff it has a [workspace] table. Members share
+# the root's Cargo.lock, and `cargo update`/`cargo upgrade` at the root are
+# workspace-aware — they walk every member's manifest. Iterating members is
+# pure overhead.
+def is-cargo-workspace-root [manifest: string]: nothing -> bool {
+    try { "workspace" in (open $manifest) } catch { false }
+}
+
+# package.json is a workspace root iff it has a "workspaces" key (npm/yarn/bun
+# workspaces), or a pnpm-workspace.yaml sits next to it (pnpm workspaces).
+def is-node-workspace-root [manifest: string]: nothing -> bool {
+    let dir = $manifest | path dirname
+    if (($dir | path join "pnpm-workspace.yaml") | path exists) { return true }
+    try { "workspaces" in (open $manifest) } catch { false }
+}
+
+# Drop manifests that are workspace members of another manifest in the list.
+# Keep workspace roots themselves, and standalone manifests (no ancestor root
+# found in the list). Nested workspaces — a root inside another workspace —
+# are kept since cargo/pnpm treat them as separate workspaces.
+def dedupe-workspace-members [files: list<string>, is_root_fn: closure]: nothing -> list<string> {
+    let roots = $files | where { |f| do $is_root_fn $f }
+    let root_dirs = $roots | each { |f| $f | path dirname }
+    $files | where { |f|
+        let f_dir = $f | path dirname
+        let f_is_root = ($f in $roots)
+        let f_is_member = $root_dirs | any { |r|
+            $r != $f_dir and ($f_dir | str starts-with ($r + "/"))
+        }
+        $f_is_root or (not $f_is_member)
+    }
 }
 
 def section [msg: string] {
@@ -57,6 +97,18 @@ def try-run [label: string, block: closure]: nothing -> bool {
         warn $"($label) failed: ($e.msg)"
         false
     }
+}
+
+# Run an install-time package-manager command, optionally proxied through
+# `sfw` when cfg.sfw is on and sfw is on PATH. `cmd` is a list whose first
+# element is the program, e.g. ["cargo" "update"].
+def run-pm [label: string, cmd: list<string>, cfg: record]: nothing -> bool {
+    let wrapped = if $cfg.sfw and (has-cmd "sfw") {
+        ["sfw"] ++ $cmd
+    } else {
+        $cmd
+    }
+    try-run $label { ^($wrapped.0) ...($wrapped | skip 1) }
 }
 
 # ---------- OSV-Scanner ----------
@@ -104,7 +156,7 @@ def update-cargo [files: list<string>, cfg: record]: nothing -> list<record> {
         let bump_ok = if $has_upgrade and $cfg.mode != "fast" {
             try-run "cargo upgrade" { ^cargo upgrade --incompatible }
         } else { true }
-        let update_ok = try-run "cargo update" { ^cargo update }
+        let update_ok = run-pm "cargo update" ["cargo" "update"] $cfg
         let vet_ok = if $cfg.vet and (has-cmd "cargo-vet") {
             try-run "cargo vet" { ^cargo vet }
         } else { true }
@@ -158,13 +210,11 @@ def update-node [files: list<string>, cfg: record]: nothing -> list<record> {
             "npm"  => (if $cfg.ignore_scripts { ["npm" "install" "--ignore-scripts"] } else { ["npm" "install"] }),
             _ => []
         }
-        let install_ok = try-run ($install_cmd | str join " ") {
-            ^($install_cmd.0) ...($install_cmd | skip 1)
-        }
+        let install_ok = run-pm ($install_cmd | str join " ") $install_cmd $cfg
 
         # Step 3: fast-mode fallback bump (if ncu wasn't used)
         let extra_ok = if $cfg.mode == "fast" and $pm == "bun" {
-            try-run "bun update --latest" { ^bun update --latest }
+            run-pm "bun update --latest" ["bun" "update" "--latest"] $cfg
         } else { true }
 
         {file: $f, ecosystem: $"node:($pm)", ok: ($bump_ok and $install_ok and $extra_ok)}
@@ -181,8 +231,8 @@ def update-uv [files: list<string>, cfg: record]: nothing -> list<record> {
         }
         cd $dir
         section $"uv — ($f)"
-        let lock_ok = try-run "uv lock --upgrade" { ^uv lock --upgrade }
-        let sync_ok = try-run "uv sync" { ^uv sync }
+        let lock_ok = run-pm "uv lock --upgrade" ["uv" "lock" "--upgrade"] $cfg
+        let sync_ok = run-pm "uv sync" ["uv" "sync"] $cfg
         let bump_ok = if (has-cmd "uv-bump") {
             try-run "uv-bump" { ^uv-bump }
         } else {
@@ -254,6 +304,8 @@ def --env main [
     --allow-scripts
     --with-vet
     --with-socket
+    --with-sfw
+    --only: string = ""  # comma-separated ecosystems: cargo,node,uv. Empty = all.
 ] {
     let mode = if $fast { "fast" } else if $paranoid { "paranoid" } else { "safe" }
     let cfg = {
@@ -264,12 +316,47 @@ def --env main [
         ignore_scripts: (not $allow_scripts)
         vet: ($with_vet or $paranoid)
         socket: ($with_socket or $paranoid)
+        sfw: ($with_sfw or $paranoid)
     }
-    log info $"upkg mode=($cfg.mode) cooldown=($cfg.cooldown)d scan=($cfg.scan) tests=($cfg.tests) ignore_scripts=($cfg.ignore_scripts) vet=($cfg.vet)"
+    if $cfg.sfw and not (has-cmd "sfw") {
+        warn "sfw not installed; install-time firewall disabled  (bun add -g sfw)"
+    }
 
-    let cargo_files = (find-manifests "Cargo.toml")
-    let node_files  = (find-manifests "package.json")
-    let py_files    = (find-manifests "pyproject.toml")
+    let valid_ecosystems = ["cargo" "node" "uv"]
+    let allowed = if ($only | str trim | is-empty) {
+        $valid_ecosystems
+    } else {
+        let parsed = $only | split row "," | each { |s| $s | str trim } | where { |s| not ($s | is-empty) }
+        let invalid = $parsed | where { |x| not ($x in $valid_ecosystems) }
+        if not ($invalid | is-empty) {
+            err-out $"--only: unknown ecosystem: ($invalid | str join ', '). Valid: cargo, node, uv"
+            exit 1
+        }
+        $parsed
+    }
+    log info $"upkg mode=($cfg.mode) cooldown=($cfg.cooldown)d scan=($cfg.scan) tests=($cfg.tests) ignore_scripts=($cfg.ignore_scripts) vet=($cfg.vet) sfw=($cfg.sfw) only=($allowed | str join ',')"
+
+    let cargo_files = if ("cargo" in $allowed) {
+        let all = (find-manifests "Cargo.toml")
+        let kept = (dedupe-workspace-members $all { |f| is-cargo-workspace-root $f })
+        let skipped = ($all | length) - ($kept | length)
+        if $skipped > 0 {
+            log info $"cargo: skipping ($skipped) workspace-member manifests, processing ($kept | length) roots"
+        }
+        $kept
+    } else { [] }
+
+    let node_files = if ("node" in $allowed) {
+        let all = (find-manifests "package.json")
+        let kept = (dedupe-workspace-members $all { |f| is-node-workspace-root $f })
+        let skipped = ($all | length) - ($kept | length)
+        if $skipped > 0 {
+            log info $"node: skipping ($skipped) workspace-member manifests, processing ($kept | length) roots"
+        }
+        $kept
+    } else { [] }
+
+    let py_files = if ("uv" in $allowed) { find-manifests "pyproject.toml" } else { [] }
 
     if ($cargo_files | is-empty) and ($node_files | is-empty) and ($py_files | is-empty) {
         warn $"no Cargo.toml, package.json, or pyproject.toml under (pwd)"

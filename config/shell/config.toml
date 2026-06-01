@@ -11,9 +11,18 @@ cat = 'bat --paging never --style plain'
 drmi='docker rmi $(docker images -aq) -f'
 dsp='docker system prune -af && docker volume prune -af'
 pu="pulumi"
-b = "bun"
-c = "cargo"
-cdo = "cargo doc"
+# Route package managers through socket-firewall — it spins up an HTTP proxy
+# that checks every fetched package against Socket's malware DB before it
+# lands on disk. Non-network subcommands (cargo build, bun run, etc.) pass
+# through unchanged. Bun isn't on sfw's official list but works (verified:
+# "Protected by Socket Firewall" appears in verbose mode).
+b = "sfw bun"
+bun = "sfw bun"
+pnpm = "sfw pnpm"
+c = "sfw cargo"
+cargo = "sfw cargo"
+uv = "sfw uv"
+cdo = "sfw cargo doc"
 #alias cdoco=cargo doc --open
 gs = "git status"
 ga = "git add"

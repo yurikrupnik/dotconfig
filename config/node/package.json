@@ -4,6 +4,8 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "@oh-my-pi/pi-coding-agent": "*"
+    "@oh-my-pi/pi-coding-agent": "*",
+    "sfw": "*",
+    "socket": "*"
   }
 }
