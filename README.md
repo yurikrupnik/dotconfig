@@ -56,6 +56,7 @@ just stow-dry               # Preview stow operations
 | Brew packages | `config/brew/Brewfile` | System |
 | Cargo tools | `config/cargo/liner.toml` | `~/.cargo/bin/` (via [cargo-liner](https://docs.rs/cargo-liner), symlinked from `$CARGO_HOME/liner.toml`) |
 | npm/bun globals | `config/node/package.json` | Global node modules |
+| uv (Python) tools | `config/uv/tools.txt` | `~/.local/bin/` (via `uv tool install`, isolated per-tool venvs) |
 | pnpm config (supply-chain hardening) | `pnpm/` | `~/.config/pnpm/config.yaml` |
 | bun config (supply-chain hardening) | `bun/` | `~/.bunfig.toml` |
 | zsh config (hand) | `zsh/` | `~/.zshenv`, `~/.config/zsh/.zshrc` |
@@ -81,7 +82,7 @@ The pipeline:
    - each subdir of `output/` (generated packages: `bin`, `zsh`, `nu`)
    - each entry of `HAND_WRITTEN_PACKAGES` at the top of the repo (currently `zellij`, `zed`, `starship`, `zsh`, `nushell`, `pnpm`, `bun`)
    …into `$HOME`. Hand-written and generated packages happily share target directories (e.g. `~/.config/zsh/` ends up with `.zshrc` linked from `zsh/` and `generated.zsh` linked from `output/zsh/`).
-3. `config/brew/Brewfile`, `config/cargo/liner.toml`, and `config/node/package.json` declare packages installed by `./install.sh` and refreshed by `u`/`up`.
+3. `config/brew/Brewfile`, `config/cargo/liner.toml`, `config/node/package.json`, and `config/uv/tools.txt` declare packages installed by `./install.sh` and refreshed by `u`/`up`.
 
 **On a fresh clone**, `output/` does not exist. `./install.sh` runs `generate` before `stow`, so it bootstraps correctly. If you ever run `just stow` directly on a fresh clone, you'll see an error pointing at `just generate`.
 
@@ -120,6 +121,10 @@ cargo liner ship
 
 # npm/bun — add to config/node/package.json
 cd config/node && bun install --global
+
+# uv (Python CLI tools) — add to config/uv/tools.txt (one tool per line)
+echo 's-tui' >> config/uv/tools.txt
+just uv-install
 ```
 
 ## Testing changes safely
@@ -144,6 +149,7 @@ dotconfig/
 │   ├── brew/Brewfile                   # Homebrew packages
 │   ├── cargo/liner.toml                # Global cargo tools
 │   ├── node/package.json               # Global npm/bun packages
+│   ├── uv/tools.txt                    # Global Python CLI tools (uv tool install)
 │   ├── shell/
 │   │   ├── config.toml                 # Aliases / env / sequence-of-command functions
 │   │   └── README.md                   # When to use [functions.X]
