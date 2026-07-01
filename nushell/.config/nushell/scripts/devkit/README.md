@@ -14,6 +14,7 @@ In any Nushell shell:
 
 ```nu
 use devkit *
+devkit                    # overview of the most-used commands
 devkit up                 # full local environment
 devkit cluster create     # just the Kind cluster
 devkit dev up -d          # docker compose
@@ -33,22 +34,24 @@ devkit cluster create -n dev -w 2
 
 | Group | Commands |
 |-------|----------|
-| lifecycle | `devkit up`, `devkit down`, `devkit status` |
-| `cluster` | `create`, `delete`, `list`, `status`, `setup`, `migrate`, `gitops`, `observability`, `local-dev`, `teardown` |
+| lifecycle | `devkit up` — single generator; extras opt-in: `--istio --core --gitops --observability --flux` (ingress always on). `devkit down [--keep-cluster]`, `devkit status` |
+| `cluster` | `create`, `delete`, `list`, `status`, `setup` (`--dbs`/`--istio`/`--flux`), `migrate`, `gitops`, `observability` |
 | `dev` | `up`, `down`, `logs`, `ps`, `restart`, `prune`, `kompose`, `reset` |
 | `secrets` | `fetch`, `vault`, `load`, `list`, `verify` |
 | `setup` | `install`, `build`, `check`, `test`, `vault-setup`, `k8s-setup`, `all` |
-| config | `devkit config`, `devkit config --path` |
+| config | `devkit config` (expanded view), `devkit config --data` (raw record for piping), `devkit config --path`, `devkit config init` |
 
 Cluster/ops commands need the relevant CLIs installed: `kind`, `kubectl`, `tilt`,
 `kcl`, `kompose`, `istioctl`, `vals`, `docker`.
 
 ## Per-repo config
 
-Copy `devkit.toml.example` to a monorepo root as `devkit.toml` and edit what
-differs (paths, namespaces, endpoints, flux repo, db creds…). devkit discovers it
-by walking up from `$PWD`; unset keys fall back to the built-in defaults in
-[`config.nu`](config.nu). Inspect the merged result with `devkit config`.
+Run `devkit config init` from a monorepo root to scaffold a `devkit.toml` from
+the bundled reference (`--force` overwrites; an optional directory arg sets where
+it lands, default the git repo root). Then edit what differs (paths, namespaces,
+endpoints, flux repo, db creds…); unset keys fall back to the built-in defaults in
+[`config.nu`](config.nu). devkit discovers the file by walking up from `$PWD`.
+Inspect the merged result with `devkit config`.
 
 ## Files
 

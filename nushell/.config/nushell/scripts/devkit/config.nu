@@ -5,10 +5,14 @@
 # Every monorepo-specific fact lives here as a default, overridable per-repo
 # via a `devkit.toml` discovered by walking up from $PWD to the filesystem root.
 # The engine modules NEVER hardcode paths, namespaces, or endpoints; they read
-# them through `devkit-config`. This is what makes the same engine reusable
+# them through `resolve-config`. This is what makes the same engine reusable
 # across different monorepos.
 
 use common.nu *
+
+# Absolute path to this module's directory (resolved at parse time). Used to
+# locate bundled assets (e.g. devkit.toml.example) regardless of the caller's cwd.
+const DEVKIT_DIR = path self .
 
 # Built-in defaults. A consumer repo overrides any subset of these in devkit.toml.
 # Lists are replaced wholesale by the user value; records are deep-merged.
@@ -19,7 +23,9 @@ export const DEFAULTS = {
         workers: 2             # default worker node count
         db_workers: 1          # tainted db-dedicated workers
         ingress: true          # expose ports 80/443
-        kcl_package: "oci://europe-west1-docker.pkg.dev/yk-artifact-registry/kcl/cluster:0.0.1"
+        # OCI url WITHOUT a tag; kcl resolves the version via --tag (kcl_tag below).
+        kcl_package: "oci://docker.io/yurikrupnik/cluster"
+        kcl_tag: "0.0.6"
     }
 
     # Kubernetes namespaces the lifecycle touches
@@ -108,7 +114,7 @@ export def find-config-file [name: string = "devkit.toml"]: nothing -> string {
 
 # Resolve effective config: DEFAULTS deep-merged with the discovered devkit.toml.
 # `--file` forces a specific config path (bypasses discovery).
-export def devkit-config [
+export def resolve-config [
     --file (-f): string   # explicit config file path
 ]: nothing -> record {
     let cfg_path = if ($file | is-not-empty) { $file } else { find-config-file }
@@ -122,10 +128,13 @@ export def devkit-config [
     $DEFAULTS | merge deep --strategy=overwrite $user
 }
 
-# Print the effective config (for debugging / `devkit config`).
+# Show the effective config (DEFAULTS deep-merged with the discovered devkit.toml).
+# Nested records/tables are expanded so every value is visible; use --data for a
+# raw record you can pipe (e.g. `devkit config --data | get cluster.name`).
 export def "devkit config" [
     --file (-f): string   # explicit config file path
     --path                # only print the resolved config file path
+    --data                # output the raw record for piping instead of a table
 ] {
     if $path {
         let p = if ($file | is-not-empty) { $file } else { find-config-file }
@@ -136,5 +145,42 @@ export def "devkit config" [
         }
         return
     }
-    devkit-config --file $file
+    let cfg = (resolve-config --file $file)
+    if $data { return $cfg }
+    $cfg | table --expand
+}
+
+# Scaffold a devkit.toml from the bundled reference into the target directory.
+export def "devkit config init" [
+    dir?: string        # Target directory (default: git repo root, else $PWD)
+    --force             # Overwrite an existing devkit.toml
+] {
+    let target_dir = if ($dir | is-not-empty) {
+        $dir | path expand
+    } else {
+        let root = (do { git rev-parse --show-toplevel } | complete)
+        if $root.exit_code == 0 { $root.stdout | str trim } else { $env.PWD }
+    }
+
+    if not ($target_dir | path exists) {
+        error $"Target directory does not exist: ($target_dir)"
+        exit 1
+    }
+
+    let dest = ($target_dir | path join "devkit.toml")
+    if ($dest | path exists) and (not $force) {
+        error $"($dest) already exists. Use --force to overwrite."
+        exit 1
+    }
+
+    let example = ($DEVKIT_DIR | path join "devkit.toml.example")
+    if not ($example | path exists) {
+        error $"Bundled reference not found: ($example)"
+        exit 1
+    }
+
+    open --raw $example | save --force $dest
+    success $"Wrote ($dest)"
+    info "Edit only the keys that differ from the built-in defaults."
+    info "Inspect the merged result with: devkit config"
 }

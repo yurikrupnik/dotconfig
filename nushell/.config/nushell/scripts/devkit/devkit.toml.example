@@ -15,7 +15,8 @@ name = "dev"                 # Kind cluster name
 workers = 2                  # worker node count
 db_workers = 1              # tainted db-dedicated workers
 ingress = true              # expose ports 80/443
-# kcl_package = "oci://.../cluster:0.0.1"   # override the KCL cluster package
+# kcl_package = "oci://.../kcl/cluster"   # OCI url WITHOUT a tag
+# kcl_tag = "0.0.6"                        # version passed to kcl via --tag
 
 [namespaces]
 dbs = "dbs"

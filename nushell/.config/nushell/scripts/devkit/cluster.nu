@@ -2,13 +2,13 @@
 
 # Kubernetes Cluster Management
 # Kind cluster creation, management, and post-setup.
-# All repo-specific paths/namespaces/defaults come from devkit-config.
+# All repo-specific paths/namespaces/defaults come from resolve-config.
 
 use common.nu *
 use config.nu *
 
 # Substitute {target} in an overlay path template.
-def overlay-path [template: string, target: string]: nothing -> string {
+export def overlay-path [template: string, target: string]: nothing -> string {
     $template | str replace --all "{target}" $target
 }
 
@@ -24,12 +24,13 @@ export def "devkit cluster create" [
     require-bin "kubectl"
     require-bin "kcl"
 
-    let cfg = (devkit-config)
+    let cfg = (resolve-config)
     let name = (if ($name | is-empty) { $cfg.cluster.name } else { $name })
     let workers = (if $workers < 0 { $cfg.cluster.workers } else { $workers })
     let db_workers = (if $db_workers < 0 { $cfg.cluster.db_workers } else { $db_workers })
     let ingress = ($ingress or $cfg.cluster.ingress)
     let kcl_package = $cfg.cluster.kcl_package
+    let kcl_tag = $cfg.cluster.kcl_tag
 
     if (cluster-exists $name) {
         info $"Kind cluster '($name)' already exists - skipping creation"
@@ -41,8 +42,7 @@ export def "devkit cluster create" [
     # Generate cluster config using KCL
     let tmp = (tmpfile $"kind-config-($name)")
 
-    let kcl_response = (kcl run $kcl_package -D workers=($workers) -D db_workers=($db_workers) -D ingress=($ingress) -D name=($name) | lines | skip while {|l| not ($l | str starts-with "items:")} | str join "\n" | from yaml)
-    let config = $kcl_response | get items.0
+    let config = (kcl run $kcl_package --tag $kcl_tag -D workers=($workers) -D db_workers=($db_workers) -D ingress=($ingress) -D name=($name) | lines | skip while {|l| not (($l | str starts-with "kind:") or ($l | str starts-with "apiVersion:"))} | str join "\n" | from yaml)
     $config | to yaml | save -f $tmp --force
 
     kind create cluster --name $name --config $tmp
@@ -72,7 +72,7 @@ export def "devkit cluster delete" [
 ] {
     require-bin "kind"
 
-    let cfg = (devkit-config)
+    let cfg = (resolve-config)
     let cluster_name = ($name | default $cfg.cluster.name)
 
     if not (cluster-exists $cluster_name) {
@@ -130,7 +130,7 @@ export def "devkit cluster setup" [
     require-bin "kubectl"
     require-cluster-connectivity
 
-    let cfg = (devkit-config)
+    let cfg = (resolve-config)
 
     if $dbs {
         info "Deploying database services..."
@@ -211,7 +211,7 @@ export def "devkit cluster migrate" [
     --password: string               # Database password (default: config database.password)
     --database (-d): string          # Database name (default: config database.name)
 ] {
-    let cfg = (devkit-config)
+    let cfg = (resolve-config)
     let port = (if $port < 0 { $cfg.database.port } else { $port })
     let user = (if ($user | is-empty) { $cfg.database.user } else { $user })
     let password = (if ($password | is-empty) { $cfg.database.password } else { $password })
@@ -238,7 +238,7 @@ export def "devkit cluster gitops" [
     require-bin "kubectl"
     require-cluster-connectivity
 
-    let cfg = (devkit-config)
+    let cfg = (resolve-config)
     let target = (if ($target | is-empty) { $cfg.paths.default_target } else { $target })
     let gitops_path = (overlay-path $cfg.paths.overlays.gitops $target)
 
@@ -265,7 +265,7 @@ export def "devkit cluster observability" [
     require-bin "kubectl"
     require-cluster-connectivity
 
-    let cfg = (devkit-config)
+    let cfg = (resolve-config)
     let target = (if ($target | is-empty) { $cfg.paths.default_target } else { $target })
     let obs_path = (overlay-path $cfg.paths.overlays.observability $target)
     let monitoring_ns = $cfg.namespaces.monitoring
@@ -293,72 +293,3 @@ export def "devkit cluster observability" [
     }
 }
 
-# Full local dev environment setup
-export def "devkit cluster local-dev" [
-    --name (-n): string              # Cluster name (default: config cluster.name)
-    --workers (-w): int = -1         # Worker nodes (default: config cluster.workers)
-    --skip-cluster                    # Skip cluster creation
-    --skip-dbs                        # Skip database deployment
-    --skip-observability              # Skip observability stack
-] {
-    let cfg = (devkit-config)
-    let name = (if ($name | is-empty) { $cfg.cluster.name } else { $name })
-    let workers = (if $workers < 0 { $cfg.cluster.workers } else { $workers })
-    let target = $cfg.paths.default_target
-
-    info "Setting up full local development environment..."
-
-    # Step 1: Create Kind cluster
-    if not $skip_cluster {
-        devkit cluster create --name $name --workers $workers --ingress
-    }
-
-    # Step 2: Deploy databases
-    if not $skip_dbs {
-        devkit cluster setup --dbs
-    }
-
-    # Step 3: Deploy core infrastructure via GitOps
-    info "Deploying core infrastructure..."
-    let core_path = (overlay-path $cfg.paths.overlays.core $target)
-    kubectl apply -k $core_path
-
-    # Step 4: Deploy observability
-    if not $skip_observability {
-        devkit cluster observability --target $target
-    }
-
-    # Step 5: Wait for services
-    info "Waiting for services to be ready..."
-    kubectl -n $cfg.namespaces.dbs wait --for=condition=Available deployment --all --timeout=300s 2>/dev/null | complete
-
-    success "Local development environment ready!"
-    print ""
-    print "Available endpoints:"
-    $cfg.endpoints | each {|e| print $"  - ($e.label): ($e.url)" }
-}
-
-# Teardown local dev environment
-export def "devkit cluster teardown" [
-    --name (-n): string              # Cluster name (default: config cluster.name)
-    --keep-cluster                    # Keep the cluster, only remove resources
-] {
-    require-bin "kubectl"
-
-    let cfg = (devkit-config)
-    let name = (if ($name | is-empty) { $cfg.cluster.name } else { $name })
-    let target = $cfg.paths.default_target
-
-    warn "Tearing down local development environment..."
-
-    if $keep_cluster {
-        info "Removing resources but keeping cluster..."
-        do { kubectl delete -k (overlay-path $cfg.paths.overlays.observability $target) } | complete
-        do { kubectl delete -k (overlay-path $cfg.paths.overlays.core $target) } | complete
-        do { kubectl delete ns $cfg.namespaces.dbs } | complete
-        success "Resources removed, cluster kept"
-    } else {
-        devkit cluster delete $name
-        success "Local development environment torn down"
-    }
-}
