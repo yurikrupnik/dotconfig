@@ -16,10 +16,9 @@ Steps:
   3. rustup update
   4. Verify nushell is on PATH
   5. just regen — generate shell configs + bin/ scripts and stow into \$HOME
-  6. Install cargo-binstall (if missing)
-  7. Install cargo-liner (if missing)
-  8. Link cargo-liner config and run 'cargo liner ship'
-  9. bun/npm install --global from config/node/package.json
+  6. just cargo-install — bootstrap cargo-binstall + cargo-liner, link config, 'cargo liner ship'
+  7. bun/npm install --global from config/node/package.json
+  8. uv tool install from config/uv/tools.txt
 
 After install: run 'just doctor' to verify, then 'u' (from your shell) for periodic refreshes.
 EOF
@@ -90,36 +89,16 @@ fi
 log_info "Generating + stowing shell configurations..."
 (cd "$DOTCONFIG_DIR" && just regen)
 
-# Step 6: Install cargo-binstall (for faster binary installations)
-if ! command -v cargo-binstall &> /dev/null; then
-    log_info "Installing cargo-binstall..."
-    cargo install cargo-binstall
-fi
+# Step 6: Install global cargo packages (recipe bootstraps cargo-binstall + cargo-liner,
+# links the liner config, then runs 'cargo liner ship').
+log_info "Installing global Cargo packages via cargo-liner..."
+(cd "$DOTCONFIG_DIR" && just cargo-install) || log_warn "Some cargo packages failed to install"
 
-# Step 7: Install cargo-liner (declarative manager for global cargo packages)
-if ! command -v cargo-liner &> /dev/null; then
-    log_info "Installing cargo-liner..."
-    cargo binstall cargo-liner --no-confirm
-fi
-
-# Step 8: Symlink cargo-liner config and install global cargo packages
-CARGO_HOME_DIR="${CARGO_HOME:-$HOME/.cargo}"
-LINER_SRC="$DOTCONFIG_DIR/config/cargo/liner.toml"
-LINER_DEST="$CARGO_HOME_DIR/liner.toml"
-if [ -f "$LINER_SRC" ]; then
-    if [ ! -L "$LINER_DEST" ] || [ "$(readlink "$LINER_DEST")" != "$LINER_SRC" ]; then
-        log_info "Linking cargo-liner config: $LINER_DEST -> $LINER_SRC"
-        ln -sfn "$LINER_SRC" "$LINER_DEST"
-    fi
-    log_info "Installing global Cargo packages via cargo-liner..."
-    (cd "$DOTCONFIG_DIR" && just cargo-install) || log_warn "Some cargo packages failed to install"
-fi
-
-# Step 9: Install global node packages via bun (installed by Brewfile in step 2)
+# Step 7: Install global node packages via bun (installed by Brewfile in step 2)
 log_info "Installing global node packages..."
 (cd "$DOTCONFIG_DIR" && just node-install) || log_warn "Failed to install some global node packages"
 
-# Step 10: Install global uv (Python) tools from config/uv/tools.txt
+# Step 8: Install global uv (Python) tools from config/uv/tools.txt
 if command -v uv &> /dev/null; then
     log_info "Installing global uv tools..."
     (cd "$DOTCONFIG_DIR" && just uv-install) || log_warn "Failed to install some uv tools"

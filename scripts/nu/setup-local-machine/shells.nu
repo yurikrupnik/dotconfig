@@ -89,9 +89,19 @@ def nu_env [key: string, val: any]: nothing -> string {
     }
 }
 
+# Reset a generator output dir to empty so runtime state (e.g. zsh's .zcompdump,
+# .zsh_history, .zsh_sessions/) can never leak into a stow package and later
+# collide on `stow`. output/ is generator-owned; only generated files belong here.
+def reset_dir [dir: string] {
+    if ($dir | path exists) {
+        rm -rf $dir
+    }
+    mkdir $dir
+}
+
 # zsh: aliases + env only. Functions become bash scripts on PATH (see generate_bin_scripts).
 def generate_zsh [config: record, output_dir: string] {
-    mkdir $output_dir
+    reset_dir $output_dir
     let output_file = $output_dir | path join "generated.zsh"
 
     mut content = "# Generated from config.toml — do not edit by hand.\n\n"
@@ -122,7 +132,7 @@ def generate_zsh [config: record, output_dir: string] {
 
 # nushell: aliases + env only. Alias values containing bash syntax ($(…), &&) become def blocks.
 def generate_nushell [config: record, output_dir: string] {
-    mkdir $output_dir
+    reset_dir $output_dir
     let output_file = $output_dir | path join "generated.nu"
 
     mut content = "# Generated from config.toml — do not edit by hand.\n\n"

@@ -117,7 +117,7 @@ echo 'brew "neovim"' >> config/brew/Brewfile
 brew bundle --file=config/brew/Brewfile
 
 # Cargo — add to config/cargo/liner.toml under [packages]
-cargo liner ship
+just cargo-install
 
 # npm/bun — add to config/node/package.json
 cd config/node && bun install --global

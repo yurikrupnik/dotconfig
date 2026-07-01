@@ -70,7 +70,7 @@ if [ -L "$LINER_DEST" ]; then
 elif [ -e "$LINER_DEST" ]; then
     bad "$LINER_DEST exists but is not a symlink"
 else
-    warn "$LINER_DEST not linked (run ./install.sh)"
+    warn "$LINER_DEST not linked (run 'just cargo-install')"
 fi
 
 # 4. Stowed symlinks

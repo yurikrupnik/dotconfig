@@ -39,8 +39,24 @@ brew-preflight:
 brew-install:
     ./scripts/brew-preflight.sh --apply
 
-# Install/update global cargo packages via cargo-liner
+# Install/update global cargo packages via cargo-liner (bootstraps binstall + liner)
 cargo-install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! command -v cargo-binstall &> /dev/null; then
+        echo "==> Installing cargo-binstall..."
+        cargo install cargo-binstall
+    fi
+    if ! command -v cargo-liner &> /dev/null; then
+        echo "==> Installing cargo-liner..."
+        cargo binstall cargo-liner --no-confirm
+    fi
+    liner_src="{{justfile_directory()}}/config/cargo/liner.toml"
+    liner_dest="${CARGO_HOME:-$HOME/.cargo}/liner.toml"
+    if [ ! -L "$liner_dest" ] || [ "$(readlink "$liner_dest")" != "$liner_src" ]; then
+        echo "==> Linking cargo-liner config: $liner_dest -> $liner_src"
+        ln -sfn "$liner_src" "$liner_dest"
+    fi
     cargo liner ship --no-fail-fast
 
 # Install/refresh global node packages declared in config/node/package.json
