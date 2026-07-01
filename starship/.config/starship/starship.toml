@@ -1,0 +1,140 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+format = """
+$username\
+${custom.gh_user}\
+$directory\
+$git_branch\
+$git_status\
+$git_commit\
+$gcloud\
+$aws\
+$azure\
+$bun\
+$zig\
+$python\
+$rust\
+$lua\
+$fill\
+$cmd_duration $time\
+$kubernetes $namespace\
+$line_break\
+$character
+"""
+
+add_newline = true
+
+[fill]
+symbol = " "
+
+[character]
+success_symbol = '[➜](bold green)'
+error_symbol = '[✗](bold red)'
+
+[cmd_duration]
+show_notifications = true
+
+[directory]
+truncation_length = 5
+truncation_symbol = '…/'
+truncate_to_repo = false
+
+# [directory.substitutions]
+# "~/tests/mussia42" = "nx-test-project"
+
+[git_branch]
+format = "[$symbol$branch(:$remote_branch)]($style) "
+
+[git_commit]
+commit_hash_length = 6
+disabled = false
+
+[git_status]
+conflicted = '🏳'
+ahead = '🏎💨'
+behind = '😰'
+diverged = '😵'
+up_to_date = ''
+untracked = '🤷'
+stashed = ''
+modified = '📝'
+staged = '[++\($count\)](green)'
+deleted = '🗑 '
+
+# Cloud and kubernetis
+[pulumi]
+disabled = false
+symbol = '🛥 '
+format = '[$symbol$username@$stack]($style) '
+
+[kubernetes]
+format = '[$symbol$context \($namespace\)](dimmed green) '
+disabled = false
+
+[nix_shell]
+disabled = false
+impure_msg = 'devbox'
+format = 'via [$symbol$state](bold purple) '
+
+# Start of Disabled
+[aws]
+disabled = true
+format = '(on [$symbol$profile]($style) )'
+
+[azure]
+disabled = false
+
+[gcloud]
+disabled = false
+format = '[$symbol($account@$domain)](bold yellow)[ | ($project)](bold cyan)[ (\($region\))](bold green) '
+style = 'bold yellow'
+
+[package]
+disabled = true
+
+[docker_context]
+disabled = false
+
+[rust]
+format = '[$symbol($version) ]($style)'
+disabled = false
+
+[nodejs]
+format = '[$symbol($version) ]($style)'
+disabled = false
+
+[bun]
+format = '[$symbol($version) ]($style)'
+disabled = false
+
+[golang]
+disabled = false
+
+[dotnet]
+disabled = true
+
+[php]
+disabled = true
+
+[lua]
+disabled = false
+
+[zig]
+disabled = false
+
+[python]
+disabled = false
+# End of Disabled
+
+[localip] # disabled true by default - here for future network tests
+ssh_only = false
+format = '@[$localipv4](bold red) '
+disabled = true
+
+[custom.gh_user]
+description = "Active GitHub user (managed via gh CLI)"
+command = "gh config get -h github.com user"
+when = "command -v gh >/dev/null 2>&1 && gh config get -h github.com user >/dev/null 2>&1"
+format = '[ $output]($style) '
+style = 'bold purple'
+ignore_timeout = true

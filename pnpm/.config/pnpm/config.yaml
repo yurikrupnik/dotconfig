@@ -1,0 +1,17 @@
+# Supply-chain hardening for pnpm 11+. Lives in ~/.config/pnpm/config.yaml.
+# Reference: https://www.youtube.com/watch?v=Wq6yMdt11LM
+
+# Block installing versions less than 7 days old (value is in minutes).
+# Most compromised packages get caught within hours; the cooldown dodges them.
+# pnpm defaults to 1440 (1 day); 10080 = 7 days.
+# Override per-install with: pnpm add <pkg> --minimum-release-age=0
+minimumReleaseAge: 10080
+
+# Only direct deps in the root package.json may use exotic sources (git URLs,
+# direct tarballs). Transitive deps that try this are rejected. Blocks the
+# trick used in the recent TanStack supply-chain attack.
+blockExoticSubdeps: true
+
+# Fail install if a package's trust level dropped vs. its previous release
+# (e.g. trusted-publisher -> unsigned). Catches publishing-pipeline takeovers.
+trustPolicy: no-downgrade

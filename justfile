@@ -1,57 +1,60 @@
 # https://just.systems
+# Dotfiles task runner. For details on what each script does, see README.md.
+
+set shell := ["bash", "-cu"]
+
+shells := "nu scripts/nu/setup-local-machine/shells.nu"
 
 default:
-    just --list
-#    cargo run --bin dotconfig -- -h --debug
-# Up shits
-up:
-    nu ~/dotconfig/scripts/nu/index.nu compose up --file ~/projects/playground/manifests/dockers/compose.yaml
-down:
-    nu ~/dotconfig/scripts/nu/index.nu compose down --file ~/projects/playground/manifests/dockers/compose.yaml
-    docker compose -f docker-compose.dev.yml -f ~/projects/playground/manifests/dockers/compose.yaml up
-rcli:
-    cargo run --bin dotconfig -- -h
-    cargo run --bin dotconfig compose -h
-#com:up
-#    cargo run --bin dotconfig compose up -h
-#com:down
-#    cargo run --bin dotconfig compose down -h
-#com:convert
-#    cargo run --bin dotconfig compose convert -h
-create-env: up rcli
-    #just up
-destroy-env: down rcli
-    #just up
+    @just --list
 
-# Test commands
-test-rust:
-    cargo test --all
-    cargo release
-    cargo audit
-test-nu:
-    nu scripts/nu/tests/resolve_compose_files_test.nu
-test: test-rust test-nu
-    echo "All tests passed!"
+# Fresh-machine bootstrap (brew, rust, cargo-liner, shells, stow)
+install:
+    ./install.sh
 
-# Toolchain management
-toolchain-install:
-    ./.cargo/bin/toolchain-install.sh
+# Generate shell configs and bin/ scripts from config/
+generate:
+    {{shells}} generate
 
-toolchain-update:
-    ./.cargo/bin/toolchain-update.sh
+# Symlink generated configs into $HOME (via GNU stow)
+stow:
+    {{shells}} stow
 
-toolchain-targets:
-    ./.cargo/bin/toolchain-ensure-targets.sh
+# Remove symlinked configs from $HOME
+unstow:
+    {{shells}} unstow
 
-toolchain-info:
-    ./.cargo/bin/toolchain-info.sh
+# Generate + stow in one step
+regen: generate stow
 
-# One-time setup on a new machine
-setup-rust:
-    ./.cargo/bin/rustup-bootstrap.sh
-    just toolchain-install
-    just toolchain-info
+# Show what stow would do without making changes
+stow-dry:
+    {{shells}} stow --dry-run
 
-# CI-ready setup
-ci-rust-setup:
-    just setup-rust
+# Preview Brewfile install: counts + which taps need trust (read-only)
+brew-preflight:
+    ./scripts/brew-preflight.sh --check
+
+# Update brew packages from Brewfile (preflight → trust new taps → bundle)
+brew-install:
+    ./scripts/brew-preflight.sh --apply
+
+# Install/update global cargo packages via cargo-liner
+cargo-install:
+    cargo liner ship --no-fail-fast
+
+# Install/refresh global node packages declared in config/node/package.json
+node-install:
+    cd config/node && bun add --global $(jq -r '.dependencies | to_entries[] | "\(.key)@\(.value)"' package.json)
+
+# Install/refresh global Python CLI tools declared in config/uv/tools.txt
+uv-install:
+    awk '!/^[[:space:]]*(#|$)/ {print $1}' config/uv/tools.txt | while IFS= read -r pkg; do uv tool install "$pkg" || echo "  ! uv tool install $pkg failed"; done
+
+# Verify the install is healthy (commands, symlinks, freshness)
+doctor:
+    ./scripts/doctor.sh
+
+# Preview what `u` would refresh (read-only)
+outdated:
+    ./scripts/outdated.sh

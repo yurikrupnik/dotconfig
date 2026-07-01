@@ -1,0 +1,38 @@
+{
+  "cli_default_open_behavior": "new_window",
+  "disable_ai": true,
+  "base_keymap": "JetBrains",
+  "ui_font_family": ".SystemUIFont",
+  "ui_font_size": 18,
+  "buffer_font_size": 24,
+  "tab_size": 4,
+  "hard_tabs": true,
+  "cursor_blink": false,
+  "format_on_save": "on",
+  "tabs": { "file_icons": true },
+  "icon_theme": "Zed (Default)",
+  "theme": {
+    "mode": "dark",
+    "light": "One Light",
+    "dark": "VSCode Dark Polished"
+  },
+  "title_bar": {
+    "show_branch_icon": true
+  },
+  "outline_panel": {
+    "dock": "left"
+  },
+  "collaboration_panel": {
+    "dock": "left"
+  },
+  "git_panel": {
+    "dock": "left"
+  },
+  "project_panel": {
+    "dock": "left",
+    "entry_spacing": "standard"
+  },
+  "terminal": {
+    "font_size": 16.0
+  }
+}

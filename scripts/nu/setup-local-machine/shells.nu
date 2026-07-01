@@ -1,284 +1,414 @@
 #!/usr/bin/env nu
 
-def "main apply atlas" [] {
+use std log
 
-    print $"\nInstalling (ansi yellow_bold)Atlas Operator(ansi reset)...\n"
-
-    (
-        helm upgrade --install atlas-operator
-            oci://ghcr.io/ariga/charts/atlas-operator
-            --namespace atlas-operator --create-namespace
-            --wait
-    )
-
-}
-
-# Retrieves a container registry address
-def "main get all_users" [] {
-    if not ("./config.toml" | path exists) {
-        print $"(ansi red)Error: config.toml file not found in current directory(ansi reset)"
-        return null
+def load_config [config_path: string]: nothing -> record {
+    if not ($config_path | path exists) {
+        error make { msg: $"Config file not found: ($config_path)" }
     }
-
-    let config = open ./config.toml
-    let env_vars = $config.environment
-    mut account_info = {}
-
-    print $"(ansi yellow_bold)Retrieving cloud account information...(ansi reset)\n"
-
-    let cloud_provider = $env_vars.CLOUD?
-
-    # if $cloud_provider == "aws" or $cloud_provider == null {
-    #     print $"(ansi blue)Checking AWS account...(ansi reset)"
-    #     if (which aws | is-empty) {
-    #         print $"  ❌ AWS CLI not installed"
-    #         $account_info = ($account_info | upsert aws null)
-    #     } else {
-    #         try {
-    #             let aws_identity = (aws sts get-caller-identity --output json | from json)
-    #             $account_info = ($account_info | upsert aws {
-    #                 account_id: $aws_identity.Account,
-    #                 user_arn: $aws_identity.Arn,
-    #                 user_id: $aws_identity.UserId,
-    #                 region: ($env_vars.CLOUD_AREGION? | default "us-east-1")
-    #             })
-    #             print $"  ✅ AWS Account: ($aws_identity.Account)"
-    #             print $"  ✅ AWS Region: ($account_info.aws.region)"
-    #         } catch {
-    #             print $"  ❌ AWS CLI not configured or not available"
-    #             $account_info = ($account_info | upsert aws null)
-    #         }
-    #     }
-    # }
-
-    # if $cloud_provider == "gcp" or $cloud_provider == null {
-    #     print $"(ansi blue)Checking GCP account...(ansi reset)"
-    #     if (which gcloud | is-empty) {
-    #         print $"  ❌ GCP CLI not installed"
-    #         $account_info = ($account_info | upsert gcp null)
-    #     } else {
-    #         try {
-    #             let config_project = $env_vars.CLOUD_GPROJECT?
-    #             let config_account = $env_vars.CLOUD_GACOUNT?
-    #             let config_region = $env_vars.CLOUD_GREGION?
-
-    #             if $config_project != null {
-    #                 gcloud config set project $config_project
-    #             }
-    #             if $config_account != null {
-    #                 gcloud config set account $config_account
-    #             }
-    #             if $config_region != null {
-    #                 gcloud config set compute/region $config_region
-    #             }
-
-    #             let gcp_config = (gcloud config list --format=json | from json)
-    #             let gcp_account = $gcp_config.core.account?
-    #             let gcp_project = $gcp_config.core.project?
-    #             let gcp_region = $gcp_config.compute.region?
-
-    #             if $gcp_account != null {
-    #                 $account_info = ($account_info | upsert gcp {
-    #                     account: $gcp_account,
-    #                     project: $gcp_project,
-    #                     region: $gcp_region
-    #                 })
-    #                 print $"  ✅ GCP Account: ($gcp_account)"
-    #                 print $"  ✅ GCP Project: ($gcp_project)"
-    #                 print $"  ✅ GCP Region: ($gcp_region)"
-    #             } else {
-    #                 print $"  ❌ GCP not configured"
-    #                 $account_info = ($account_info | upsert gcp null)
-    #             }
-    #         } catch {
-    #             print $"  ❌ GCP CLI not available"
-    #             $account_info = ($account_info | upsert gcp null)
-    #         }
-    #     }
-    # }
-
-    # if $cloud_provider == "azure" or $cloud_provider == null {
-    #     print $"(ansi blue)Checking Azure account...(ansi reset)"
-    #     if (which az | is-empty) {
-    #         print $"  ❌ Azure CLI not installed"
-    #         $account_info = ($account_info | upsert azure null)
-    #     } else {
-    #         try {
-    #             let azure_account = (az account show --output json | from json)
-    #             $account_info = ($account_info | upsert azure {
-    #                 subscription_id: $azure_account.id,
-    #                 subscription_name: $azure_account.name,
-    #                 tenant_id: $azure_account.tenantId,
-    #                 user_name: $azure_account.user.name,
-    #                 user_type: $azure_account.user.type,
-    #                 region: ($env_vars.CLOUD_AREGION? | default "eastus")
-    #             })
-    #             print $"  ✅ Azure Subscription: ($azure_account.name) \(($azure_account.id)\)"
-    #             print $"  ✅ Azure User: ($azure_account.user.name)"
-    #             print $"  ✅ Azure Region: ($account_info.azure.region)"
-    #         } catch {
-    #             print $"  ❌ Azure CLI not configured or not available"
-    #             $account_info = ($account_info | upsert azure null)
-    #         }
-    #     }
-    # }
-
-    # print $"\n(ansi green_bold)Account Information Summary:(ansi reset)"
-    # print $"Primary Cloud Provider: ($cloud_provider)"
-    # $account_info | table
-
-    # $account_info
+    open $config_path
 }
 
-# Retrieves a container registry address
-def "main get container_registry" [] {
+def main [] {}
 
-    mut registry = ""
-    if "CONTAINER_REGISTRY" in $env {
-        $registry = $env.CONTAINER_REGISTRY
+# Repo root, derived from this file's location: <repo>/scripts/nu/setup-local-machine/shells.nu
+const REPO_DIR = path self | path dirname | path dirname | path dirname | path dirname
+const REPO_NAME = $REPO_DIR | path basename
+
+# Hand-written stow packages that live at the top of the repo (not under output/).
+# output/ is for generator output only; anything you hand-edit goes here.
+const HAND_WRITTEN_PACKAGES = ["zellij", "zed", "starship", "zsh", "nushell", "pnpm", "bun"]
+
+# Wrap a string as a zsh single-quoted literal. Closes-and-reopens to embed `'`:
+# `it's me` → `'it'\''s me'`. Safe for any value, including shell metacharacters.
+def zsh_q [s: string]: nothing -> string {
+    let escaped = $s | str replace -a "'" "'\\''"
+    $"'($escaped)'"
+}
+
+# Wrap a string as a nushell raw string. r#'…'# has no escape rules; the only
+# closing sequence is '# — vanishingly rare in shell values. Safe for env values.
+def nu_q [s: string]: nothing -> string {
+    $"r#'($s)'#"
+}
+
+# Whitelist of shell variables env values may reference. Anything outside this
+# list is rejected at generation time so `$TYPO_NAME` can't sneak through.
+const ENV_ALLOWED_REFS = ['HOME', 'DOTCONFIG_DIR']
+
+def validate_env_refs [s: string, label: string]: nothing -> nothing {
+    let refs = $s | parse -r '\$([A-Za-z_][A-Za-z0-9_]*)' | get capture0
+    let bad = $refs | where { |v| $v not-in $ENV_ALLOWED_REFS }
+    if ($bad | length) > 0 {
+        error make { msg: $"($label): value '($s)' references unsupported variable $($bad | first); only $HOME and $DOTCONFIG_DIR are allowed in env values." }
+    }
+}
+
+# Emit a zsh env value. Single-quoted (verbatim) by default; double-quoted when
+# the value references $HOME/$DOTCONFIG_DIR so the shell expands them at source.
+def zsh_env [key: string, val: any]: nothing -> string {
+    let s = if ($val | describe) == "bool" {
+        if $val { "true" } else { "false" }
     } else {
-        let value = input $"(ansi green_bold)Enter container image registry \(e.g., `ghcr.io/vfarcic`\):(ansi reset) "
-        $registry = $value
+        $val
     }
-    $"CONTAINER_REGISTRY=($registry)\n" | save --append .env
-
-    $registry
-
+    if ($s | str contains '$') {
+        validate_env_refs $s $"environment.($key)"
+        for ch in ['"' '`' '\\'] {
+            if ($s | str contains $ch) {
+                error make { msg: $"environment.($key): value '($s)' contains '($ch)', which conflicts with double-quoted shell expansion." }
+            }
+        }
+        $"\"($s)\""
+    } else {
+        zsh_q $s
+    }
 }
 
-# Generate shell configurations from unified config
-# --path: str = "~/configs-files/shells/config.toml"
-# def main [
-#     repo?: string = "../../../config.toml"
-#     --path: string = "../../../config.toml"
-# ] {
-#     print $path
-#     print $repo
-#     # print $env
-#     let config = open ($nu.env-paths.config-path | path join 'config.toml')
-#     #let config = open ~/configs-files/shells/config.toml
-#     #print $config
-#     generate-zsh $config
-#     #generate-fish $config
-#     #generate-nu $config
-
-#     print "✅ Generated configurations for all shells"
-# }
-
-def generate-zsh [config] {
-    let zsh_dir = "~/dotconfig/zsh/.config/zsh"
-    mkdir $zsh_dir
-    mut content = "# Generated from shells/config.toml\n\n"
-    # Aliases
-    for alias in ($config.aliases | transpose key value) {
-        $content = $content + $"alias ($alias.key)='($alias.value)'\n"
-    }
-
-    $content = $content + "\n"
-    # Functions
-    for func in ($config.functions | transpose key value) {
-        $content = $content + $"($func.key)" + "() {\n"
-        if "type" in $func.value and $func.value.type == "complex" {
-            # Complex functions call Nu scripts with arguments
-            $content = $content + $"    nu ($func.value.script) \"$@\"\n"
-        } else if "commands" in $func.value {
-            for cmd in $func.value.commands {
-                let processed_cmd = ($cmd | str replace "{arg}" '$1')
-                $content = $content + $"    ($processed_cmd)\n"
-            }
-        } else {
-            let cmd = if "args" in $func.value {
-                mut processed_cmd = $func.value.command
-                for i in 0..($func.value.args | length) {
-                    $processed_cmd = ($processed_cmd | str replace "{arg}" $"$($i + 1)")
+# Emit a nu env value. Raw string by default; interpolated $"…" with $env.X
+# substitution when the value references $HOME/$DOTCONFIG_DIR.
+def nu_env [key: string, val: any]: nothing -> string {
+    if ($val | describe) == "bool" {
+        if $val { "true" } else { "false" }
+    } else {
+        let s = $val
+        if ($s | str contains '$') {
+            validate_env_refs $s $"environment.($key)"
+            for ch in ['"' '`' '\\' '(' ')'] {
+                if ($s | str contains $ch) {
+                    error make { msg: $"environment.($key): value '($s)' contains '($ch)', which conflicts with nu interpolation." }
                 }
-                $processed_cmd
+            }
+            let converted = $s
+                | str replace -a '$HOME' '($env.HOME)'
+                | str replace -a '$DOTCONFIG_DIR' '($env.DOTCONFIG_DIR)'
+            $"$\"($converted)\""
+        } else {
+            nu_q $s
+        }
+    }
+}
+
+# zsh: aliases + env only. Functions become bash scripts on PATH (see generate_bin_scripts).
+def generate_zsh [config: record, output_dir: string] {
+    mkdir $output_dir
+    let output_file = $output_dir | path join "generated.zsh"
+
+    mut content = "# Generated from config.toml — do not edit by hand.\n\n"
+
+    if "aliases" in $config {
+        $content = $content + "# Aliases\n"
+        for entry in ($config.aliases | transpose key value) {
+            if ($entry.value | str contains "'") {
+                error make { msg: $"alias '($entry.key)' contains a single quote. Shell aliases are textual substitution — even properly escaped, the body re-parses at call time and fails. Move it to [functions.($entry.key)] in config.toml; the generated bash script handles embedded quotes correctly." }
+            }
+            $content = $content + $"alias ($entry.key)=(zsh_q $entry.value)\n"
+        }
+        $content = $content + "\n"
+    }
+
+    if "environment" in $config {
+        $content = $content + "# Environment Variables\n"
+        $content = $content + (": \"${DOTCONFIG_DIR:=$HOME/" + $REPO_NAME + "}\"\n")
+        $content = $content + "export DOTCONFIG_DIR\n"
+        for entry in ($config.environment | transpose key value) {
+            $content = $content + $"export ($entry.key)=(zsh_env $entry.key $entry.value)\n"
+        }
+    }
+
+    $content | save -f $output_file
+    log info $"Generated zsh config: ($output_file)"
+}
+
+# nushell: aliases + env only. Alias values containing bash syntax ($(…), &&) become def blocks.
+def generate_nushell [config: record, output_dir: string] {
+    mkdir $output_dir
+    let output_file = $output_dir | path join "generated.nu"
+
+    mut content = "# Generated from config.toml — do not edit by hand.\n\n"
+
+    if "aliases" in $config {
+        $content = $content + "# Aliases\n"
+        for entry in ($config.aliases | transpose key value) {
+            let val = $entry.value
+            if ($val | str contains "'") {
+                error make { msg: $"alias '($entry.key)' contains a single quote, which can't be safely emitted as a bare nushell alias. Move it to [functions.($entry.key)] in config.toml — bash handles embedded quotes via the generated script on PATH." }
+            }
+            let has_subshell = $val | str contains '$('
+            let has_andand = $val | str contains '&&'
+
+            if $has_subshell or $has_andand {
+                $content = $content + $"export def ($entry.key) [] {\n"
+                let converted = $val
+                    | str replace -a '&&' ';'
+                    | str replace -r '\$\(([^)]+)\)' '(^$1 | str trim)'
+                let commands = $converted | split row ';' | each {|cmd| $cmd | str trim}
+                for cmd in $commands {
+                    $content = $content + $"    ^($cmd)\n"
+                }
+                $content = $content + "}\n"
             } else {
-                ($func.value.command | str replace "{arg}" '$1')
+                $content = $content + $"export alias ($entry.key) = ($val)\n"
             }
-            $content = $content + $"    ($cmd)\n"
         }
-        $content = $content + "}\n\n"
-        print $content
+        $content = $content + "\n"
     }
 
-    $content | save --force $"($zsh_dir)/generated.zsh"
+    if "environment" in $config {
+        $content = $content + "# Environment Variables\n"
+        $content = $content + ('$env.DOTCONFIG_DIR = ($env.DOTCONFIG_DIR? | default $"($env.HOME)/' + $REPO_NAME + '")' + "\n")
+        for entry in ($config.environment | transpose key value) {
+            $content = $content + $"$env.($entry.key) = (nu_env $entry.key $entry.value)\n"
+        }
+    }
+
+    $content | save -f $output_file
+    log info $"Generated nushell config: ($output_file)"
 }
 
-def generate-fish [config] {
-    let fish_dir = ($env.HOME | path join "configs-files/fish/.config/fish")
-    let functions_dir = ($fish_dir | path join "functions")
-    mkdir $fish_dir
-    mkdir $functions_dir
-
-    # Create aliases file
-    mut aliases_content = "# Generated from shells/config.toml\n\n"
-    for alias in ($config.aliases | transpose key value) {
-        $aliases_content = $aliases_content + $"alias ($alias.key) '($alias.value)'\n"
+# Emit one bash script per [functions.*] under output/bin/.local/bin/<name>.
+# These end up on PATH via stow and are callable from every shell.
+def generate_bin_scripts [config: record, output_dir: string] {
+    if not ("functions" in $config) {
+        return
     }
-    $aliases_content | save --force ($fish_dir | path join "generated_aliases.fish")
 
-    # Create individual function files
-    for func in ($config.functions | transpose key value) {
-        mut func_content = $"# Generated from shells/config.toml\n"
-        if "description" in $func.value {
-            $func_content = $func_content + $"# ($func.value.description)\n"
+    mkdir $output_dir
+
+    for entry in ($config.functions | transpose key value) {
+        let name = $entry.key
+        let func = $entry.value
+        let script_path = $output_dir | path join $name
+
+        mut content = "#!/usr/bin/env bash\n"
+        $content = $content + "# Generated from config.toml — do not edit by hand.\n"
+        $content = $content + "set -euo pipefail\n"
+        $content = $content + $"DOTCONFIG_DIR=\"${DOTCONFIG_DIR:-$HOME/($REPO_NAME)}\"\n"
+        if "description" in $func {
+            $content = $content + $"# ($func.description)\n"
         }
-        $func_content = $func_content + $"\nfunction ($func.key)\n"
+        $content = $content + "\n"
 
-        if "type" in $func.value and $func.value.type == "complex" {
-            # Complex functions call Nu scripts with arguments
-            $func_content = $func_content + $"    nu ($func.value.script) $argv\n"
-        } else if "commands" in $func.value {
-            for cmd in $func.value.commands {
-                let processed_cmd = ($cmd | str replace "{arg}" '$argv[1]')
-                $func_content = $func_content + $"    ($processed_cmd)\n"
+        if "commands" in $func {
+            for cmd in $func.commands {
+                $content = $content + $"($cmd)\n"
             }
-        } else {
-            let cmd = ($func.value.command | str replace "{arg}" '$argv[1]')
-            $func_content = $func_content + $"    ($cmd)\n"
+        } else if "command" in $func {
+            $content = $content + $"($func.command)\n"
         }
-        $func_content = $func_content + "end\n"
 
-        $func_content | save --force ($functions_dir | path join $"($func.key).fish")
+        $content | save -f $script_path
+        ^chmod +x $script_path
+        log info $"Generated bin script: ($script_path)"
     }
 }
 
-def generate-nu [config] {
-    let nu_dir = "~/configs-files/nu/.config/nu"
-    mkdir $nu_dir
-
-    mut content = "# Generated from shells/config.toml\n\n"
-
-    # Aliases
-    for alias in ($config.aliases | transpose key value) {
-        $content = $content + $"export alias ($alias.key) = ($alias.value)\n"
+# Copy each file from config/scripts/ to output/bin/.local/bin/<name-without-extension>.
+# These are hand-written scripts in any language (nu, bash, python, …). The shebang in
+# each file determines the interpreter; the extension is for editor support and gets stripped.
+def generate_user_scripts [scripts_dir: string, output_dir: string] {
+    if not ($scripts_dir | path exists) {
+        return
     }
 
-    $content = $content + "\n"
+    mkdir $output_dir
 
-    # Functions
-    for func in ($config.functions | transpose key value) {
-        if "type" in $func.value and $func.value.type == "complex" {
-            # Complex functions - keep original implementation or source from script
-            $content = $content + $"# Complex function ($func.key) - use original implementation\n"
-            $content = $content + $"# Or source from: ($func.value.script)\n\n"
-        } else if "commands" in $func.value {
-            let args = if "args" in $func.value { $func.value.args.0 } else { "arg" }
-            $content = $content + $"export def ($func.key) [($args): string] {\n"
-            for cmd in $func.value.commands {
-                let processed_cmd = ($cmd | str replace "{arg}" $"$($args)")
-                $content = $content + $"    ^($processed_cmd)\n"
+    for file in (ls $scripts_dir | where type == file) {
+        let src = $file.name
+        let basename = $src | path basename
+        # Skip dotfiles and READMEs
+        if ($basename | str starts-with ".") or ($basename | str downcase) == "readme.md" {
+            continue
+        }
+        let stem = $basename | path parse | get stem
+        let dest = $output_dir | path join $stem
+
+        cp $src $dest
+        ^chmod +x $dest
+        log info $"Installed user script: ($src) → ($dest)"
+    }
+}
+
+# Remove dangling symlinks in target_dir that point into stale_dir (a now-empty source).
+# Called after pruning output/bin so ~/.local/bin/ doesn't accumulate broken symlinks.
+def remove_dangling_links [target_dir: string, source_dir: string] {
+    if not ($target_dir | path exists) {
+        return
+    }
+    for entry in (ls $target_dir | where type == symlink) {
+        let resolved = try { $entry.name | path expand } catch { "" }
+        # path expand on a dangling symlink still returns the would-be target
+        if not ($resolved | path exists) {
+            let link_target = (^readlink $entry.name | str trim)
+            if ($link_target | str contains "dotconfig/output/bin") {
+                log info $"Removing dangling symlink: ($entry.name) → ($link_target)"
+                rm $entry.name
             }
-            $content = $content + "}\n\n"
-        } else {
-            let args = if "args" in $func.value { $func.value.args.0 } else { "arg" }
-            let cmd = ($func.value.command | str replace "{arg}" $"$($args)")
-            $content = $content + $"export def ($func.key) [($args): string] {\n"
-            $content = $content + $"    ^($cmd)\n"
-            $content = $content + "}\n\n"
+        }
+    }
+}
+
+export def "main generate" [
+    --config-path: string = $"($REPO_DIR)/config/shell/config.toml"
+    --zsh-dir: string = $"($REPO_DIR)/output/zsh/.config/zsh"
+    --nu-dir: string = $"($REPO_DIR)/output/nu/.config/nushell"
+    --bin-dir: string = $"($REPO_DIR)/output/bin/.local/bin"
+    --scripts-dir: string = $"($REPO_DIR)/config/scripts"
+    --targets: list<string> = ["zsh", "nu", "bin", "scripts"]
+] {
+    let config_path = $config_path | path expand
+    let config = load_config $config_path
+
+    log info $"Loading config from: ($config_path)"
+
+    if "zsh" in $targets {
+        generate_zsh $config ($zsh_dir | path expand)
+    }
+
+    if "nu" in $targets {
+        generate_nushell $config ($nu_dir | path expand)
+    }
+
+    # bin/scripts share output/bin/.local/bin/. Clean it first so renames and deletions
+    # don't leave stale executables behind.
+    let bin_expanded = $bin_dir | path expand
+    if ("bin" in $targets) or ("scripts" in $targets) {
+        if ($bin_expanded | path exists) {
+            for f in (ls $bin_expanded | where type == file) {
+                rm $f.name
+            }
         }
     }
 
-    $content | save --force $"($nu_dir)/generated.nu"
+    if "bin" in $targets {
+        generate_bin_scripts $config $bin_expanded
+    }
+
+    if "scripts" in $targets {
+        generate_user_scripts ($scripts_dir | path expand) $bin_expanded
+    }
+
+    # Clear out symlinks in ~/.local/bin/ that point at executables we no longer emit.
+    if ("bin" in $targets) or ("scripts" in $targets) {
+        remove_dangling_links ("~/.local/bin" | path expand) $bin_expanded
+    }
+
+    log info "Generation complete"
+}
+
+def run_stow [stow_dir: string, target_dir: string, item: string, dry_run: bool] {
+    let item_dir = $stow_dir | path join $item
+    if not ($item_dir | path exists) {
+        log warning $"Skipping ($item): directory not found at ($item_dir)"
+        return
+    }
+
+    let stow_cmd = if $dry_run {
+        $"stow --no-folding -d ($stow_dir) -t ($target_dir) --no -v ($item)"
+    } else {
+        $"stow --no-folding -d ($stow_dir) -t ($target_dir) -v ($item)"
+    }
+
+    log info $"Running: ($stow_cmd)"
+    let result = (bash -c $stow_cmd | complete)
+
+    if $result.exit_code != 0 {
+        log error $"Failed to stow ($item): ($result.stderr)"
+    } else {
+        log info $"Successfully stowed ($item)"
+        if ($result.stdout | str length) > 0 {
+            print $result.stdout
+        }
+    }
+}
+
+def run_unstow [stow_dir: string, target_dir: string, item: string, dry_run: bool] {
+    let item_dir = $stow_dir | path join $item
+    if not ($item_dir | path exists) {
+        log warning $"Skipping ($item): directory not found at ($item_dir)"
+        return
+    }
+
+    let stow_cmd = if $dry_run {
+        $"stow -D -d ($stow_dir) -t ($target_dir) --no -v ($item)"
+    } else {
+        $"stow -D -d ($stow_dir) -t ($target_dir) -v ($item)"
+    }
+
+    log info $"Running: ($stow_cmd)"
+    let result = (bash -c $stow_cmd | complete)
+
+    if $result.exit_code != 0 {
+        log error $"Failed to unstow ($item): ($result.stderr)"
+    } else {
+        log info $"Successfully unstowed ($item)"
+        if ($result.stdout | str length) > 0 {
+            print $result.stdout
+        }
+    }
+}
+
+export def "main stow" [
+    --items: list<string> = []
+    --dry-run
+] {
+    let repo_dir = $REPO_DIR | path expand
+    let output_dir = $repo_dir | path join "output"
+    let target_dir = "~" | path expand
+
+    if not ($output_dir | path exists) {
+        error make { msg: $"Output directory not found: ($output_dir)\nRun 'main generate' first." }
+    }
+
+    # Generated packages live under output/; hand-written ones at the repo root.
+    let generated = ls $output_dir | where type == dir | get name | path basename
+    let hand_written = $HAND_WRITTEN_PACKAGES | where ($it in (ls $repo_dir | where type == dir | get name | path basename))
+
+    let selected_generated = if ($items | is-empty) { $generated } else { $items | where ($it in $generated) }
+    let selected_hand_written = if ($items | is-empty) { $hand_written } else { $items | where ($it in $hand_written) }
+
+    log info $"Stow target: ($target_dir)"
+    log info $"Generated packages: ($selected_generated | str join ', ')"
+    log info $"Hand-written packages: ($selected_hand_written | str join ', ')"
+
+    for item in $selected_generated {
+        run_stow $output_dir $target_dir $item $dry_run
+    }
+    for item in $selected_hand_written {
+        run_stow $repo_dir $target_dir $item $dry_run
+    }
+
+    log info "Stow apply complete"
+}
+
+export def "main unstow" [
+    --items: list<string> = []
+    --dry-run
+] {
+    let repo_dir = $REPO_DIR | path expand
+    let output_dir = $repo_dir | path join "output"
+    let target_dir = "~" | path expand
+
+    if not ($output_dir | path exists) {
+        error make { msg: $"Output directory not found: ($output_dir)\nRun 'main generate' first." }
+    }
+
+    let generated = ls $output_dir | where type == dir | get name | path basename
+    let hand_written = $HAND_WRITTEN_PACKAGES | where ($it in (ls $repo_dir | where type == dir | get name | path basename))
+
+    let selected_generated = if ($items | is-empty) { $generated } else { $items | where ($it in $generated) }
+    let selected_hand_written = if ($items | is-empty) { $hand_written } else { $items | where ($it in $hand_written) }
+
+    log info $"Unstow target: ($target_dir)"
+    log info $"Generated packages: ($selected_generated | str join ', ')"
+    log info $"Hand-written packages: ($selected_hand_written | str join ', ')"
+
+    for item in $selected_generated {
+        run_unstow $output_dir $target_dir $item $dry_run
+    }
+    for item in $selected_hand_written {
+        run_unstow $repo_dir $target_dir $item $dry_run
+    }
+
+    log info "Stow remove complete"
 }

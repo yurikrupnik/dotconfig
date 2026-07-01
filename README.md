@@ -1,30 +1,194 @@
-# .config
+# dotconfig
 
-A personal configuration files repository for managing dotfiles and system configurations.
+Personal dotfiles and machine setup. One source of truth for shell configs, packages, and tooling — applied via GNU stow.
 
-## Structure
+## Quick Start
 
-- `shell/` - Shell configuration files (zsh, bash, etc.)
-- `editors/` - Editor configurations (vim, vscode, etc.)
-- `terminals/` - Terminal emulator configurations
-- `git/` - Git configuration files
-- `scripts/` - Utility nu scripts for setup and management
-
-## Installation
+### Fresh Machine
 
 ```bash
-# Clone the repository
-git clone https://github.com/yurikrupnik/dotconfig.git ~/.config
-
-# Run the setup script
-cd ~/.config
-./scripts/setup.sh
+git clone https://github.com/yurikrupnik/dotconfig.git ~/dotconfig
+cd ~/dotconfig
+./install.sh
 ```
 
-## Usage
+This:
+1. Installs Homebrew (if missing) and all packages from `config/brew/Brewfile`
+2. Updates the Rust toolchain
+3. Generates shell configs and `bin/` scripts from `config/` into `output/`
+4. Symlinks `output/` and hand-written packages into `$HOME` via GNU stow
+5. Bootstraps `cargo-binstall` + `cargo-liner` and installs global cargo tools from `config/cargo/liner.toml`
+6. Installs global npm/bun packages from `config/node/package.json`
 
-This repository contains configuration files that can be symlinked to their appropriate locations in your system.
+After install, run `just doctor` to verify everything is wired correctly.
 
-## License
+### One-liner (from anywhere)
 
-MIT License
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/yurikrupnik/dotconfig/main/bootstrap.sh)
+```
+
+`bootstrap.sh` clones the repo to `~/dotconfig` and runs `./install.sh`.
+
+## Daily Commands
+
+```bash
+u                           # Refresh installed packages (brew + rust + cargo + node + gcloud) and restow
+                            #   — alias for `up`; both resolve to ~/.local/bin/up on every shell
+
+just                        # List all recipes
+just doctor                 # Verify install health (symlinks, freshness, deps)
+just outdated               # Preview what `u` would refresh
+
+just regen                  # Regenerate output/ from config/ + restow
+just stow / unstow          # Re-apply or remove stowed symlinks
+just stow-dry               # Preview stow operations
+```
+
+`u`/`up` is the daily refresher; `./install.sh` is for fresh machines.
+
+## What Gets Managed
+
+| Component | Source of truth | Destination |
+|-----------|-----------------|-------------|
+| Shell aliases / env vars / sequence-of-command functions | [`config/shell/config.toml`](config/shell/README.md) | Generated per-shell + `~/.local/bin/<name>` |
+| Hand-written scripts (any language) | [`config/scripts/`](config/scripts/README.md) | `~/.local/bin/<name>` |
+| Brew packages | `config/brew/Brewfile` | System |
+| Cargo tools | `config/cargo/liner.toml` | `~/.cargo/bin/` (via [cargo-liner](https://docs.rs/cargo-liner), symlinked from `$CARGO_HOME/liner.toml`) |
+| npm/bun globals | `config/node/package.json` | Global node modules |
+| uv (Python) tools | `config/uv/tools.txt` | `~/.local/bin/` (via `uv tool install`, isolated per-tool venvs) |
+| pnpm config (supply-chain hardening) | `pnpm/` | `~/.config/pnpm/config.yaml` |
+| bun config (supply-chain hardening) | `bun/` | `~/.bunfig.toml` |
+| zsh config (hand) | `zsh/` | `~/.zshenv`, `~/.config/zsh/.zshrc` |
+| zsh config (generated) | `output/zsh/` | `~/.config/zsh/generated.zsh` |
+| nushell config (hand) | `nushell/` | `~/.config/nushell/config.nu`, `env.nu` |
+| nushell config (generated) | `output/nu/` | `~/.config/nushell/generated.nu` |
+| starship prompt | `starship/` | `~/.config/starship/` |
+| zed editor | `zed/` | `~/.config/zed/` |
+| zellij layouts | `zellij/layouts/` | (loaded by zellij directly) |
+
+## How It Works
+
+The repo is organized into three roles:
+
+1. **`config/`** — source for things that get *generated*: shell aliases, env vars, sequence-of-command functions (`config/shell/config.toml`), and hand-written scripts in any language (`config/scripts/`).
+2. **`output/`** — generator output. **Do not edit by hand. Not committed to git** — rebuilt from `config/` by `shells.nu generate`.
+3. **Top-level hand-written stow packages** — `zsh/`, `nushell/`, `zellij/`, `zed/`, `starship/`. These hold config files that are pure source (no generation step). They're committed to git and stowed as-is.
+
+The pipeline:
+
+1. `shells.nu generate` reads `config/shell/config.toml` and `config/scripts/*` and writes everything to `output/`. It also prunes stale entries — if you delete a `[functions.X]` block or a script, the matching executable in `output/bin/` and the dangling symlink in `~/.local/bin/` are removed automatically.
+2. `shells.nu stow` uses GNU stow with `--no-folding` to symlink:
+   - each subdir of `output/` (generated packages: `bin`, `zsh`, `nu`)
+   - each entry of `HAND_WRITTEN_PACKAGES` at the top of the repo (currently `zellij`, `zed`, `starship`, `zsh`, `nushell`, `pnpm`, `bun`)
+   …into `$HOME`. Hand-written and generated packages happily share target directories (e.g. `~/.config/zsh/` ends up with `.zshrc` linked from `zsh/` and `generated.zsh` linked from `output/zsh/`).
+3. `config/brew/Brewfile`, `config/cargo/liner.toml`, `config/node/package.json`, and `config/uv/tools.txt` declare packages installed by `./install.sh` and refreshed by `u`/`up`.
+
+**On a fresh clone**, `output/` does not exist. `./install.sh` runs `generate` before `stow`, so it bootstraps correctly. If you ever run `just stow` directly on a fresh clone, you'll see an error pointing at `just generate`.
+
+## Supply-chain hardening
+
+Two layers, defense in depth:
+
+1. **Package-manager config** ([`pnpm/.config/pnpm/config.yaml`](pnpm/.config/pnpm/config.yaml), [`bun/.bunfig.toml`](bun/.bunfig.toml)) — 7-day minimum release age (skip versions <1 week old, catches >90% of supply-chain attacks since they're flagged within hours), no lifecycle scripts in bun (`ignoreScripts = true`), no git/tarball sources in pnpm transitive deps (`blockExoticSubdeps`), and `trustPolicy: no-downgrade` so a package losing its trusted-publisher signature fails install.
+2. **[Socket Firewall](https://github.com/SocketDev/sfw-free) (`sfw`) at install time** — `config/shell/config.toml` aliases `pnpm`, `bun`, `cargo`, and `uv` through `sfw <name>`, which proxies the package manager's HTTP traffic and blocks human-confirmed malware before it reaches disk. Bypass per-command with the bare binary path (e.g. `/opt/homebrew/bin/bun add foo`). Aliases only fire in interactive shells, so `install.sh` and `just <recipe>` workflows run un-proxied.
+3. **`upkg` batch update flow** ([`config/scripts/upkg.nu`](config/scripts/upkg.nu)) — when updating project deps, runs OSV-Scanner pre/post, gates new versions through `ncu --cooldown 7`, passes `--ignore-scripts` to every PM, and (with `--paranoid` or `--with-sfw`) wraps install calls through `sfw`. The `socket` CLI is installed globally and runs in `--paranoid` mode for a post-install risk audit.
+
+Inspired by [this video](https://www.youtube.com/watch?v=Wq6yMdt11LM).
+
+## Adding new functionality
+
+This repo has **two places** to define a new command: pick the one that fits.
+
+| You want… | Put it in… | Why |
+|---|---|---|
+| An alias (`k = "kubectl"`) | `config/shell/config.toml` `[aliases]` | One-liner per shell, no logic |
+| An env var (`EDITOR = "zed"`) | `config/shell/config.toml` `[environment]` | Exported in every shell |
+| "Run these N commands in order" | `config/shell/config.toml` `[functions.X]` | Emits a bash script on `PATH`. See [`config/shell/README.md`](config/shell/README.md). |
+| Anything with flags, branches, loops, or structured data | `config/scripts/<name>.<ext>` | Hand-written file in any language. See [`config/scripts/README.md`](config/scripts/README.md). |
+
+The shell user types `<name>` and the shell finds the resulting file on `PATH` — it doesn't care whether your function came from a TOML block or a hand-written nu script.
+
+### Adding packages
+
+```bash
+# Homebrew — add to config/brew/Brewfile
+echo 'brew "neovim"' >> config/brew/Brewfile
+brew bundle --file=config/brew/Brewfile
+
+# Cargo — add to config/cargo/liner.toml under [packages]
+cargo liner ship
+
+# npm/bun — add to config/node/package.json
+cd config/node && bun install --global
+
+# uv (Python CLI tools) — add to config/uv/tools.txt (one tool per line)
+echo 's-tui' >> config/uv/tools.txt
+just uv-install
+```
+
+## Testing changes safely
+
+`./install.sh` is idempotent — re-running is the simplest test. For full isolation:
+
+```bash
+docker run -it --rm -v "$(pwd):/dotconfig" ubuntu:latest bash
+# inside the container:
+cd /dotconfig && ./install.sh
+```
+
+## File Structure
+
+```
+dotconfig/
+├── install.sh                          # Fresh machine bootstrap
+├── bootstrap.sh                        # Clone + install (for curl piping)
+├── justfile                            # Task runner (wraps the scripts below)
+├── .editorconfig                       # Cross-editor formatting
+├── config/                             # Source of truth (hand-edited)
+│   ├── brew/Brewfile                   # Homebrew packages
+│   ├── cargo/liner.toml                # Global cargo tools
+│   ├── node/package.json               # Global npm/bun packages
+│   ├── uv/tools.txt                    # Global Python CLI tools (uv tool install)
+│   ├── shell/
+│   │   ├── config.toml                 # Aliases / env / sequence-of-command functions
+│   │   └── README.md                   # When to use [functions.X]
+│   └── scripts/                        # Hand-written scripts (any language)
+│       ├── mcp.nu                      # → ~/.local/bin/mcp
+│       ├── nx-run.nu                   # → ~/.local/bin/nx-run
+│       ├── upkg.nu                     # → ~/.local/bin/upkg
+│       └── README.md                   # When to write a script; bash vs nu
+├── scripts/
+│   ├── doctor.sh                       # Health check (commands, symlinks, freshness)
+│   ├── outdated.sh                     # Preview pending updates (brew/rust/node)
+│   └── nu/setup-local-machine/
+│       └── shells.nu                   # Generator + stow driver
+├── output/                             # Generated; NOT committed to git
+│   ├── bin/.local/bin/                 # Functions from TOML + scripts from config/scripts/
+│   ├── zsh/.config/zsh/generated.zsh   # Generated zsh aliases + env
+│   └── nu/.config/nushell/generated.nu # Generated nu aliases + env
+├── zsh/                                # Hand-written zsh source
+│   ├── .zshenv
+│   └── .config/zsh/.zshrc
+├── nushell/.config/nushell/            # Hand-written nu source
+│   ├── config.nu
+│   └── env.nu
+├── starship/.config/starship/          # Hand-written starship prompt
+├── zed/.config/zed/                    # Hand-written Zed config
+├── zellij/.config/zellij/layouts/      # Zellij terminal layouts (empty; add .kdl files as needed)
+├── pnpm/.config/pnpm/config.yaml       # pnpm supply-chain hardening (min release age, no exotic subdeps, trust policy)
+└── bun/.bunfig.toml                    # bun supply-chain hardening (min release age, ignore lifecycle scripts)
+```
+
+## Command Runners
+
+- **`./install.sh`, `./bootstrap.sh`** — pure bash, run before nu exists
+- **`u`/`up`** — daily refresh of installed packages (defined in `config.toml`, lives on `PATH`)
+- **`./scripts/doctor.sh`, `./scripts/outdated.sh`** — health check + update preview
+- **`just <recipe>`** — short aliases for daily commands; requires `brew install just`
+
+There is no Makefile — the bash scripts are the canonical entry points; `just` is just for ergonomics.
+
+## Supported Platforms
+
+- macOS (Apple Silicon and Intel)

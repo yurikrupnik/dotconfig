@@ -1,0 +1,101 @@
+[aliases]
+lg = 'lazygit'
+k = "kubectl"
+#alias kx=kubectx
+ls = 'eza --no-permissions --no-user --no-time'
+lsl = 'eza --no-permissions --no-user --no-time --long'
+u = 'up'
+cat = 'bat --paging never --style plain'
+#alias fzfp='fzf --preview="bat --style numbers --color=always {}"'
+#alias d=docker
+drmi='docker rmi $(docker images -aq) -f'
+dsp='docker system prune -af && docker volume prune -af'
+pu="pulumi"
+# Route package managers through socket-firewall — it spins up an HTTP proxy
+# that checks every fetched package against Socket's malware DB before it
+# lands on disk. Non-network subcommands (cargo build, bun run, etc.) pass
+# through unchanged. Bun isn't on sfw's official list but works (verified:
+# "Protected by Socket Firewall" appears in verbose mode).
+b = "sfw bun"
+bun = "sfw bun"
+pnpm = "sfw pnpm"
+c = "sfw cargo"
+cargo = "sfw cargo"
+uv = "sfw uv"
+cdo = "sfw cargo doc"
+#alias cdoco=cargo doc --open
+gs = "git status"
+ga = "git add"
+g = "gcloud"
+gal = "gcloud auth login"
+
+# Starter pack — uncomment to try, drop the ones you dislike
+#find = 'fd'                          # fd — flag syntax differs from BSD find
+#grep = 'rg'                          # ripgrep — flag syntax differs from grep
+#top  = 'btm'                         # bottom — TUI process viewer
+#df   = 'duf'                         # duf — disk usage TUI
+#kx   = 'kubectx'                     # switch kubectl context
+#kn   = 'kubens'                      # switch kubectl namespace
+#kk   = 'k9s'                         # k9s cluster TUI
+#fm   = 'yazi'                        # terminal file manager
+#zj   = 'zellij'                      # terminal multiplexer
+#h    = 'http'                        # httpie
+#y    = 'yq'                          # YAML/JSON processor
+#loc  = 'tokei --sort code -e target -e node_modules -e dist -e build -e .next -e .nx'  # lines of code, ignoring build dirs
+
+
+#[functions.knd]
+#description = "Switch kubectl namespace"
+#commands = [
+#    "if ! kubectl config current-context >/dev/null 2>&1; then echo 'No kubectl context set. Run: kubectl config use-context <context>'; return 1; fi",
+#    "kubectl config set-context --current --namespace={arg}"
+#]
+#args = ["namespace"]
+
+[functions.up]
+description = "Refresh installed packages on this machine"
+commands = [
+    "brew update",
+    "just -f $DOTCONFIG_DIR/justfile brew-install",
+    "brew upgrade",
+    "brew cleanup",
+    "rustup update",
+    "just -f $DOTCONFIG_DIR/justfile cargo-install",
+    "just -f $DOTCONFIG_DIR/justfile node-install",
+    "bun update --global --latest",
+    "just -f $DOTCONFIG_DIR/justfile uv-install",
+    "uv tool upgrade --all",
+    "gcloud components update --quiet",
+    "just -f $DOTCONFIG_DIR/justfile regen"
+]
+
+[functions.csort]
+description = "Format and sort cargo workspace"
+commands = [
+    "cargo fmt",
+    "cargo sort --workspace"
+]
+
+# Note: `mcp`, `nx-run`, and `upkg` are no longer declared here. They live at
+# config/scripts/{mcp,nx-run,upkg}.nu and are installed directly to ~/.local/bin/
+# by the generator.
+
+[environment]
+EDITOR = "zed"
+KUBE_EDITOR = "zed"
+BROWSER = "open"
+AI = "claude"
+
+PROJECT = "rust"
+TYPE = "be" # fe, devops, data, cli, operator, ci - tekton
+
+# Locale / XDG (consolidated from hand-written zshrc + env.nu)
+LANG = "en_US.UTF-8"
+XDG_CONFIG_HOME = "$HOME/.config"
+
+# Homebrew behavior: `up` handles updates and cleanup explicitly, so suppress
+# brew's implicit auto-update and post-install cleanup for predictable runs.
+# HOMEBREW_BUNDLE_FILE lets bare `brew bundle` work from any directory.
+HOMEBREW_NO_AUTO_UPDATE = "1"
+HOMEBREW_NO_INSTALL_CLEANUP = "1"
+HOMEBREW_BUNDLE_FILE = "$DOTCONFIG_DIR/config/brew/Brewfile"

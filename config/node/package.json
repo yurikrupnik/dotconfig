@@ -1,0 +1,11 @@
+{
+  "name": "dotconfig-global-packages",
+  "description": "Global npm/bun packages for development",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@oh-my-pi/pi-coding-agent": "*",
+    "sfw": "*",
+    "socket": "*"
+  }
+}

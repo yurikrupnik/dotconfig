@@ -1,0 +1,11 @@
+# Global Python CLI tools — installed via `uv tool install`.
+#
+# Format: one tool per line. First whitespace-separated token is the install
+# argument (so version specs like `s-tui==1.1.5` or extras like `httpie[full]`
+# all work). Lines starting with `#` and blank lines are ignored; anything
+# after `# …` on a tool line is treated as a comment.
+#
+# Installed by `just uv-install` (also wired into ./install.sh).
+# Refreshed by `u`/`up` via `uv tool upgrade --all`.
+
+s-tui   # s-tui — terminal CPU stress test & monitor

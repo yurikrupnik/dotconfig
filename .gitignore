@@ -7,22 +7,33 @@
 ehthumbs.db
 Thumbs.db
 .env
-/target
-/dist
+/tmp
+
 # Temporary files
 *.tmp
 *.temp
 *.log
 
-# Editor files
+# Editor / IDE
 *.swp
 *.swo
 *~
+.idea/
 
 # Local configuration overrides
 local/
-*.local
+*.local.json
+*.local.yaml
+*.local.yml
 
 # Backup files
 *.backup
 *.bak
+dotconfig-backup-*/
+
+# Generator output — rebuilt from config/ by `nu shells.nu generate`
+/output/
+
+# Misc
+.gemini/
+gha-creds-*.json
