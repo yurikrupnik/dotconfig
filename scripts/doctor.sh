@@ -33,7 +33,7 @@ for cmd in brew cargo rustup nu stow git; do
 done
 
 # Optional but recommended
-for cmd in just cargo-binstall cargo-liner bun; do
+for cmd in just cargo-binstall cargo-liner bun uv; do
     if command -v "$cmd" &> /dev/null; then
         ok "$cmd"
     else
@@ -47,6 +47,7 @@ for f in \
     "$DOTCONFIG_DIR/config/brew/Brewfile" \
     "$DOTCONFIG_DIR/config/cargo/liner.toml" \
     "$DOTCONFIG_DIR/config/node/package.json" \
+    "$DOTCONFIG_DIR/config/uv/tools.txt" \
     "$DOTCONFIG_DIR/config/shell/config.toml"; do
     if [ -f "$f" ]; then
         ok "${f#$DOTCONFIG_DIR/}"

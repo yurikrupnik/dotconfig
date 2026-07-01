@@ -119,6 +119,14 @@ fi
 log_info "Installing global node packages..."
 (cd "$DOTCONFIG_DIR" && just node-install) || log_warn "Failed to install some global node packages"
 
+# Step 10: Install global uv (Python) tools from config/uv/tools.txt
+if command -v uv &> /dev/null; then
+    log_info "Installing global uv tools..."
+    (cd "$DOTCONFIG_DIR" && just uv-install) || log_warn "Failed to install some uv tools"
+else
+    log_warn "uv not found; skipping global uv tools install"
+fi
+
 log_info "Installation complete!"
 echo ""
 log_info "Next steps:"

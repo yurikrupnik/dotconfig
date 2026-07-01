@@ -63,6 +63,8 @@ commands = [
     "just -f $DOTCONFIG_DIR/justfile cargo-install",
     "just -f $DOTCONFIG_DIR/justfile node-install",
     "bun update --global --latest",
+    "just -f $DOTCONFIG_DIR/justfile uv-install",
+    "uv tool upgrade --all",
     "gcloud components update --quiet",
     "just -f $DOTCONFIG_DIR/justfile regen"
 ]

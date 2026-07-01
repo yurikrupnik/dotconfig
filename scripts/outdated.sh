@@ -43,4 +43,14 @@ elif command -v npm &> /dev/null; then
     fi
 fi
 
+if command -v uv &> /dev/null; then
+    section "uv tools"
+    out=$(uv tool list --outdated 2>/dev/null || true)
+    if [ -z "$out" ]; then
+        dim "  all tools up to date"
+    else
+        echo "$out" | sed 's/^/  /'
+    fi
+fi
+
 echo -e "\n${YELLOW}==>${NC} Run ${GREEN}u${NC} (shell function) to apply."

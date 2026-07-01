@@ -31,9 +31,13 @@ regen: generate stow
 stow-dry:
     {{shells}} stow --dry-run
 
-# Update brew packages from Brewfile
+# Preview Brewfile install: counts + which taps need trust (read-only)
+brew-preflight:
+    ./scripts/brew-preflight.sh --check
+
+# Update brew packages from Brewfile (preflight → trust new taps → bundle)
 brew-install:
-    brew bundle --file=config/brew/Brewfile
+    ./scripts/brew-preflight.sh --apply
 
 # Install/update global cargo packages via cargo-liner
 cargo-install:
@@ -42,6 +46,10 @@ cargo-install:
 # Install/refresh global node packages declared in config/node/package.json
 node-install:
     cd config/node && bun add --global $(jq -r '.dependencies | to_entries[] | "\(.key)@\(.value)"' package.json)
+
+# Install/refresh global Python CLI tools declared in config/uv/tools.txt
+uv-install:
+    awk '!/^[[:space:]]*(#|$)/ {print $1}' config/uv/tools.txt | while IFS= read -r pkg; do uv tool install "$pkg" || echo "  ! uv tool install $pkg failed"; done
 
 # Verify the install is healthy (commands, symlinks, freshness)
 doctor:
