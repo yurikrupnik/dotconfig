@@ -26,7 +26,7 @@ def resolve_compose_files [--file (-f): string]: nothing -> list<string> {
 
     if ($found_files | is-empty) {
         # Check configured compose file as fallback
-        let manifest_compose = (devkit-config).paths.compose_file
+        let manifest_compose = (resolve-config).paths.compose_file
         if ($manifest_compose | path exists) {
             return [($manifest_compose | path expand)]
         }

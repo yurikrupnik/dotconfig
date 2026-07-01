@@ -16,9 +16,9 @@ if ! command -v nu >/dev/null 2>&1; then
     exit 127
 fi
 
-# With no args, show the module's command list instead of a raw error.
+# With no args, show the curated overview (the module's `main` command).
 if [[ $# -eq 0 ]]; then
-    exec nu -c 'use devkit *; help commands | where name =~ "^devkit" | select name description'
+    exec nu -c 'use devkit *; devkit'
 fi
 
 # Build a single nu command line, forwarding args. Nushell parses flags

@@ -204,7 +204,7 @@ export def "devkit setup k8s-setup" [] {
 
     info "Setting up Kubernetes resources..."
 
-    let ns = (devkit-config).namespaces.external_secrets
+    let ns = (resolve-config).namespaces.external_secrets
 
     # Create namespace
     #kubectl create namespace zerg --dry-run=client -o yaml | kubectl apply -f -

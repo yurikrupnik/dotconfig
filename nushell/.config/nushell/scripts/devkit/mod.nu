@@ -57,20 +57,45 @@ def check-prerequisites []: nothing -> bool {
 # Top-level lifecycle: up / down / status
 # ============================================================================
 
-# Bring up the full local development environment
+# Overview of the most-used commands. Run a group (e.g. `devkit cluster`) to list
+# its subcommands, or `help devkit <cmd>` for details on any command.
+export def main [] {
+    print "devkit — reusable monorepo dev/ops engine"
+    print ""
+    print "Daily:"
+    print "  devkit up [--istio --core --gitops --observability --flux]  bring up local env (ingress always on)"
+    print "  devkit down [--keep-cluster]                                tear it down"
+    print "  devkit status                                               cluster + namespace status"
+    print "  devkit config [--data | --path]                             view effective config"
+    print "  devkit config init [dir] [--force]                          scaffold devkit.toml"
+    print ""
+    print "Building blocks — run the group name to list its subcommands:"
+    print "  devkit cluster    Kind cluster lifecycle + k8s deploys"
+    print "  devkit dev        docker compose wrappers"
+    print "  devkit secrets    vals / vault secret handling"
+    print "  devkit setup      toolchain install, build, check, test"
+}
+
+# Bring up the local development environment. Extras are opt-in via flags:
+# --istio, --core, --gitops, --observability, --flux. Ingress is always enabled.
 export def "devkit up" [
     --name (-n): string              # Cluster name (default: config cluster.name)
     --workers (-w): int = -1         # Worker nodes (default: config cluster.workers)
     --skip-dbs                       # Skip database deployment
     --skip-secrets                   # Skip external-secrets setup
     --skip-tilt                      # Skip starting Tilt
+    --istio                          # Install Istio (ambient) before workloads
+    --core                           # Apply the core infrastructure overlay
+    --gitops                         # Apply the GitOps overlay
+    --observability                  # Deploy the observability stack
     --flux                           # Bootstrap Flux GitOps
     --dry-run                        # Preview without executing
     --verbose (-v)                   # Verbose output
 ] {
-    let cfg = (devkit-config)
+    let cfg = (resolve-config)
     let name = (if ($name | is-empty) { $cfg.cluster.name } else { $name })
     let workers = (if $workers < 0 { $cfg.cluster.workers } else { $workers })
+    let target = $cfg.paths.default_target
 
     if not (check-prerequisites) {
         error "Missing required prerequisites. Please install them first."
@@ -80,43 +105,70 @@ export def "devkit up" [
     if $dry_run {
         info "[DRY-RUN] Would create Kind cluster and deploy services"
         info $"  Cluster: ($name), Workers: ($workers)"
-        info $"  DBs: (not $skip_dbs), Secrets: (not $skip_secrets)"
+        info $"  DBs: (not $skip_dbs), Secrets: (not $skip_secrets), Istio: ($istio), Core: ($core), GitOps: ($gitops), Observability: ($observability), Flux: ($flux)"
         return
     }
 
     let start_time = date now
 
-    # Step 1: Create Kind cluster
-    info $"Step 1/5: Creating Kind cluster '($name)' with ($workers) workers..."
+    # Kind cluster (ingress always on)
+    info $"Creating Kind cluster '($name)' with ($workers) workers..."
     devkit cluster create -n $name -w $workers --ingress -d 1
 
-    # Step 2: Create app namespaces
-    info "Step 2/5: Creating app namespaces..."
-    create-app-namespaces $cfg
-
-    # Step 3: Setup External Secrets
-    if not $skip_secrets {
-        info "Step 3/5: Setting up External Secrets..."
-        setup-external-secrets $cfg
-    } else {
-        info "Step 3/5: Skipping External Secrets setup"
+    # Service mesh before workloads (db manifests are patched for Istio ambient)
+    if $istio {
+        info "Installing Istio..."
+        devkit cluster setup --istio
     }
 
-    # Step 4: Deploy databases
+    # App namespaces
+    info "Creating app namespaces..."
+    create-app-namespaces $cfg
+
+    # External Secrets
+    if not $skip_secrets {
+        info "Setting up External Secrets..."
+        setup-external-secrets $cfg
+    } else {
+        info "Skipping External Secrets setup"
+    }
+
+    # Databases
     if not $skip_dbs {
-        info "Step 4/5: Deploying database services..."
+        info "Deploying database services..."
         devkit cluster setup --dbs
         wait-for-databases $cfg
     } else {
-        info "Step 4/5: Skipping database deployment"
+        info "Skipping database deployment"
     }
 
-    # Step 5: Bootstrap Flux (optional)
+    # Core infrastructure overlay
+    if $core {
+        let core_path = (overlay-path $cfg.paths.overlays.core $target)
+        if ($core_path | path exists) {
+            info $"Applying core overlay: ($core_path)"
+            kubectl apply -k $core_path
+        } else {
+            warn $"Core overlay not found: ($core_path)"
+        }
+    }
+
+    # GitOps overlay
+    if $gitops {
+        info "Deploying GitOps resources..."
+        devkit cluster gitops --target $target
+    }
+
+    # Observability stack
+    if $observability {
+        info "Deploying observability stack..."
+        devkit cluster observability --target $target
+    }
+
+    # Flux GitOps bootstrap
     if $flux {
-        info "Step 5/5: Bootstrapping Flux GitOps..."
+        info "Bootstrapping Flux GitOps..."
         devkit cluster setup --flux
-    } else {
-        info "Step 5/5: Skipping Flux bootstrap (use --flux to enable)"
     }
 
     let elapsed = (date now) - $start_time
@@ -138,16 +190,17 @@ export def "devkit up" [
     }
 }
 
-# Tear down the local development environment
+# Tear down the local development environment.
 export def "devkit down" [
     --name (-n): string              # Cluster name (default: config cluster.name)
-    --keep-cluster                   # Keep cluster, only remove resources
+    --keep-cluster                   # Keep cluster, only remove deployed resources
     --verbose (-v)                   # Verbose output
 ] {
     require-bin "kind"
 
-    let cfg = (devkit-config)
+    let cfg = (resolve-config)
     let name = (if ($name | is-empty) { $cfg.cluster.name } else { $name })
+    let target = $cfg.paths.default_target
 
     # Stop Tilt first
     info "Stopping Tilt..."
@@ -155,6 +208,14 @@ export def "devkit down" [
 
     if $keep_cluster {
         info "Removing resources but keeping cluster..."
+        # Delete overlays devkit up may have applied (ignore missing paths)
+        for ov in [$cfg.paths.overlays.core $cfg.paths.overlays.gitops $cfg.paths.overlays.observability] {
+            let p = (overlay-path $ov $target)
+            if ($p | path exists) {
+                do { kubectl delete -k $p --ignore-not-found } | complete
+            }
+        }
+        # Delete lifecycle namespaces
         for ns in (lifecycle-namespaces $cfg) {
             do { kubectl delete ns $ns --ignore-not-found } | complete
         }

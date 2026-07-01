@@ -13,7 +13,7 @@ export def "devkit secrets fetch" [
 ] {
     require-bin "vals"
 
-    let cfg = (devkit-config)
+    let cfg = (resolve-config)
     let output = (if ($output | is-empty) { $cfg.secrets.output } else { $output })
     let config = (if ($config | is-empty) { $cfg.secrets.config } else { $config })
 
@@ -63,7 +63,7 @@ export def "devkit secrets vault" [
 ] {
     require-bin "vals"
 
-    let cfg = (devkit-config)
+    let cfg = (resolve-config)
     let output = (if ($output | is-empty) { $cfg.secrets.output } else { $output })
 
     let vault_addr = ($env.VAULT_ADDR? | default "http://localhost:8200")
@@ -96,7 +96,7 @@ export def "devkit secrets vault" [
 export def "devkit secrets load" [
     --env-file: string = ""  # Path to .env file (defaults to config secrets.output)
 ] {
-    let cfg = (devkit-config)
+    let cfg = (resolve-config)
     let env_file = (if ($env_file | is-empty) { $cfg.secrets.output } else { $env_file })
 
     if not ($env_file | path exists) {
@@ -133,7 +133,7 @@ export def "devkit secrets load" [
 export def "devkit secrets list" [
     --config (-c): string = ""  # vals config file (defaults to config secrets.config)
 ] {
-    let cfg = (devkit-config)
+    let cfg = (resolve-config)
     let config = (if ($config | is-empty) { $cfg.secrets.config } else { $config })
 
     if not ($config | path exists) {
@@ -170,7 +170,7 @@ export def "devkit secrets verify" [
 ] {
     require-bin "vals"
 
-    let cfg = (devkit-config)
+    let cfg = (resolve-config)
     let config = (if ($config | is-empty) { $cfg.secrets.config } else { $config })
 
     if not ($config | path exists) {
