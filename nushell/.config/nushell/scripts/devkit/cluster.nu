@@ -96,7 +96,7 @@ export def "devkit cluster list" [] {
         return []
     }
 
-    info $"Found ($clusters | length) Kind cluster(s):"
+    info $"Found ($clusters | length) Kind cluster\(s):"
     $clusters | each {|c| print $"  - ($c)"}
     $clusters
 }
@@ -166,7 +166,7 @@ export def "devkit cluster setup" [
                 }
                 | str join "---\n")
             $patched | kubectl apply -f -
-            success $"Database services deployed to '($dbs_ns)' namespace (on db-worker nodes)"
+            success $"Database services deployed to '($dbs_ns)' namespace \(on db-worker nodes\)"
         } else {
             warn $"Compose file not found at ($compose_file)"
         }

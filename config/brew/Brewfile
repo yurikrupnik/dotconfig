@@ -9,6 +9,8 @@ brew "siderolabs/tap/talosctl"           # talosctl — CLI for Talos Linux (k8s
 tap "fluxcd/tap"
 brew "fluxcd/tap/flux"                   # Flux — GitOps controller for Kubernetes
 brew "metalbear-co/mirrord/mirrord"      # mirrord — run local process in a remote k8s pod context
+tap "nats-io/nats-tools"
+brew "nats-io/nats-tools/nats"           # nats — NATS CLI (pub/sub, JetStream, KV, streams)
 
 # brew "1password-cli"
 # brew "broot"
