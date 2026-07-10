@@ -12,6 +12,20 @@ export def overlay-path [template: string, target: string]: nothing -> string {
     $template | str replace --all "{target}" $target
 }
 
+# Kind cluster lifecycle + k8s deploys. Run a subcommand, or `help devkit cluster <cmd>`.
+export def "devkit cluster" [] {
+    print "devkit cluster — Kind cluster lifecycle + k8s deploys"
+    print ""
+    print "  devkit cluster create [-n NAME] [-w N] [-d N] [-i]   create Kind cluster"
+    print "  devkit cluster delete [NAME]                         delete a cluster"
+    print "  devkit cluster list                                  list Kind clusters"
+    print "  devkit cluster status [-n NAME]                      context + node status"
+    print "  devkit cluster setup [--dbs --istio --flux]          post-create infra setup"
+    print "  devkit cluster migrate [-p PORT -u USER ...]         run DB migrations"
+    print "  devkit cluster gitops [-e TARGET] [--dry-run]        apply GitOps overlay"
+    print "  devkit cluster observability [-e TARGET] [--dry-run] deploy observability stack"
+}
+
 # Create a local Kind cluster using KCL configuration
 export def "devkit cluster create" [
     --name (-n): string              # Cluster name (default: config cluster.name)
@@ -124,6 +138,7 @@ export def "devkit cluster status" [
 export def "devkit cluster setup" [
     --flux                           # Bootstrap Flux GitOps
     --flux-repo: string              # Flux repository (default: config flux.repository)
+    --flux-owner: string             # GitHub owner/org (default: config flux.owner, else gh user)
     --istio                          # Install Istio
     --dbs                            # Deploy database services from compose
 ] {
@@ -192,7 +207,10 @@ export def "devkit cluster setup" [
             exit 1
         }
 
-        let owner = (gh api user --jq '.login' | str trim)
+        let owner = (if ($flux_owner | is-empty) {
+            let cfg_owner = ($cfg.flux.owner? | default "")
+            if ($cfg_owner | is-not-empty) { $cfg_owner } else { (gh api user --jq '.login' | str trim) }
+        } else { $flux_owner })
         let token = ($token_result.stdout | str trim)
 
         let extra_args = (if $cfg.flux.personal { ["--personal"] } else { [] })

@@ -26,7 +26,7 @@
 # Detects Cargo.toml, package.json, pyproject.toml across the repo (walks Nx libs/apps).
 # Emits a machine-readable diagnosis block on failure for AI consumption.
 
-use std log
+use std/log
 
 const PRUNE_GLOBS = [
     "**/node_modules/**" "**/target/**" "**/dist/**" "**/build/**"

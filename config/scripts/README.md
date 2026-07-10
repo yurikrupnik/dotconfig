@@ -44,7 +44,7 @@ Default rule: **nu for new logic-heavy scripts.** Reserve bash for bootstrap (`i
 ```nu
 #!/usr/bin/env nu
 
-use std log
+use std/log
 
 export def --env "main" [
     --location: list<string> = [".mcp.json"]

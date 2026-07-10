@@ -6,6 +6,19 @@
 use common.nu *
 use config.nu *
 
+# Toolchain install, build, check, test. Run a subcommand, or `help devkit setup <cmd>`.
+export def "devkit setup" [] {
+    print "devkit setup — toolchain install, build, check, test"
+    print ""
+    print "  devkit setup install [--rust --node --k8s --all]   install dependencies"
+    print "  devkit setup build [-r] [-a APP]                    build Rust packages"
+    print "  devkit setup check [--fix]                          run quality checks"
+    print "  devkit setup test [-w]                              run tests"
+    print "  devkit setup vault-setup                            init Vault secrets structure"
+    print "  devkit setup k8s-setup                              init k8s resources"
+    print "  devkit setup all                                    full setup"
+}
+
 # Install system dependencies
 export def "devkit setup install" [
     --rust       # Install Rust toolchain and cargo tools

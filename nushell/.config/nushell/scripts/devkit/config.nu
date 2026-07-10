@@ -64,7 +64,7 @@ export const DEFAULTS = {
 
     # Secrets (vals)
     secrets: {
-        config: ".vals.yaml"
+        config: "manifests/secrets/.vals.yaml"
         output: ".env"
     }
 
@@ -76,6 +76,7 @@ export const DEFAULTS = {
 
     # Flux GitOps bootstrap
     flux: {
+        owner: ""              # GitHub user/org; empty = derive from `gh api user`
         repository: "gitops"
         branch: "main"
         path: "clusters/local"

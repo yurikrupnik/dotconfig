@@ -48,6 +48,20 @@ def build_docker_compose_args [
     $file_args ++ [$subcmd] ++ $rest
 }
 
+# Docker Compose wrappers. Run a subcommand below, or `help devkit dev <cmd>`.
+export def "devkit dev" [] {
+    print "devkit dev — docker compose wrappers"
+    print ""
+    print "  devkit dev up [-d] [-f FILE]         start services"
+    print "  devkit dev down [-v] [-f FILE]       stop services"
+    print "  devkit dev logs [--follow] [SVC]     show logs"
+    print "  devkit dev ps [-f FILE]              service status"
+    print "  devkit dev restart [SVC]             restart services"
+    print "  devkit dev prune [-a]                prune docker resources"
+    print "  devkit dev kompose [--stdout]        convert compose to k8s manifests"
+    print "  devkit dev reset [-f FILE]           down -v + prune + up -d"
+}
+
 # Start docker compose services
 export def "devkit dev up" [
     --file (-f): string  # Custom compose file path

@@ -11,7 +11,7 @@
 # Targets: named presets that know each AI client's path, format, and merge strategy.
 # Use --target codex (etc.) to write the right file in the right shape without overwriting siblings.
 
-use std log
+use std/log
 
 const DEFAULT_CONFIG = "~/dotconfig/config/mcp/servers.json"
 

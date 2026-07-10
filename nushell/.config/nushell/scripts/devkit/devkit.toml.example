@@ -43,7 +43,7 @@ migration_cmd = ["cargo", "run", "-p", "migration", "--", "up"]
 wait_timeout = "120s"
 
 [secrets]
-config = ".vals.yaml"       # vals config file
+config = "manifests/secrets/.vals.yaml"       # vals config file
 output = ".env"             # generated env file
 
 [external_secrets]
@@ -51,6 +51,7 @@ gcp_credentials = "~/dotconfig/tmp/secret-puller.json"
 secret_name = "gcp-sm-credentials"
 
 [flux]
+# owner = "my-org"          # GitHub user/org; leave unset to derive from `gh api user`
 repository = "gitops"
 branch = "main"
 path = "clusters/local"

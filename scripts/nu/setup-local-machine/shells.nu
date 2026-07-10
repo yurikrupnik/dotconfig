@@ -1,6 +1,6 @@
 #!/usr/bin/env nu
 
-use std log
+use std/log
 
 def load_config [config_path: string]: nothing -> record {
     if not ($config_path | path exists) {
@@ -227,7 +227,7 @@ def generate_user_scripts [scripts_dir: string, output_dir: string] {
         let src = $file.name
         let basename = $src | path basename
         # Skip dotfiles and READMEs
-        if ($basename | str starts-with ".") or ($basename | str downcase) == "readme.md" {
+        if ($basename | str starts-with ".") or ($basename | str lowercase) == "readme.md" {
             continue
         }
         let stem = $basename | path parse | get stem
