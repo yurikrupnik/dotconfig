@@ -18,6 +18,8 @@ export use common.nu *
 export use config.nu *
 export use cluster.nu *
 export use local-dev.nu *
+export use fleet.nu *
+export use manager.nu *
 export use secrets.nu *
 export use setup.nu *
 
@@ -72,6 +74,8 @@ export def main [] {
     print "Building blocks — run the group name to list its subcommands:"
     print "  devkit cluster    Kind cluster lifecycle + k8s deploys"
     print "  devkit dev        docker compose wrappers"
+    print "  devkit manager    role-gated dashboard in the Kind cluster"
+    print "  devkit fleet      self-hosted machine fleet: hub, agents, agentless probes"
     print "  devkit secrets    vals / vault secret handling"
     print "  devkit setup      toolchain install, build, check, test"
 }
@@ -115,6 +119,12 @@ export def "devkit up" [
     info $"Creating Kind cluster '($name)' with ($workers) workers..."
     devkit cluster create -n $name -w $workers --ingress -d 1
 
+    # Cluster dependencies from [[deps]] (helm charts / manifests); no-op when empty
+    if ($cfg.deps? | default [] | is-not-empty) {
+        info "Installing cluster deps..."
+        devkit cluster deps
+    }
+
     # Service mesh before workloads (db manifests are patched for Istio ambient)
     if $istio {
         info "Installing Istio..."
@@ -125,10 +135,10 @@ export def "devkit up" [
     info "Creating app namespaces..."
     create-app-namespaces $cfg
 
-    # External Secrets
+    # External Secrets (operator + GCP creds + ClusterSecretStore)
     if not $skip_secrets {
         info "Setting up External Secrets..."
-        setup-external-secrets $cfg
+        devkit cluster setup --external-secrets
     } else {
         info "Skipping External Secrets setup"
     }
@@ -286,32 +296,6 @@ def create-app-namespaces [cfg: record] {
     }
 
     success $"Created ($namespaces | length) app namespaces: ($namespaces | str join ', ')"
-}
-
-# Setup External Secrets with GCP credentials
-def setup-external-secrets [cfg: record] {
-    let creds_path = ($cfg.external_secrets.gcp_credentials | path expand)
-    let es_ns = $cfg.namespaces.external_secrets
-
-    if not ($creds_path | path exists) {
-        warn $"GCP credentials not found at ($creds_path)"
-        warn "External Secrets will not be able to pull from GCP Secret Manager"
-        return
-    }
-
-    do { kubectl create namespace $es_ns } | complete
-
-    let result = do {
-        kubectl create secret generic $cfg.external_secrets.secret_name -n $es_ns --from-file=credentials=($creds_path)
-    } | complete
-
-    if $result.exit_code == 0 {
-        success "External Secrets configured with GCP credentials"
-    } else if ($result.stderr | str contains "already exists") {
-        info "External Secrets credentials already configured"
-    } else {
-        warn $"Failed to create secret: ($result.stderr)"
-    }
 }
 
 # Wait for database pods to be ready

@@ -62,8 +62,8 @@ After editing, run `just regen` to copy the updated source to `output/bin/` (liv
 just regen        # copy updated scripts to output/bin/.local/bin/
 ```
 
-Or `up` (the daily refresher) which calls `shells.nu generate` and `stow` at the end.
+Or `u` (the daily refresher, `~/.local/bin/update`) which calls `shells.nu generate` and `stow` at the end.
 
 ## Name collisions
 
-A few bare names — `update`, `sort`, `generate` — shadow **nushell builtins**. Once a script lives on `PATH`, typing the name in nu still resolves to the builtin, not your script. Pick names that don't collide (use `help commands` in nu to check).
+A few bare names — `update`, `sort`, `generate` — shadow **nushell builtins**. Once a script lives on `PATH`, typing the name in nu still resolves to the builtin, not your script — you must call it as `^name` or via an alias the generator emits with a `^` prefix (that's how the daily `update` refresher works). Prefer names that don't collide (use `help commands` in nu to check).

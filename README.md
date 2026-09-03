@@ -34,7 +34,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/yurikrupnik/dotconfig/main/b
 
 ```bash
 u                           # Refresh installed packages (brew + rust + cargo + node + gcloud) and restow
-                            #   — alias for `up`; both resolve to ~/.local/bin/up on every shell
+                            #   — alias for `update`; resolves to ~/.local/bin/update on every shell
 
 just                        # List all recipes
 just doctor                 # Verify install health (symlinks, freshness, deps)
@@ -45,7 +45,7 @@ just stow / unstow          # Re-apply or remove stowed symlinks
 just stow-dry               # Preview stow operations
 ```
 
-`u`/`up` is the daily refresher; `./install.sh` is for fresh machines.
+`u`/`update` is the daily refresher; `./install.sh` is for fresh machines. In nushell, `update` is a builtin, so use `u` (aliased to `^update`) or type `^update`. (Not named `up` — that would shadow the Upbound CLI from the Brewfile.)
 
 ## What Gets Managed
 
@@ -65,6 +65,7 @@ just stow-dry               # Preview stow operations
 | nushell config (generated) | `output/nu/` | `~/.config/nushell/generated.nu` |
 | starship prompt | `starship/` | `~/.config/starship/` |
 | zed editor | `zed/` | `~/.config/zed/` |
+| neovim editor | `nvim/` | `~/.config/nvim/` (see [the learning plan](nvim/.config/nvim/docs/learning-plan.md)) |
 | zellij layouts | `zellij/layouts/` | (loaded by zellij directly) |
 
 ## How It Works
@@ -73,16 +74,16 @@ The repo is organized into three roles:
 
 1. **`config/`** — source for things that get *generated*: shell aliases, env vars, sequence-of-command functions (`config/shell/config.toml`), and hand-written scripts in any language (`config/scripts/`).
 2. **`output/`** — generator output. **Do not edit by hand. Not committed to git** — rebuilt from `config/` by `shells.nu generate`.
-3. **Top-level hand-written stow packages** — `zsh/`, `nushell/`, `zellij/`, `zed/`, `starship/`. These hold config files that are pure source (no generation step). They're committed to git and stowed as-is.
+3. **Top-level hand-written stow packages** — `zsh/`, `nushell/`, `zellij/`, `zed/`, `nvim/`, `starship/`. These hold config files that are pure source (no generation step). They're committed to git and stowed as-is.
 
 The pipeline:
 
 1. `shells.nu generate` reads `config/shell/config.toml` and `config/scripts/*` and writes everything to `output/`. It also prunes stale entries — if you delete a `[functions.X]` block or a script, the matching executable in `output/bin/` and the dangling symlink in `~/.local/bin/` are removed automatically.
 2. `shells.nu stow` uses GNU stow with `--no-folding` to symlink:
    - each subdir of `output/` (generated packages: `bin`, `zsh`, `nu`)
-   - each entry of `HAND_WRITTEN_PACKAGES` at the top of the repo (currently `zellij`, `zed`, `starship`, `zsh`, `nushell`, `pnpm`, `bun`)
+   - each entry of `HAND_WRITTEN_PACKAGES` at the top of the repo (currently `zellij`, `zed`, `starship`, `zsh`, `nushell`, `pnpm`, `bun`, `nvim`)
    …into `$HOME`. Hand-written and generated packages happily share target directories (e.g. `~/.config/zsh/` ends up with `.zshrc` linked from `zsh/` and `generated.zsh` linked from `output/zsh/`).
-3. `config/brew/Brewfile`, `config/cargo/liner.toml`, `config/node/package.json`, and `config/uv/tools.txt` declare packages installed by `./install.sh` and refreshed by `u`/`up`.
+3. `config/brew/Brewfile`, `config/cargo/liner.toml`, `config/node/package.json`, and `config/uv/tools.txt` declare packages installed by `./install.sh` and refreshed by `u`/`update`.
 
 **On a fresh clone**, `output/` does not exist. `./install.sh` runs `generate` before `stow`, so it bootstraps correctly. If you ever run `just stow` directly on a fresh clone, you'll see an error pointing at `just generate`.
 
@@ -175,6 +176,13 @@ dotconfig/
 │   └── env.nu
 ├── starship/.config/starship/          # Hand-written starship prompt
 ├── zed/.config/zed/                    # Hand-written Zed config
+├── nvim/.config/nvim/                  # Hand-written Neovim config (Neovim ≥ 0.12)
+│   ├── init.lua                        # Entry point; leader, trainer mode, module order
+│   ├── lua/config/                     # options, keymaps, autocmds, lazy bootstrap, LSP
+│   ├── lua/plugins/                    # One file per concern (ui, editor, lsp deps, git, …)
+│   ├── lsp/<server>.lua                # Native vim.lsp.config server definitions (no mason)
+│   ├── lazy-lock.json                  # Committed plugin lockfile — reproducible on a new box
+│   └── docs/learning-plan.md           # 4-week plan + keymap reference (<leader>L in nvim)
 ├── zellij/.config/zellij/layouts/      # Zellij terminal layouts (empty; add .kdl files as needed)
 ├── pnpm/.config/pnpm/config.yaml       # pnpm supply-chain hardening (min release age, no exotic subdeps, trust policy)
 └── bun/.bunfig.toml                    # bun supply-chain hardening (min release age, ignore lifecycle scripts)
@@ -183,7 +191,7 @@ dotconfig/
 ## Command Runners
 
 - **`./install.sh`, `./bootstrap.sh`** — pure bash, run before nu exists
-- **`u`/`up`** — daily refresh of installed packages (defined in `config.toml`, lives on `PATH`)
+- **`u`/`update`** — daily refresh of installed packages (defined in `config.toml`, lives on `PATH`)
 - **`./scripts/doctor.sh`, `./scripts/outdated.sh`** — health check + update preview
 - **`just <recipe>`** — short aliases for daily commands; requires `brew install just`
 

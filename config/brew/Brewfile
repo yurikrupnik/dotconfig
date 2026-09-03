@@ -21,9 +21,10 @@ brew "hashicorp/tap/vault"               # Vault — secrets management
 brew "hashicorp/tap/terraform"           # Terraform — infrastructure as code
 brew "qemu"                              # QEMU — generic machine emulator / virtualizer
 brew "tbls"                              # tbls — generate database documentation
+brew "jless"                             # jless — TUI JSON/YAML viewer (pager for structured data)
 brew "mise"                              # mise — polyglot runtime/version manager (Node, Python, …)
 brew "mprocs"                            # mprocs — run multiple commands in parallel in a TUI
-brew "pnpm"
+brew "pnpm"                              # pnpm — node package manager (hardening: pnpm/.config/pnpm/config.yaml)
 brew "cloc"                              # cloc — count lines of code by language
 brew "lefthook"                          # lefthook — fast polyglot git hooks manager
 brew "opencode"                          # opencode — AI coding agent in the terminal
@@ -57,6 +58,7 @@ brew "ollama"                            # ollama — run local LLMs
 brew "rbenv"                             # rbenv — Ruby version manager
 brew "httpie"                            # HTTPie — human-friendly HTTP client
 brew "htop"                              # htop — interactive process viewer
+brew "osv-scanner"                       # osv-scanner — Google OSV vulnerability scanner (used by upkg)
 brew "upbound/tap/up"                    # up — Upbound CLI for Crossplane control planes
 brew "protobuf"                          # protobuf — Protocol Buffers compiler (protoc) & libs
 brew "istioctl"                          # istioctl — Istio service mesh CLI
@@ -106,6 +108,20 @@ brew "duf"                               # duf — disk usage / free utility TUI
 brew "eza"                               # eza — modern replacement for `ls`
 brew "langgraph-cli"                     # LangGraph CLI — build/run LangGraph LLM apps
 brew "tektoncd-cli"                      # tkn — Tekton Pipelines CLI
+brew "zipkin"                            # Zipkin — distributed tracing server (collect & visualize traces)
+
+# Neovim + the binaries its config expects. Config lives in the `nvim/` stow
+# package; language servers it drives from node are in config/node/package.json.
+brew "neovim"                            # Neovim — modal editor (config: nvim/.config/nvim)
+brew "tree-sitter-cli"                   # tree-sitter CLI — nvim-treesitter `main` compiles parsers with it
+#                                        (the `tree-sitter` formula is the library only, no CLI)
+brew "lua-language-server"               # lua_ls — LSP for the Neovim config itself
+brew "stylua"                            # StyLua — Lua formatter
+brew "shfmt"                             # shfmt — shell script formatter
+brew "shellcheck"                        # ShellCheck — shell linter (bash-language-server uses it)
+brew "taplo"                             # taplo — TOML language server & formatter
+brew "ruff"                              # ruff — Python linter/formatter + LSP
+
 cask "raycast"                           # Raycast — macOS launcher & productivity app
 cask "visual-studio-code"                # VS Code — editor
 cask "warp"                              # Warp — modern terminal

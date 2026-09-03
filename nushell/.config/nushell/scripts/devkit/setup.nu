@@ -15,7 +15,6 @@ export def "devkit setup" [] {
     print "  devkit setup check [--fix]                          run quality checks"
     print "  devkit setup test [-w]                              run tests"
     print "  devkit setup vault-setup                            init Vault secrets structure"
-    print "  devkit setup k8s-setup                              init k8s resources"
     print "  devkit setup all                                    full setup"
 }
 
@@ -130,6 +129,7 @@ export def "devkit setup build" [
     --app (-a): string # Build specific app
 ] {
     require-bin "cargo"
+    require-cargo-project
 
     if ($app | is-not-empty) {
         info $"Building ($app)..."
@@ -155,6 +155,7 @@ export def "devkit setup check" [
     --fix       # Auto-fix issues where possible
 ] {
     require-bin "cargo"
+    require-cargo-project
 
     info "Running quality checks..."
 
@@ -174,6 +175,7 @@ export def "devkit setup test" [
     --watch (-w)  # Watch mode
 ] {
     require-bin "cargo"
+    require-cargo-project
 
     if $watch {
         require-bin "cargo-watch"
@@ -208,31 +210,6 @@ export def "devkit setup vault-setup" [] {
         success "Vault secrets structure created!"
         warn "Remember to update placeholder values with real secrets"
     }
-}
-
-# Setup Kubernetes resources
-export def "devkit setup k8s-setup" [] {
-    require-bin "kubectl"
-    require-bin "helm"
-
-    info "Setting up Kubernetes resources..."
-
-    let ns = (resolve-config).namespaces.external_secrets
-
-    # Create namespace
-    #kubectl create namespace zerg --dry-run=client -o yaml | kubectl apply -f -
-
-    # Install External Secrets Operator
-    let eso_installed = (do { kubectl get deployment -n $ns external-secrets } | complete).exit_code == 0
-
-    if not $eso_installed {
-        info "Installing External Secrets Operator..."
-        helm repo add external-secrets https://charts.external-secrets.io
-        helm repo update
-        helm install external-secrets external-secrets/external-secrets -n $ns --create-namespace
-    }
-
-    success "Kubernetes resources configured!"
 }
 
 # Full setup

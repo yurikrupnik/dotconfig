@@ -1,0 +1,81 @@
+# devkit manager — role-gated dashboard for local kind clusters.
+# Placeholders ({{NAMESPACE}}, {{IMAGE}}) are substituted by `devkit manager up`.
+# The ServiceAccount is read-only; secret access is list-only metadata
+# (the server never returns secret values). Local-dev trust model only.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: "{{NAMESPACE}}"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: manager
+  namespace: "{{NAMESPACE}}"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: devkit-manager-read
+rules:
+  - apiGroups: [""]
+    resources: [nodes, namespaces, pods, services, events, secrets]
+    verbs: [get, list]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, list]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterroles, clusterrolebindings]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: devkit-manager-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: devkit-manager-read
+subjects:
+  - kind: ServiceAccount
+    name: manager
+    namespace: "{{NAMESPACE}}"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: manager
+  namespace: "{{NAMESPACE}}"
+  labels: { app: devkit-manager }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: devkit-manager }
+  template:
+    metadata:
+      labels: { app: devkit-manager }
+    spec:
+      serviceAccountName: manager
+      containers:
+        - name: manager
+          image: "{{IMAGE}}"
+          imagePullPolicy: Never # image is side-loaded via `kind load docker-image`
+          ports:
+            - containerPort: 8300
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8300 }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: manager
+  namespace: "{{NAMESPACE}}"
+spec:
+  selector: { app: devkit-manager }
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8300

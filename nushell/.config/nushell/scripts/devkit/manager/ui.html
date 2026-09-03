@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>devkit manager</title>
+<style>
+  :root {
+    --bg: #0f1117; --panel: #171a23; --border: #262b38; --text: #d5dae4;
+    --dim: #7c8494; --accent: #6ea8fe; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  header { display: flex; align-items: center; gap: 16px; padding: 14px 20px;
+           border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header h1 span { color: var(--accent); }
+  select { background: var(--panel); color: var(--text); border: 1px solid var(--border);
+           border-radius: 6px; padding: 5px 10px; font: inherit; }
+  #grants { color: var(--dim); font-size: 12px; }
+  #status { margin-left: auto; color: var(--dim); font-size: 12px; }
+  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+         gap: 14px; padding: 16px 20px; align-items: start; }
+  section { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+            padding: 14px 16px; overflow-x: auto; }
+  section h2 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase;
+               letter-spacing: .08em; color: var(--dim); }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 4px 10px 4px 0; vertical-align: top; }
+  th { color: var(--dim); font-weight: 500; border-bottom: 1px solid var(--border); }
+  .stats { display: flex; gap: 22px; flex-wrap: wrap; }
+  .stat b { display: block; font-size: 22px; }
+  .stat span { color: var(--dim); font-size: 12px; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .dim { color: var(--dim); }
+  .err { grid-column: 1 / -1; border-color: var(--bad); color: var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <h1>devkit <span>manager</span></h1>
+  <label>role <select id="role"></select></label>
+  <span id="grants"></span>
+  <span id="status"></span>
+</header>
+<main id="main"></main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function table(headers, rows) {
+  return `<table><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr>` +
+    rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("") + "</table>";
+}
+
+const RENDER = {
+  summary(d) {
+    const phases = Object.entries(d.pods.phases)
+      .map(([p, n]) => `${p}: ${n}`).join(" · ") || "none";
+    return `<div class="stats">
+      <div class="stat"><b class="${d.nodes.ready === d.nodes.total ? "ok" : "bad"}">${d.nodes.ready}/${d.nodes.total}</b><span>nodes ready</span></div>
+      <div class="stat"><b>${d.namespaces}</b><span>namespaces</span></div>
+      <div class="stat"><b>${d.pods.total}</b><span>pods</span></div>
+      <div class="stat"><b>${d.deployments}</b><span>deployments</span></div>
+    </div><p class="dim">${esc(phases)}</p>`;
+  },
+  nodes(d) {
+    return table(["node", "roles", "ready", "version", "os", "cpu", "mem", "taints"],
+      d.map((n) => [esc(n.name), esc(n.roles.join(",") || "worker"),
+        n.ready ? '<span class="ok">yes</span>' : '<span class="bad">NO</span>',
+        esc(n.version), esc(n.os), esc(n.cpu), esc(n.memory),
+        `<span class="dim">${esc(n.taints.join(" "))}</span>`]));
+  },
+  workloads(d) {
+    const deps = table(["namespace", "deployment", "ready", "images"],
+      d.deployments.map((x) => [esc(x.namespace), esc(x.name),
+        x.ready.split("/")[0] === x.ready.split("/")[1]
+          ? `<span class="ok">${x.ready}</span>` : `<span class="warn">${x.ready}</span>`,
+        `<span class="dim">${x.images.map(esc).join("<br>")}</span>`]));
+    const pods = table(["namespace", "pods"],
+      Object.entries(d.podsByNamespace).map(([ns, phases]) =>
+        [esc(ns), esc(Object.entries(phases).map(([p, n]) => `${p}: ${n}`).join(" · "))]));
+    return deps + "<h2 style='margin-top:14px'>pods by namespace</h2>" + pods;
+  },
+  events(d) {
+    if (!d.length) return '<p class="dim">no recent events</p>';
+    return table(["type", "reason", "object", "count", "message"],
+      d.map((e) => [e.type === "Warning" ? '<span class="warn">Warning</span>' : '<span class="dim">Normal</span>',
+        esc(e.reason), esc(`${e.namespace}/${e.object}`), e.count,
+        `<span class="dim">${esc(e.message)}</span>`]));
+  },
+  secrets(d) {
+    return table(["namespace", "secret", "type", "keys"],
+      d.map((s) => [esc(s.namespace), esc(s.name), `<span class="dim">${esc(s.type)}</span>`, s.keys]));
+  },
+  rbac(d) {
+    return `<p class="dim">${d.clusterRoles} cluster roles</p>` +
+      table(["binding", "role", "subjects"],
+        d.bindings.map((b) => [esc(b.name), esc(b.role),
+          `<span class="dim">${b.subjects.map(esc).join("<br>")}</span>`]));
+  },
+};
+
+let grants = {};
+
+async function refresh() {
+  const role = $("role").value;
+  localStorage.setItem("manager-role", role);
+  $("grants").textContent = `grants: ${(grants[role] ?? []).join(", ")}`;
+  $("status").textContent = "loading…";
+  const res = await fetch("/api/overview", { headers: { "x-manager-role": role } });
+  const data = await res.json();
+  const main = $("main");
+  main.innerHTML = "";
+  if (!res.ok) {
+    main.innerHTML = `<section class="err">${esc(data.error)}</section>`;
+    $("status").textContent = "";
+    return;
+  }
+  for (const [panel, payload] of Object.entries(data.panels)) {
+    const sec = document.createElement("section");
+    sec.innerHTML = `<h2>${panel}</h2>` + (RENDER[panel] ? RENDER[panel](payload) : esc(JSON.stringify(payload)));
+    main.appendChild(sec);
+  }
+  for (const err of data.errors ?? []) {
+    main.insertAdjacentHTML("beforeend", `<section class="err">${esc(err)}</section>`);
+  }
+  $("status").textContent = `updated ${new Date().toLocaleTimeString()}`;
+}
+
+async function init() {
+  const meta = await (await fetch("/api/roles")).json();
+  grants = meta.grants;
+  const saved = localStorage.getItem("manager-role");
+  $("role").innerHTML = meta.roles
+    .map((r) => `<option ${r === saved ? "selected" : ""}>${r}</option>`).join("");
+  $("role").onchange = refresh;
+  await refresh();
+  setInterval(refresh, 15000);
+}
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+{"properties":{"items":{"items":{"anyOf":[{"$ref":"io-upbound-dev-meta-v1alpha1-CompositionTest.schema.json"},{"$ref":"io-upbound-dev-meta-v1alpha1-E2ETest.schema.json"},{"$ref":"io-upbound-dev-meta-v1alpha1-OperationTest.schema.json"}]},"type":"array","description":"Items is an array of test definitions."}}}

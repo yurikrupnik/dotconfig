@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>fleet</title>
+<style>
+  :root {
+    --bg: #0f1117; --panel: #171a23; --border: #262b38; --text: #d5dae4;
+    --dim: #7c8494; --accent: #6ea8fe; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  header { display: flex; align-items: center; gap: 14px; padding: 12px 16px;
+           border-bottom: 1px solid var(--border); position: sticky; top: 0;
+           background: var(--bg); z-index: 1; flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header h1 span { color: var(--accent); }
+  #counts { color: var(--dim); font-size: 12px; display: flex; gap: 12px; }
+  #status { margin-left: auto; color: var(--dim); font-size: 12px; }
+  main { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+         gap: 12px; padding: 14px 16px; align-items: start; }
+  @media (max-width: 480px) {
+    header { padding: 10px 12px; }
+    main { padding: 10px 12px; gap: 10px; }
+  }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+          padding: 12px 14px; }
+  .card.offline { opacity: .55; }
+  .head { display: flex; align-items: baseline; gap: 8px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; align-self: center; }
+  .dot.online { background: var(--ok); } .dot.stale { background: var(--warn); }
+  .dot.offline { background: var(--bad); }
+  .name { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; }
+  .meta { margin-left: auto; color: var(--dim); font-size: 11px; white-space: nowrap; }
+  .sub { color: var(--dim); font-size: 11px; margin: 2px 0 8px; }
+  .bar { display: grid; grid-template-columns: 42px 1fr 64px; gap: 8px;
+         align-items: center; font-size: 12px; margin: 4px 0; }
+  .bar .label { color: var(--dim); }
+  .bar .track { display: block; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+  .bar .fill { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+  .bar .fill.warn { background: var(--warn); } .bar .fill.bad { background: var(--bad); }
+  .bar .val { text-align: right; color: var(--dim); font-variant-numeric: tabular-nums;
+              white-space: nowrap; }
+  .facts { display: flex; gap: 14px; flex-wrap: wrap; color: var(--dim);
+           font-size: 11px; margin-top: 8px; }
+  .facts b { color: var(--text); font-weight: 500; }
+  svg.spark { display: block; width: 100%; height: 34px; margin-top: 8px; }
+  svg.spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+  svg.spark .area { fill: color-mix(in srgb, var(--accent) 14%, transparent); stroke: none; }
+  .err { grid-column: 1 / -1; background: var(--panel); border: 1px solid var(--bad);
+         border-radius: 10px; padding: 12px 14px; color: var(--bad); }
+  .empty { grid-column: 1 / -1; color: var(--dim); padding: 24px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>devkit <span>fleet</span></h1>
+  <span id="counts"></span>
+  <span id="status"></span>
+</header>
+<main id="main"></main>
+<script>
+"use strict";
+const $main = document.getElementById("main");
+const $counts = document.getElementById("counts");
+const $status = document.getElementById("status");
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function fmtBytes(n) {
+  if (n == null) return "–";
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return n.toFixed(n >= 100 || i === 0 ? 0 : 1) + " " + units[i];
+}
+
+function fmtAgo(ts) {
+  const s = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (s < 60) return s + "s ago";
+  if (s < 3600) return Math.floor(s / 60) + "m ago";
+  if (s < 86400) return Math.floor(s / 3600) + "h ago";
+  return Math.floor(s / 86400) + "d ago";
+}
+
+function fmtUptime(s) {
+  if (s == null) return "–";
+  if (s < 3600) return Math.floor(s / 60) + "m";
+  if (s < 86400) return Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m";
+  return Math.floor(s / 86400) + "d " + Math.floor((s % 86400) / 3600) + "h";
+}
+
+function bar(label, pct, valueText) {
+  if (pct == null) return "";
+  const cls = pct >= 90 ? "bad" : pct >= 75 ? "warn" : "";
+  return `<div class="bar"><span class="label">${label}</span>
+    <span class="track"><span class="fill ${cls}" style="width:${Math.min(100, pct).toFixed(1)}%"></span></span>
+    <span class="val">${valueText}</span></div>`;
+}
+
+// Sparkline of the machine's key series (cpu % / probe latency) over the last hour.
+function spark(values) {
+  const pts = values.map((v, i) => [i, v]).filter(([, v]) => v != null);
+  if (pts.length < 2) return "";
+  const max = Math.max(...pts.map(([, v]) => v), 1);
+  const W = 100, H = 30;
+  const xy = pts.map(([i, v]) =>
+    `${(i / (values.length - 1) * W).toFixed(1)},${(H - v / max * (H - 2)).toFixed(1)}`);
+  const first = xy[0].split(",")[0], last = xy[xy.length - 1].split(",")[0];
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <polygon class="area" points="${first},${H} ${xy.join(" ")} ${last},${H}"/>
+    <polyline points="${xy.join(" ")}"/></svg>`;
+}
+
+function agentCard(m) {
+  const l = m.latest ?? {};
+  const memPct = l.mem_used != null && m.mem_total ? l.mem_used / m.mem_total * 100 : null;
+  const diskPct = l.disk_used != null && l.disk_total ? l.disk_used / l.disk_total * 100 : null;
+  const facts = [
+    l.load1 != null ? `load <b>${l.load1.toFixed(2)}</b>` : "",
+    l.uptime != null ? `up <b>${fmtUptime(l.uptime)}</b>` : "",
+    l.battery != null ? `batt <b>${Math.round(l.battery)}%</b>` : "",
+    m.cpus != null ? `<b>${m.cpus}</b> cpu` : "",
+  ].filter(Boolean).join(" · ");
+  return `
+    ${bar("cpu", l.cpu, l.cpu != null ? l.cpu.toFixed(0) + "%" : "–")}
+    ${bar("mem", memPct, fmtBytes(l.mem_used))}
+    ${bar("disk", diskPct, diskPct != null ? diskPct.toFixed(0) + "%" : "–")}
+    <div class="facts">${facts}</div>
+    ${spark(m.spark)}`;
+}
+
+function probeCard(m) {
+  const l = m.latest ?? {};
+  const latency = l.online === 1 && l.latency_ms != null
+    ? `<b>${l.latency_ms.toFixed(1)} ms</b>` : "<b>unreachable</b>";
+  return `<div class="facts">latency ${latency}</div>${spark(m.spark)}`;
+}
+
+function render(fleet) {
+  const ms = fleet.machines;
+  if (ms.length === 0) {
+    $main.innerHTML = `<div class="empty">no machines yet — start an agent
+      (devkit fleet agent) or configure [[fleet.probes]]</div>`;
+    return;
+  }
+  const by = (s) => ms.filter((m) => m.status === s).length;
+  $counts.innerHTML =
+    `<span style="color:var(--ok)">● ${by("online")}</span>` +
+    `<span style="color:var(--warn)">● ${by("stale")}</span>` +
+    `<span style="color:var(--bad)">● ${by("offline")}</span>`;
+  $main.innerHTML = ms.map((m) => `
+    <div class="card ${m.status}">
+      <div class="head">
+        <span class="dot ${m.status}"></span>
+        <span class="name">${esc(m.hostname)}</span>
+        <span class="meta">${fmtAgo(m.last_seen)}</span>
+      </div>
+      <div class="sub">${esc(m.kind === "probe" ? m.platform : [m.platform, m.arch].filter(Boolean).join("/"))}</div>
+      ${m.kind === "probe" ? probeCard(m) : agentCard(m)}
+    </div>`).join("");
+}
+
+async function refresh() {
+  try {
+    const res = await fetch("/api/fleet");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    render(await res.json());
+    $status.textContent = "updated " + new Date().toLocaleTimeString();
+  } catch (err) {
+    $main.innerHTML = `<div class="err">hub unreachable: ${esc(err.message)}</div>`;
+    $status.textContent = "error";
+  }
+}
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

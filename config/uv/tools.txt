@@ -6,6 +6,6 @@
 # after `# …` on a tool line is treated as a comment.
 #
 # Installed by `just uv-install` (also wired into ./install.sh).
-# Refreshed by `u`/`up` via `uv tool upgrade --all`.
+# Refreshed by `u`/`update` via `uv tool upgrade --all`.
 
 s-tui   # s-tui — terminal CPU stress test & monitor

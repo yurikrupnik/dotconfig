@@ -17,11 +17,12 @@ const REPO_NAME = $REPO_DIR | path basename
 
 # Hand-written stow packages that live at the top of the repo (not under output/).
 # output/ is for generator output only; anything you hand-edit goes here.
-const HAND_WRITTEN_PACKAGES = ["zellij", "zed", "starship", "zsh", "nushell", "pnpm", "bun"]
+const HAND_WRITTEN_PACKAGES = ["zellij", "zed", "starship", "zsh", "nushell", "pnpm", "bun", "nvim"]
 
-# Wrap a string as a zsh single-quoted literal. Closes-and-reopens to embed `'`:
-# `it's me` → `'it'\''s me'`. Safe for any value, including shell metacharacters.
-def zsh_q [s: string]: nothing -> string {
+# Wrap a string as a POSIX single-quoted literal (valid in zsh and bash).
+# Closes-and-reopens to embed `'`: `it's me` → `'it'\''s me'`. Safe for any
+# value, including shell metacharacters.
+def sh_q [s: string]: nothing -> string {
     let escaped = $s | str replace -a "'" "'\\''"
     $"'($escaped)'"
 }
@@ -61,7 +62,7 @@ def zsh_env [key: string, val: any]: nothing -> string {
         }
         $"\"($s)\""
     } else {
-        zsh_q $s
+        sh_q $s
     }
 }
 
@@ -112,7 +113,7 @@ def generate_zsh [config: record, output_dir: string] {
             if ($entry.value | str contains "'") {
                 error make { msg: $"alias '($entry.key)' contains a single quote. Shell aliases are textual substitution — even properly escaped, the body re-parses at call time and fails. Move it to [functions.($entry.key)] in config.toml; the generated bash script handles embedded quotes correctly." }
             }
-            $content = $content + $"alias ($entry.key)=(zsh_q $entry.value)\n"
+            $content = $content + $"alias ($entry.key)=(sh_q $entry.value)\n"
         }
         $content = $content + "\n"
     }
@@ -131,6 +132,8 @@ def generate_zsh [config: record, output_dir: string] {
 }
 
 # nushell: aliases + env only. Alias values containing bash syntax ($(…), &&) become def blocks.
+# Aliases targeting a [functions.*] bin script are emitted with a `^` prefix so they
+# call the external script even when its name shadows a nu builtin (e.g. `update`).
 def generate_nushell [config: record, output_dir: string] {
     reset_dir $output_dir
     let output_file = $output_dir | path join "generated.nu"
@@ -146,6 +149,8 @@ def generate_nushell [config: record, output_dir: string] {
             }
             let has_subshell = $val | str contains '$('
             let has_andand = $val | str contains '&&'
+            let fn_names = if "functions" in $config { $config.functions | columns } else { [] }
+            let first_word = $val | split row " " | first
 
             if $has_subshell or $has_andand {
                 $content = $content + $"export def ($entry.key) [] {\n"
@@ -157,6 +162,8 @@ def generate_nushell [config: record, output_dir: string] {
                     $content = $content + $"    ^($cmd)\n"
                 }
                 $content = $content + "}\n"
+            } else if $first_word in $fn_names {
+                $content = $content + $"export alias ($entry.key) = ^($val)\n"
             } else {
                 $content = $content + $"export alias ($entry.key) = ($val)\n"
             }
@@ -176,8 +183,56 @@ def generate_nushell [config: record, output_dir: string] {
     log info $"Generated nushell config: ($output_file)"
 }
 
+# Preamble for `on_error = "continue"` scripts: a `step` runner that executes a
+# command, records it on failure, and keeps going.
+# NOTE: a raw string may not open with `#` (`r#'#…` mis-lexes), hence the
+# leading newlines and the comment line built as a normal string.
+def step_runner [total: int]: nothing -> string {
+    let body = r#'
+STEP_BLUE='\033[1;34m'
+STEP_RED='\033[0;31m'
+STEP_NC='\033[0m'
+step_no=0
+failed_steps=()
+
+step() {
+    step_no=$((step_no + 1))
+    printf "\n${STEP_BLUE}==> [%d/%d]${STEP_NC} %s\n" "$step_no" "$total_steps" "$1"
+    # Capture on the || side: `fi` would reset $? to 0 before we could read it.
+    local status=0
+    eval "$1" || status=$?
+    if ((status == 0)); then
+        return 0
+    fi
+    printf "${STEP_RED}✗ step %d/%d failed (exit %d)${STEP_NC}: %s\n" "$step_no" "$total_steps" "$status" "$1" >&2
+    failed_steps+=("$1")
+}
+
+'#
+    let head = "# on_error = \"continue\": every command runs even if an earlier one fails.\n"
+    $"($head)total_steps=($total)($body)"
+}
+
+# Epilogue for `on_error = "continue"` scripts: re-report the failures so they
+# aren't buried thousands of lines up, and exit non-zero.
+const STEP_SUMMARY = r#'
+if ((${#failed_steps[@]} > 0)); then
+    printf "\n${STEP_RED}%d of %d steps failed:${STEP_NC}\n" "${#failed_steps[@]}" "$total_steps" >&2
+    for cmd in "${failed_steps[@]}"; do
+        printf "  %s\n" "$cmd" >&2
+    done
+    exit 1
+fi
+'#
+
 # Emit one bash script per [functions.*] under output/bin/.local/bin/<name>.
 # These end up on PATH via stow and are callable from every shell.
+#
+# Default is `set -e`: the first failing command aborts the script. A function
+# may set `on_error = "continue"` (see [functions.update]) to run every command
+# and fail at the end instead — what a machine refresher wants, since one flaky
+# upstream (rustup self-update, an expired gcloud token) otherwise skips every
+# remaining step.
 def generate_bin_scripts [config: record, output_dir: string] {
     if not ("functions" in $config) {
         return
@@ -189,22 +244,43 @@ def generate_bin_scripts [config: record, output_dir: string] {
         let name = $entry.key
         let func = $entry.value
         let script_path = $output_dir | path join $name
+        let commands = if "commands" in $func {
+            $func.commands
+        } else if "command" in $func {
+            [$func.command]
+        } else {
+            []
+        }
+        let on_error = $func | get -o on_error | default "abort"
+        if $on_error not-in ["abort", "continue"] {
+            error make { msg: $"functions.($name): on_error = '($on_error)' is not supported; use \"abort\" \(the default) or \"continue\"." }
+        }
 
         mut content = "#!/usr/bin/env bash\n"
         $content = $content + "# Generated from config.toml — do not edit by hand.\n"
-        $content = $content + "set -euo pipefail\n"
+        if $on_error == "continue" {
+            # Must precede the first command to apply file-wide: step bodies are
+            # single-quoted on purpose, `eval` expands them at step time.
+            $content = $content + "# shellcheck disable=SC2016\n"
+        }
+        # errexit is pointless under `continue`; the step runner owns failures.
+        $content = $content + (if $on_error == "continue" { "set -uo pipefail\n" } else { "set -euo pipefail\n" })
         $content = $content + $"DOTCONFIG_DIR=\"${DOTCONFIG_DIR:-$HOME/($REPO_NAME)}\"\n"
         if "description" in $func {
             $content = $content + $"# ($func.description)\n"
         }
         $content = $content + "\n"
 
-        if "commands" in $func {
-            for cmd in $func.commands {
+        if $on_error == "continue" {
+            $content = $content + (step_runner ($commands | length))
+            for cmd in $commands {
+                $content = $content + $"step (sh_q $cmd)\n"
+            }
+            $content = $content + $STEP_SUMMARY
+        } else {
+            for cmd in $commands {
                 $content = $content + $"($cmd)\n"
             }
-        } else if "command" in $func {
-            $content = $content + $"($func.command)\n"
         }
 
         $content | save -f $script_path

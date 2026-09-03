@@ -7,29 +7,35 @@ shells := "nu scripts/nu/setup-local-machine/shells.nu"
 
 default:
     @just --list
+    devkit
 
+devkit:
+    devkit
+
+up:
+    devkit up --istio --core --gitops --observability --flux
 # Fresh-machine bootstrap (brew, rust, cargo-liner, shells, stow)
 install:
     ./install.sh
 
 # Generate shell configs and bin/ scripts from config/
 generate:
-    {{shells}} generate
+    {{ shells }} generate
 
 # Symlink generated configs into $HOME (via GNU stow)
 stow:
-    {{shells}} stow
+    {{ shells }} stow
 
 # Remove symlinked configs from $HOME
 unstow:
-    {{shells}} unstow
+    {{ shells }} unstow
 
 # Generate + stow in one step
 regen: generate stow
 
 # Show what stow would do without making changes
 stow-dry:
-    {{shells}} stow --dry-run
+    {{ shells }} stow --dry-run
 
 # Preview Brewfile install: counts + which taps need trust (read-only)
 brew-preflight:
@@ -51,7 +57,7 @@ cargo-install:
         echo "==> Installing cargo-liner..."
         cargo binstall cargo-liner --no-confirm
     fi
-    liner_src="{{justfile_directory()}}/config/cargo/liner.toml"
+    liner_src="{{ justfile_directory() }}/config/cargo/liner.toml"
     liner_dest="${CARGO_HOME:-$HOME/.cargo}/liner.toml"
     if [ ! -L "$liner_dest" ] || [ "$(readlink "$liner_dest")" != "$liner_src" ]; then
         echo "==> Linking cargo-liner config: $liner_dest -> $liner_src"

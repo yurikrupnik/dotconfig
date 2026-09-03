@@ -13,14 +13,14 @@ Declarative source of truth for shell **aliases**, **environment variables**, an
 Use `[functions.X]` when **all** of these are true:
 
 - It's a sequence of commands run in order
-- No flags, no branches, no loops, no error handling beyond "abort on first failure"
+- No flags, no branches, no loops, and no error handling beyond the two modes below (`on_error`)
 - 1–15 lines
 - Bash is enough
 
 In other words: when you can express the whole thing as a list of one-line strings.
 
 ```toml
-[functions.up]
+[functions.update]
 description = "Refresh installed packages on this machine"
 commands = [
     "brew update",
@@ -31,7 +31,7 @@ commands = [
 ]
 ```
 
-This is emitted as `~/.local/bin/up`:
+This is emitted as `~/.local/bin/update`:
 
 ```bash
 #!/usr/bin/env bash
@@ -48,6 +48,29 @@ bun update --global --latest
 Commands that have a justfile recipe (`brew bundle`, `cargo liner ship`) are routed through `just -f …` to keep the source of truth single. See `config/shell/config.toml` for the full live pipeline.
 
 Every shell finds it on `PATH`, regardless of which shell you're typing into.
+
+## Failure handling (`on_error`)
+
+| `on_error` | Emitted script | Use for |
+|---|---|---|
+| `"abort"` (default) | `set -euo pipefail`, bare commands | Short sequences where a failed step makes the rest meaningless (`csort`) |
+| `"continue"` | `set -uo pipefail` + a `step` runner | Long best-effort pipelines where one flaky upstream must not skip the rest (`update`) |
+
+`"continue"` wraps every command in `step '<command>'`, which prints a `==> [n/total]`
+banner, `eval`s the command, and on failure records it and moves on. At the end the
+script re-prints every failed step and exits 1:
+
+```
+==> [5/14] rustup self update
+✗ step 5/14 failed (exit 1): rustup self update
+…
+1 of 14 steps failed:
+  rustup self update
+```
+
+This exists because `update` is a machine refresher: before it, a transient
+`rustup self update` failure aborted the script and silently skipped the cargo,
+bun, node, uv, gcloud, and regen steps.
 
 ## When **not** to put a function here
 
@@ -81,4 +104,4 @@ Bare names — like `update`, `sort`, `generate` — collide with **nushell buil
 just regen        # regenerate output/ + restow
 ```
 
-Or just `up` (the daily refresher) which calls `shells.nu generate` and `stow` at the end.
+Or just `u` (the daily refresher, `~/.local/bin/update`) which calls `shells.nu generate` and `stow` at the end.

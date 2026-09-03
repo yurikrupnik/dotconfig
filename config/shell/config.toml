@@ -4,7 +4,7 @@ k = "kubectl"
 #alias kx=kubectx
 ls = 'eza --no-permissions --no-user --no-time'
 lsl = 'eza --no-permissions --no-user --no-time --long'
-u = 'up'
+u = 'update'
 cat = 'bat --paging never --style plain'
 #alias fzfp='fzf --preview="bat --style numbers --color=always {}"'
 #alias d=docker
@@ -29,6 +29,11 @@ ga = "git add"
 g = "gcloud"
 gal = "gcloud auth login"
 
+# Neovim. Config lives in the `nvim/` stow package; `vt` is the drill runner
+# referenced by nvim/.config/nvim/docs/learning-plan.md.
+v = "nvim"
+vt = "nvim +Tutor"
+
 # Starter pack — uncomment to try, drop the ones you dislike
 #find = 'fd'                          # fd — flag syntax differs from BSD find
 #grep = 'rg'                          # ripgrep — flag syntax differs from grep
@@ -52,17 +57,33 @@ gal = "gcloud auth login"
 #]
 #args = ["namespace"]
 
-[functions.up]
+# `update` shadows a nushell builtin, so nu users go through `u` (emitted as
+# `^update` by the generator) or type `^update`. zsh/bash are unaffected.
+# Not named `up` — that would shadow the Upbound CLI from brew "upbound/tap/up".
+[functions.update]
 description = "Refresh installed packages on this machine"
+# A machine refresher must not stop at the first flaky upstream: with plain
+# `set -e`, a failed `rustup self update` skipped cargo/node/uv/gcloud/regen.
+# "continue" runs every step and exits 1 with a list of what failed.
+on_error = "continue"
 commands = [
     "brew update",
     "just -f $DOTCONFIG_DIR/justfile brew-install",
     "brew upgrade",
     "brew cleanup",
-    "rustup update",
+    # Self-update is its own step: `rustup update` bundles it, and its
+    # exec-the-new-binary replace step fails intermittently on macOS — which
+    # must not cost us the toolchain refresh.
+    "rustup self update",
+    "rustup update --no-self-update",
+    # rust-analyzer is a rustup component (used by nvim's rustaceanvim), not a
+    # brew package; `rustup update` alone never installs it.
+    "rustup component add rust-analyzer",
     "just -f $DOTCONFIG_DIR/justfile cargo-install",
-    "just -f $DOTCONFIG_DIR/justfile node-install",
+    # Order matters: `--latest` ignores the ranges in config/node/package.json,
+    # so node-install runs afterwards to restore pinned versions (typescript@6.*).
     "bun update --global --latest",
+    "just -f $DOTCONFIG_DIR/justfile node-install",
     "just -f $DOTCONFIG_DIR/justfile uv-install",
     "uv tool upgrade --all",
     "gcloud components update --quiet",
@@ -93,7 +114,14 @@ TYPE = "be" # fe, devops, data, cli, operator, ci - tekton
 LANG = "en_US.UTF-8"
 XDG_CONFIG_HOME = "$HOME/.config"
 
-# Homebrew behavior: `up` handles updates and cleanup explicitly, so suppress
+# Proxy exclusions. The sfw-wrapped package managers above set HTTP(S)_PROXY for
+# child processes; loopback and the RFC 6761-reserved .test TLD (used by tests as
+# a guaranteed-unresolvable host) must bypass the proxy. Both cases are honored
+# by curl/reqwest/node; set both spellings — tools disagree on which they read.
+NO_PROXY = "localhost,127.0.0.1,::1,.test"
+no_proxy = "localhost,127.0.0.1,::1,.test"
+
+# Homebrew behavior: `update` handles updates and cleanup explicitly, so suppress
 # brew's implicit auto-update and post-install cleanup for predictable runs.
 # HOMEBREW_BUNDLE_FILE lets bare `brew bundle` work from any directory.
 HOMEBREW_NO_AUTO_UPDATE = "1"

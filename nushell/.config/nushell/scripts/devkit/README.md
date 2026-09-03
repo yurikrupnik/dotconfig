@@ -35,11 +35,42 @@ devkit cluster create -n dev -w 2
 | Group | Commands |
 |-------|----------|
 | lifecycle | `devkit up` — single generator; extras opt-in: `--istio --core --gitops --observability --flux` (ingress always on). `devkit down [--keep-cluster]`, `devkit status` |
-| `cluster` | `create`, `delete`, `list`, `status`, `setup` (`--dbs`/`--istio`/`--flux`), `migrate`, `gitops`, `observability` |
+| `cluster` | `create`, `delete`, `list`, `status`, `setup` (`--dbs`/`--istio`/`--flux`/`--external-secrets`), `deps` (install `[[deps]]` helm charts/manifests from devkit.toml), `migrate`, `gitops`, `observability` |
 | `dev` | `up`, `down`, `logs`, `ps`, `restart`, `prune`, `kompose`, `reset` |
+| `manager` | `up` (build image → `kind load` → deploy), `open` (port-forward + browser), `status`, `down` |
+| `fleet` | `hub` (run the fleet hub), `agent` (report this machine; `--once` for cron/smoke), `status`, `open` |
 | `secrets` | `fetch`, `vault`, `load`, `list`, `verify` |
-| `setup` | `install`, `build`, `check`, `test`, `vault-setup`, `k8s-setup`, `all` |
+| `setup` | `install`, `build`, `check`, `test`, `vault-setup`, `all` |
 | config | `devkit config` (expanded view), `devkit config --data` (raw record for piping), `devkit config --path`, `devkit config init` |
+
+### `devkit manager` — role-gated dashboard
+
+A zero-dependency Bun app deployed *into* the Kind cluster (`devkit manager up`,
+then `devkit manager open` → http://localhost:8300). It shows cluster info scoped
+by a security enum defined once in [`manager/roles.ts`](manager/roles.ts):
+
+| Role | Panels |
+|------|--------|
+| `admin` | summary, workloads, events, nodes, secrets (metadata only), rbac |
+| `operator` | summary, workloads, events, nodes |
+| `developer` | summary, workloads, events |
+| `viewer` | summary |
+
+The server enforces grants — a role never receives panels outside its set, and
+secret *values* are never surfaced. Trust model is local-dev only: the role is
+picked in the UI (no authentication); do not expose beyond a local kind cluster.
+
+### `devkit fleet` — self-hosted machine fleet
+
+A zero-dependency Bun app ([`fleet/`](fleet/)) for observing every machine on
+your network from one place — desktop, phone, or tablet (the UI is
+responsive-first). One always-on machine runs `devkit fleet hub`; every
+machine that can run Bun reports with `devkit fleet agent` (push, so sleeping
+laptops go *stale* instead of failing scrapes); devices that can't host an
+agent — phones, tablets, printers — are probed by the hub itself
+(`[[fleet.probes]]`: TCP connect or ICMP ping). History lives in SQLite
+(`fleet.db`, retention-swept). Trust model: LAN only — set `fleet.token` to
+gate reports; reads are open.
 
 Cluster/ops commands need the relevant CLIs installed: `kind`, `kubectl`, `tilt`,
 `kcl`, `kompose`, `istioctl`, `vals`, `docker`.
@@ -61,6 +92,10 @@ config.nu      DEFAULTS + devkit.toml discovery/merge
 common.nu      output/log helpers, cluster connectivity
 cluster.nu     Kind cluster lifecycle + k8s deploys
 local-dev.nu   docker compose wrappers
+manager.nu     role-gated dashboard: build/load/deploy into Kind
+manager/       bundled dashboard app (Bun server, UI, Dockerfile, manifests)
+fleet.nu       machine fleet: hub / agent / status / open
+fleet/         bundled fleet app (Bun hub, agent, responsive UI)
 secrets.nu     vals-based secret fetch/verify
 setup.nu       toolchain install, build, check, test
 devkit.toml.example   reference config

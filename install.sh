@@ -74,6 +74,9 @@ log_info "Installing packages from Brewfile..."
 if command -v rustup &> /dev/null; then
     log_info "Updating Rust toolchain..."
     rustup update
+    # rust-analyzer is a rustup component, not a brew package. Without this the
+    # ~/.cargo/bin/rust-analyzer shim exists but fails with "Unknown binary".
+    rustup component add rust-analyzer || log_warn "Failed to add rust-analyzer component"
 else
     log_error "Rust not found after brew install. Please check Brewfile"
     exit 1

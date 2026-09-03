@@ -25,8 +25,42 @@ export const DEFAULTS = {
         ingress: true          # expose ports 80/443
         # OCI url WITHOUT a tag; kcl resolves the version via --tag (kcl_tag below).
         kcl_package: "oci://docker.io/yurikrupnik/cluster"
-        kcl_tag: "0.0.6"
+        # 0.1.3 is the first version that understands oidc_bucket/oidc_id. On
+        # 0.0.6 those -D args are silently discarded -- KCL does not error on
+        # unknown top-level arguments -- so the cluster comes up with the
+        # default service-account-issuer and Workload Identity Federation is
+        # impossible. Output is byte-identical to 0.0.6 when the oidc args are
+        # absent, so this bump is a no-op for existing setups.
+        kcl_tag: "0.1.3"
+        # Extra top-level arguments passed to `kcl run` as `-D key=value`.
+        # name/workers/db_workers/ingress are supplied by the engine and win.
+        # Empty values are omitted, so a key can be declared here and left unset.
+        #
+        # Both oidc keys must be non-empty to get a WIF-capable cluster: they
+        # set apiServer service-account-issuer to
+        # https://storage.googleapis.com/<oidc_bucket>/<oidc_id>. Setting them
+        # is necessary but not sufficient -- that URL must also serve
+        # .well-known/openid-configuration and the JWKS, and the issuer can only
+        # be chosen at create time, never patched onto a running cluster.
+        kcl_args: {
+            oidc_bucket: ""    # GCS bucket hosting the OIDC discovery documents
+            oidc_id: ""        # OIDC provider id / issuer path prefix
+        }
     }
+
+    # Cluster dependencies installed by `devkit cluster deps` (and `devkit up`)
+    # once the cluster is reachable. Each row is either a helm chart:
+    #   { name, repo, chart?, version?, namespace?, timeout?, values?, set?, wave? }
+    #   chart defaults to name; namespace to "default"; timeout to "10m".
+    #   Omit repo to treat chart as a full reference (e.g. oci://...).
+    #   values: a values file path or list of paths (helm -f, later files win),
+    #   resolved against $PWD then the devkit.toml directory.
+    #   set: a key=value string or list (helm --set, wins over values files).
+    # or a raw manifest applied with kubectl --server-side:
+    #   { name, manifest, wave? }   — a URL or repo-relative path.
+    # Same-wave deps (default 0) install in parallel; waves run in ascending
+    # order, each starting only after the previous wave fully succeeded.
+    deps: []
 
     # Kubernetes namespaces the lifecycle touches
     namespaces: {
@@ -68,15 +102,21 @@ export const DEFAULTS = {
         output: ".env"
     }
 
-    # External-secrets / GCP
+    # External-secrets: `devkit up` / `devkit cluster setup --external-secrets`
+    # installs the operator (unless a [[deps]] row named "external-secrets" owns
+    # it), creates the credentials secret, and applies a ClusterSecretStore.
     external_secrets: {
         gcp_credentials: "~/dotconfig/tmp/secret-puller.json"
         secret_name: "gcp-sm-credentials"
+        store_name: "gcp-secret-manager"   # ClusterSecretStore name apps reference
+        project_id: ""                     # GCP project; empty = project_id from the creds JSON
+        chart_version: ""                  # ESO chart version; empty = latest
     }
 
     # Flux GitOps bootstrap
     flux: {
         owner: ""              # GitHub user/org; empty = derive from `gh api user`
+        gh_user: ""            # gh account for the bootstrap token (multi-account); empty = active account
         repository: "gitops"
         branch: "main"
         path: "clusters/local"
@@ -91,6 +131,28 @@ export const DEFAULTS = {
         { label: "Postgres", url: "localhost:5433" }
         { label: "Redis",    url: "localhost:6379" }
     ]
+
+    # Manager dashboard (devkit manager). Roles live in manager/roles.ts.
+    manager: {
+        namespace: "devkit-manager"
+        image: "devkit-manager"
+        tag: "dev"
+        port: 8300
+    }
+
+    # Fleet manager (devkit fleet): one hub, push agents, agentless probes.
+    fleet: {
+        port: 9300                        # hub listen port
+        hub: "http://localhost:9300"      # hub URL used by agent/status/open
+        token: ""                         # bearer token gating reports ("" = open)
+        db: "~/.local/share/devkit/fleet.db"
+        interval: 10                      # agent report cadence (seconds)
+        probe_interval: 30                # hub probe cadence (seconds)
+        retention_hours: 48               # sample history retention
+        stale_after: 60                   # seconds without a report -> stale
+        offline_after: 300                # seconds without a report -> offline
+        probes: []                        # agentless devices: [{ name, host, port? }]
+    }
 
     # Whether `up` should start Tilt at the end
     tilt: { enabled: true }

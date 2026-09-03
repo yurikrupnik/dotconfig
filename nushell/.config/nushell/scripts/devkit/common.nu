@@ -32,6 +32,19 @@ export def require-bin [cmd: string] {
     }
 }
 
+# Require the cwd to be inside a Cargo project/workspace (walks up like cargo does)
+export def require-cargo-project [] {
+    mut dir = ($env.PWD | path expand)
+    loop {
+        if (($dir | path join "Cargo.toml") | path exists) { return }
+        let parent = ($dir | path dirname)
+        if $parent == $dir { break }
+        $dir = $parent
+    }
+    error $"Not a Rust project: no Cargo.toml found from ($env.PWD) upward. `devkit setup build/check/test` operate on Cargo workspaces — cd into one first."
+    exit 1
+}
+
 # Get the monorepo root directory
 export def repo-root []: nothing -> string {
     let git_root = (do { git rev-parse --show-toplevel } | complete)

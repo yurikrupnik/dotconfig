@@ -20,7 +20,8 @@ export def "devkit cluster" [] {
     print "  devkit cluster delete [NAME]                         delete a cluster"
     print "  devkit cluster list                                  list Kind clusters"
     print "  devkit cluster status [-n NAME]                      context + node status"
-    print "  devkit cluster setup [--dbs --istio --flux]          post-create infra setup"
+    print "  devkit cluster setup [--dbs --istio --flux --external-secrets]  post-create infra setup"
+    print "  devkit cluster deps                                  install [[deps]] from devkit.toml"
     print "  devkit cluster migrate [-p PORT -u USER ...]         run DB migrations"
     print "  devkit cluster gitops [-e TARGET] [--dry-run]        apply GitOps overlay"
     print "  devkit cluster observability [-e TARGET] [--dry-run] deploy observability stack"
@@ -45,9 +46,22 @@ export def "devkit cluster create" [
     let ingress = ($ingress or $cfg.cluster.ingress)
     let kcl_package = $cfg.cluster.kcl_package
     let kcl_tag = $cfg.cluster.kcl_tag
+    # Extra KCL top-level arguments from config (cluster.kcl_args), e.g. oidc_bucket.
+    # Flag-driven values below win; empty values are omitted entirely.
+    let kcl_args = (
+        ($cfg.cluster.kcl_args? | default {})
+        | merge { name: $name, workers: $workers, db_workers: $db_workers, ingress: $ingress }
+        | transpose key value
+        | where {|r| ($r.value | describe) != "nothing" and ($r.value | into string | is-not-empty) }
+        | each {|r| ["-D" $"($r.key)=($r.value)"] }
+        | flatten
+    )
 
     if (cluster-exists $name) {
         info $"Kind cluster '($name)' already exists - skipping creation"
+        # Still ensure kubeconfig has the context and it is current, so
+        # follow-up commands (deps, setup) target this cluster.
+        kind export kubeconfig --name $name
         return
     }
 
@@ -56,15 +70,18 @@ export def "devkit cluster create" [
     # Generate cluster config using KCL
     let tmp = (tmpfile $"kind-config-($name)")
 
-    let config = (kcl run $kcl_package --tag $kcl_tag -D workers=($workers) -D db_workers=($db_workers) -D ingress=($ingress) -D name=($name) | lines | skip while {|l| not (($l | str starts-with "kind:") or ($l | str starts-with "apiVersion:"))} | str join "\n" | from yaml)
+    let config = (kcl run $kcl_package --tag $kcl_tag ...$kcl_args | lines | skip while {|l| not (($l | str starts-with "kind:") or ($l | str starts-with "apiVersion:"))} | str join "\n" | from yaml)
     $config | to yaml | save -f $tmp --force
 
+    # Capture kind's status before anything else runs: `rm` below would
+    # otherwise overwrite $env.LAST_EXIT_CODE and the check would always pass.
     kind create cluster --name $name --config $tmp
+    let create_status = ($env.LAST_EXIT_CODE? | default 0)
 
     rm -f $tmp
 
-    if $env.LAST_EXIT_CODE? == 1 {
-        error "Failed to create cluster"
+    if $create_status != 0 {
+        error $"Failed to create cluster '($name)' (kind exit ($create_status))"
         exit 1
     }
 
@@ -97,6 +114,107 @@ export def "devkit cluster delete" [
     info $"Deleting Kind cluster: ($cluster_name)"
     kind delete cluster --name $cluster_name
     success $"Cluster '($cluster_name)' deleted"
+}
+
+# Install cluster dependencies declared in config `[[deps]]`.
+# Helm rows: { name, repo, chart?, version?, namespace?, timeout?, values?, set?, wave? } —
+# chart defaults to name, namespace to "default", timeout to "10m"; omit repo
+# to use chart as a full reference (e.g. oci://...). `values` is a values file
+# path or list of paths (helm -f, later files win), resolved against $PWD then
+# the devkit.toml directory; a missing file is a hard error. `set` is a
+# key=value string or list of them (helm --set, wins over values files).
+# Manifest rows: { name, manifest, wave? } are applied with kubectl
+# --server-side (URL or repo-relative path; SSA handles large CRDs).
+# Deps in the same wave (default 0) install in PARALLEL; waves run in ascending
+# order and a wave only starts after the previous one fully succeeded — give a
+# dep a higher wave when it needs another dep's CRDs/webhooks/controllers.
+# Command output is captured per dep and only shown on failure. Idempotent.
+export def "devkit cluster deps" [] {
+    require-bin "kubectl"
+    require-cluster-connectivity
+
+    let cfg = (resolve-config)
+    let deps = ($cfg.deps? | default [])
+    if ($deps | is-empty) {
+        info "No [[deps]] declared in devkit.toml — nothing to install"
+        return
+    }
+
+    # Values paths resolve against the devkit.toml directory so `devkit cluster
+    # deps` behaves the same from any subdirectory of the repo.
+    let cfg_path = (find-config-file)
+    let cfg_dir = (if ($cfg_path | is-empty) { $env.PWD } else { $cfg_path | path dirname })
+
+    # Serial prep: resolve each row into a runnable plan, validate values files,
+    # and run every `helm repo add` up front — helm's repo config/cache is not
+    # safe to mutate concurrently, and this fails fast before touching the cluster.
+    let plans = ($deps | each {|dep|
+        let name = $dep.name
+        let wave = ($dep.wave? | default 0)
+        if ($dep.manifest? | is-not-empty) {
+            {
+                name: $name
+                wave: $wave
+                desc: $"manifest ($dep.manifest)"
+                done: "applied"
+                cmd: "kubectl"
+                args: ["apply" "--server-side" "-f" $dep.manifest]
+            }
+        } else {
+            require-bin "helm"
+            let chart = ($dep.chart? | default $name)
+            let ns = ($dep.namespace? | default "default")
+            let timeout = ($dep.timeout? | default "10m")
+            let version_args = (if ($dep.version? | is-empty) { [] } else { ["--version" $dep.version] })
+            let values = ($dep.values? | default [] | if ($in | describe | str starts-with "list") { $in } else { [$in] })
+            let values_args = ($values | each {|v|
+                let expanded = ($v | path expand)
+                let resolved = (if ($expanded | path exists) { $expanded } else { $cfg_dir | path join $v })
+                if not ($resolved | path exists) {
+                    error make { msg: $"values file not found for dep ($name): '($v)' \(tried ($expanded) and ($resolved)\)" }
+                }
+                ["-f" $resolved]
+            } | flatten)
+            let set_args = ($dep.set? | default [] | if ($in | describe | str starts-with "list") { $in } else { [$in] } | each {|s| ["--set" $s] } | flatten)
+            let ref = (if ($dep.repo? | is-not-empty) {
+                helm repo add $name $dep.repo --force-update
+                $"($name)/($chart)"
+            } else { $chart })
+            let values_note = (if ($values | is-empty) { "" } else { $", values ($values | str join ', ')" })
+            {
+                name: $name
+                wave: $wave
+                desc: $"chart ($ref), namespace ($ns)($values_note)"
+                done: "installed"
+                cmd: "helm"
+                args: (["upgrade" "--install" $name $ref] ++ $version_args ++ $values_args ++ $set_args ++ ["-n" $ns "--create-namespace" "--wait" "--timeout" $timeout])
+            }
+        }
+    })
+
+    # Waves run sequentially; deps within a wave install in parallel.
+    let waves = ($plans | get wave | uniq | sort)
+    for w in $waves {
+        let batch = ($plans | where wave == $w)
+        if ($waves | length) > 1 {
+            info $"Wave ($w): ($batch | get name | str join ', ')"
+        }
+        let failed = ($batch | par-each --keep-order {|p|
+            info $"Installing dep ($p.name) — ($p.desc)"
+            let r = (do { ^$p.cmd ...$p.args } | complete)
+            if $r.exit_code == 0 {
+                success $"Dep ($p.name) ($p.done)"
+            } else {
+                error $"Dep ($p.name) failed \(exit ($r.exit_code)\)"
+                print ($r.stdout + $r.stderr)
+            }
+            { name: $p.name, exit_code: $r.exit_code }
+        } | where exit_code != 0)
+        if ($failed | is-not-empty) {
+            error $"Failed deps: ($failed | get name | str join ', ')"
+            exit 1
+        }
+    }
 }
 
 # List all Kind clusters
@@ -141,6 +259,7 @@ export def "devkit cluster setup" [
     --flux-owner: string             # GitHub owner/org (default: config flux.owner, else gh user)
     --istio                          # Install Istio
     --dbs                            # Deploy database services from compose
+    --external-secrets               # Install ESO + GCP credentials + ClusterSecretStore
 ] {
     require-bin "kubectl"
     require-cluster-connectivity
@@ -194,6 +313,10 @@ export def "devkit cluster setup" [
         success "Istio installed"
     }
 
+    if $external_secrets {
+        setup-external-secrets $cfg
+    }
+
     if $flux {
         info "Bootstrapping Flux..."
         require-bin "flux"
@@ -201,24 +324,165 @@ export def "devkit cluster setup" [
 
         let flux_repo = (if ($flux_repo | is-empty) { $cfg.flux.repository } else { $flux_repo })
 
-        let token_result = (do { gh auth token } | complete)
+        # Token account: config flux.gh_user if set, else the active gh account.
+        # Bootstrap pushes commits, so the account needs WRITE on the repo —
+        # with multiple gh logins the active one is often the wrong identity.
+        let gh_user = ($cfg.flux.gh_user? | default "")
+        let token_args = (if ($gh_user | is-empty) { [] } else { ["--user" $gh_user] })
+        let token_result = (do { gh auth token ...$token_args } | complete)
         if $token_result.exit_code != 0 {
-            error "GitHub CLI not authenticated. Run 'gh auth login' first."
+            let who = (if ($gh_user | is-empty) { "" } else { $" for user '($gh_user)'" })
+            error $"GitHub CLI not authenticated($who). Run 'gh auth login' first."
             exit 1
         }
 
         let owner = (if ($flux_owner | is-empty) {
             let cfg_owner = ($cfg.flux.owner? | default "")
-            if ($cfg_owner | is-not-empty) { $cfg_owner } else { (gh api user --jq '.login' | str trim) }
+            if ($cfg_owner | is-not-empty) { $cfg_owner } else if ($gh_user | is-not-empty) { $gh_user } else { (gh api user --jq '.login' | str trim) }
         } else { $flux_owner })
         let token = ($token_result.stdout | str trim)
+        let branch = $cfg.flux.branch
+        let sync_path = $cfg.flux.path
 
-        let extra_args = (if $cfg.flux.personal { ["--personal"] } else { [] })
+        # Re-running `flux bootstrap` against a repo that already carries
+        # identical manifests fails on the no-op commit (fluxcd/flux2#3467) —
+        # exactly what happens every time a Kind cluster is recreated. If the
+        # repo is already bootstrapped, re-attach this cluster instead:
+        # install controllers, mint a fresh read-only deploy key, and recreate
+        # the sync objects. No commits are pushed.
+        let bootstrapped = ((do {
+            with-env { GH_TOKEN: $token } {
+                gh api $"repos/($owner)/($flux_repo)/contents/($sync_path)/flux-system/gotk-components.yaml?ref=($branch)"
+            }
+        } | complete).exit_code) == 0
 
-        with-env { GITHUB_TOKEN: $token } {
-            flux bootstrap github --owner $owner --repository $flux_repo --branch $cfg.flux.branch --path $cfg.flux.path ...$extra_args
+        if $bootstrapped {
+            info $"Repo ($owner)/($flux_repo) already bootstrapped — re-attaching cluster \(no commits\)..."
+            flux install
+
+            let ssh_url = $"ssh://git@github.com/($owner)/($flux_repo)"
+            let key_out = (flux create secret git flux-system --url $ssh_url --ssh-key-algorithm ecdsa --ssh-ecdsa-curve p384 | complete)
+            if $key_out.exit_code != 0 {
+                error $"Failed to create git secret: ($key_out.stderr)"
+                exit 1
+            }
+            let pub_key = ($key_out.stderr + $key_out.stdout
+                | lines
+                | where {|l| $l | str contains "ecdsa-sha2"}
+                | first
+                | str replace --regex '.*(ecdsa-sha2\S+\s+\S+).*' '$1')
+
+            let ctx = (kubectl config current-context | str trim)
+            let title = $"flux-system-($ctx)-(date now | format date '%Y%m%d%H%M%S')"
+            with-env { GH_TOKEN: $token } {
+                gh api $"repos/($owner)/($flux_repo)/keys" -f $"title=($title)" -f $"key=($pub_key)" -F read_only=true | ignore
+            }
+
+            flux create source git flux-system --url $ssh_url --branch $branch --secret-ref flux-system --interval 1m
+            flux create kustomization flux-system --source GitRepository/flux-system --path $"./($sync_path)" --prune true --interval 10m
+            success $"Flux re-attached to ($owner)/($flux_repo) @ ($sync_path)"
+        } else {
+            let extra_args = (if $cfg.flux.personal { ["--personal"] } else { [] })
+
+            with-env { GITHUB_TOKEN: $token } {
+                flux bootstrap github --owner $owner --repository $flux_repo --branch $branch --path $sync_path ...$extra_args
+            }
+            success "Flux bootstrapped"
         }
-        success "Flux bootstrapped"
+    }
+}
+
+# Full external-secrets support: install the External Secrets Operator (unless a
+# [[deps]] row named "external-secrets" already owns it), create the GCP
+# service-account credentials secret, and apply a ClusterSecretStore so app
+# ExternalSecrets can resolve from GCP Secret Manager. Idempotent.
+def setup-external-secrets [cfg: record] {
+    let es = $cfg.external_secrets
+    let ns = $cfg.namespaces.external_secrets
+
+    # Operator. Skip when declared in [[deps]] — `devkit cluster deps` owns it then.
+    let in_deps = ($cfg.deps? | default [] | any {|d| $d.name == "external-secrets"})
+    if $in_deps {
+        info "external-secrets declared in [[deps]] — skipping operator install"
+    } else {
+        require-bin "helm"
+        info "Installing External Secrets Operator..."
+        helm repo add external-secrets https://charts.external-secrets.io --force-update
+        let version_args = (if ($es.chart_version? | default "" | is-empty) { [] } else { ["--version" $es.chart_version] })
+        let r = (do {
+            helm upgrade --install external-secrets external-secrets/external-secrets ...$version_args -n $ns --create-namespace --set installCRDs=true --wait --timeout 10m
+        } | complete)
+        if $r.exit_code != 0 {
+            error $"External Secrets Operator install failed \(exit ($r.exit_code)\)"
+            print ($r.stdout + $r.stderr)
+            exit 1
+        }
+        success "External Secrets Operator installed"
+    }
+
+    # GCP service-account credentials secret
+    let creds_path = ($es.gcp_credentials | path expand)
+    if not ($creds_path | path exists) {
+        warn $"GCP credentials not found at ($creds_path)"
+        warn "Skipping credentials secret and ClusterSecretStore — ExternalSecrets will not sync"
+        return
+    }
+    do { kubectl create namespace $ns } | complete
+    # create --dry-run | apply = idempotent, and updates the secret when the key file changed
+    let sec = (do {
+        kubectl create secret generic $es.secret_name -n $ns --from-file=credentials=($creds_path) --dry-run=client -o yaml | kubectl apply -f -
+    } | complete)
+    if $sec.exit_code != 0 {
+        error $"Failed to create secret ($es.secret_name): ($sec.stderr)"
+        exit 1
+    }
+    success $"Secret ($ns)/($es.secret_name) configured from ($creds_path)"
+
+    # ClusterSecretStore. Project id from config, else from the creds JSON itself.
+    let project = (if ($es.project_id? | default "" | is-not-empty) {
+        $es.project_id
+    } else {
+        open $creds_path | get -o project_id | default ""
+    })
+    if ($project | is-empty) {
+        warn "No GCP project id (set external_secrets.project_id) — skipping ClusterSecretStore"
+        return
+    }
+    let store_yaml = ({
+        apiVersion: "external-secrets.io/v1"
+        kind: "ClusterSecretStore"
+        metadata: { name: $es.store_name }
+        spec: {
+            provider: {
+                gcpsm: {
+                    projectID: $project
+                    auth: {
+                        secretRef: {
+                            secretAccessKeySecretRef: {
+                                name: $es.secret_name
+                                key: "credentials"
+                                namespace: $ns
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } | to yaml)
+    # ESO's validating webhook can lag a few seconds behind deployment readiness
+    # (CA bundle injection), so retry briefly instead of failing the whole up.
+    mut result = { exit_code: 1, stdout: "", stderr: "" }
+    for _ in 1..5 {
+        $result = (do { $store_yaml | kubectl apply -f - } | complete)
+        if $result.exit_code == 0 { break }
+        sleep 3sec
+    }
+    if $result.exit_code == 0 {
+        success $"ClusterSecretStore '($es.store_name)' → GCP project ($project)"
+    } else {
+        error $"Failed to apply ClusterSecretStore '($es.store_name)'"
+        print ($result.stdout + $result.stderr)
+        exit 1
     }
 }
 

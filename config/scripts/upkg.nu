@@ -5,7 +5,8 @@
 #   (default)    safe   — OSV-Scanner pre/post, --ignore-scripts, cooldown gate for npm,
 #                          post-update build/lint/test via just or nx
 #   --fast              — skip all checks/tests, just update --latest. Use knowingly.
-#   --paranoid          — safe + cargo-vet + Socket if installed
+#   --paranoid          — safe + cargo-vet + Socket (Socket needs an API token;
+#                          skipped with a warning when absent)
 #
 # Granular toggles override the mode preset:
 #   --cooldown <days>   release-age gate for npm (default 7; 0 = off)
@@ -38,6 +39,17 @@ def has-cmd [name: string]: nothing -> bool {
     (which $name | length) > 0
 }
 
+# Socket scans need an API token: env var, or one stored by `socket login`.
+# `socket config get apiToken --json` returns {ok:true} with no `data` when unset.
+def socket-authed []: nothing -> bool {
+    if ($env.SOCKET_CLI_API_TOKEN? | default "" | is-not-empty) { return true }
+    if ($env.SOCKET_SECURITY_API_KEY? | default "" | is-not-empty) { return true }
+    let token = try {
+        ^socket config get apiToken --json | from json | get data? | default ""
+    } catch { "" }
+    $token | is-not-empty
+}
+
 def find-manifests [name: string]: nothing -> list<string> {
     glob $"**/($name)" --exclude $PRUNE_GLOBS
     | each { |p| $p | into string }
@@ -60,10 +72,14 @@ def is-node-workspace-root [manifest: string]: nothing -> bool {
 }
 
 # Drop manifests that are workspace members of another manifest in the list.
-# Keep workspace roots themselves, and standalone manifests (no ancestor root
-# found in the list). Nested workspaces — a root inside another workspace —
-# are kept since cargo/pnpm treat them as separate workspaces.
-def dedupe-workspace-members [files: list<string>, is_root_fn: closure]: nothing -> list<string> {
+# Keep workspace roots themselves, standalone manifests (no ancestor root found
+# in the list), and members that carry their OWN lockfile in `own_locks` — a
+# lockfile makes a dir an independent install root regardless of workspace globs
+# (e.g. an app with its own bun.lock inside a bun-workspaces repo). Nested
+# workspaces — a root inside another workspace — are kept for the same reason.
+def dedupe-workspace-members [
+    files: list<string>, is_root_fn: closure, own_locks: list<string>
+]: nothing -> list<string> {
     let roots = $files | where { |f| do $is_root_fn $f }
     let root_dirs = $roots | each { |f| $f | path dirname }
     $files | where { |f|
@@ -72,7 +88,8 @@ def dedupe-workspace-members [files: list<string>, is_root_fn: closure]: nothing
         let f_is_member = $root_dirs | any { |r|
             $r != $f_dir and ($f_dir | str starts-with ($r + "/"))
         }
-        $f_is_root or (not $f_is_member)
+        let has_own_lock = $own_locks | any { |l| ($f_dir | path join $l) | path exists }
+        $f_is_root or $has_own_lock or (not $f_is_member)
     }
 }
 
@@ -132,11 +149,14 @@ def run-osv [phase: string]: nothing -> record {
     let count = (
         $parsed.results? | default []
         | each { |r| ($r.packages? | default [] | length) }
+        | append 0  # math sum errors on empty input (clean scan)
         | math sum
     )
     if $count > 0 {
-        warn $"($phase): ($count) vulnerable package group(s) — see details:"
-        ^osv-scanner --recursive .
+        warn $"($phase): ($count) vulnerable package group\(s\) — see details:"
+        # osv-scanner exits non-zero when vulns exist; that's the expected case
+        # here — don't let the uncaught external error kill the run.
+        try { ^osv-scanner --recursive . } catch { }
         return {ok: false, vulns: $count, skipped: false}
     }
     log info $"($phase): 0 vulnerabilities"
@@ -212,12 +232,33 @@ def update-node [files: list<string>, cfg: record]: nothing -> list<record> {
         }
         let install_ok = run-pm ($install_cmd | str join " ") $install_cmd $cfg
 
+        # Step 2.5: refresh transitive deps within semver. ncu only bumps DIRECT
+        # deps in package.json and install honors the lockfile, so vulnerable
+        # transitives (flagged by OSV against the lockfile) stay pinned without this.
+        # Fast mode skips it — step 3 does a harder bump anyway.
+        let refresh_cmd = if $cfg.mode == "fast" { [] } else {
+            match $pm {
+                "bun"  => ["bun" "update"],
+                "pnpm" => ["pnpm" "update" "-r"],
+                "npm"  => ["npm" "update"],
+                _ => []
+            }
+        }
+        let refresh_cmd = if ($refresh_cmd | is-empty) or (not $cfg.ignore_scripts) {
+            $refresh_cmd
+        } else {
+            $refresh_cmd ++ ["--ignore-scripts"]
+        }
+        let refresh_ok = if ($refresh_cmd | is-empty) { true } else {
+            run-pm ($refresh_cmd | str join " ") $refresh_cmd $cfg
+        }
+
         # Step 3: fast-mode fallback bump (if ncu wasn't used)
         let extra_ok = if $cfg.mode == "fast" and $pm == "bun" {
             run-pm "bun update --latest" ["bun" "update" "--latest"] $cfg
         } else { true }
 
-        {file: $f, ecosystem: $"node:($pm)", ok: ($bump_ok and $install_ok and $extra_ok)}
+        {file: $f, ecosystem: $"node:($pm)", ok: ($bump_ok and $install_ok and $refresh_ok and $extra_ok)}
     }
 }
 
@@ -250,7 +291,10 @@ def detect-task-runner []: nothing -> record {
         let summary = try {
             ^just --summary | str trim | split row " "
         } catch { [] }
-        let recipes = ($summary | where { |r| $r in ["build" "lint" "test" "check"] })
+        # `check` is conventionally the aggregate gate (fmt+lint+test+audit);
+        # running it alongside its constituents triples the work.
+        let candidates = ($summary | where { |r| $r in ["build" "lint" "test" "check"] })
+        let recipes = if "check" in $candidates { ["check"] } else { $candidates }
         if not ($recipes | is-empty) {
             return {kind: "just", recipes: $recipes}
         }
@@ -338,7 +382,7 @@ def --env main [
 
     let cargo_files = if ("cargo" in $allowed) {
         let all = (find-manifests "Cargo.toml")
-        let kept = (dedupe-workspace-members $all { |f| is-cargo-workspace-root $f })
+        let kept = (dedupe-workspace-members $all { |f| is-cargo-workspace-root $f } ["Cargo.lock"])
         let skipped = ($all | length) - ($kept | length)
         if $skipped > 0 {
             log info $"cargo: skipping ($skipped) workspace-member manifests, processing ($kept | length) roots"
@@ -348,7 +392,7 @@ def --env main [
 
     let node_files = if ("node" in $allowed) {
         let all = (find-manifests "package.json")
-        let kept = (dedupe-workspace-members $all { |f| is-node-workspace-root $f })
+        let kept = (dedupe-workspace-members $all { |f| is-node-workspace-root $f } ["bun.lock" "bun.lockb" "package-lock.json" "pnpm-lock.yaml" "yarn.lock"])
         let skipped = ($all | length) - ($kept | length)
         if $skipped > 0 {
             log info $"node: skipping ($skipped) workspace-member manifests, processing ($kept | length) roots"
@@ -385,10 +429,29 @@ def --env main [
     let checks = if $cfg.tests { (run-checks) } else { {ok: true, runner: "skipped", failed: []} }
     cd $original_pwd
 
-    # Socket (paranoid)
+    # Socket (paranoid). Requires an API token — skip with a warning when absent
+    # so --paranoid still works out of the box (cargo-vet + sfw still apply).
     let socket = if $cfg.socket and (has-cmd "socket") {
-        section "Socket"
-        {ok: (try-run "socket" { ^socket scan create --json . }), used: true}
+        if (socket-authed) {
+            section "Socket"
+            let res = (do { ^socket scan create --json . } | complete)
+            if not ($res.stdout | is-empty) { print $res.stdout }
+            if not ($res.stderr | is-empty) { print --stderr $res.stderr }
+            if $res.exit_code == 0 and not ($res.stdout | str contains '"ok": false') {
+                {ok: true, used: true}
+            } else {
+                if (($res.stdout + $res.stderr) | str contains "Organization not found") {
+                    let org = try {
+                        ^socket config get defaultOrg --json | from json | get data? | default "(unset)"
+                    } catch { "(unset)" }
+                    err-out $"socket: your token cannot access org '($org)'. Create an API token for that org at socket.dev → API tokens \(scopes: full-scans:create, repo:create\), then run `socket login`. If the org name is wrong: `socket config set defaultOrg <org>`. Note: a SOCKET_CLI_API_TOKEN env var \(shell or .env via dotenv-load\) overrides the stored login."
+                }
+                {ok: false, used: true}
+            }
+        } else {
+            warn "socket CLI has no API token; skipping  (socket login, or set SOCKET_CLI_API_TOKEN)"
+            {ok: true, used: false}
+        }
     } else if $cfg.socket {
         warn "socket CLI not installed; skipping  (npm i -g socket)"
         {ok: true, used: false}
@@ -401,8 +464,10 @@ def --env main [
 
     let report = {
         mode: $cfg.mode
+        # Pre-scan is informational: vulns that existed BEFORE the update are the
+        # reason you're running upkg. Only the post-update state gates the run.
         ok: (
-            $pre.ok and $post.ok and $checks.ok and $socket.ok
+            $post.ok and $checks.ok and $socket.ok
             and ($failed_updates | is-empty)
         )
         cooldown_days: $cfg.cooldown

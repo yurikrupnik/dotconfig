@@ -18,6 +18,34 @@ ingress = true              # expose ports 80/443
 # kcl_package = "oci://.../kcl/cluster"   # OCI url WITHOUT a tag
 # kcl_tag = "0.0.6"                        # version passed to kcl via --tag
 
+# Extra top-level args forwarded to `kcl run` as `-D key=value`.
+# name/workers/db_workers/ingress come from flags/config above and win here.
+# Empty values are skipped, so declaring a key without a value is a no-op.
+# [cluster.kcl_args]
+# oidc_bucket = "my-oidc-bucket"
+# oidc_id = "dev-cluster"
+
+# Cluster dependencies installed by `devkit cluster deps` (and `devkit up`).
+# Helm rows: name, repo, chart (default: name), version, namespace (default:
+# "default"), timeout (default: "10m"), values (a values file path or list of
+# paths — helm -f, later files win — resolved against the devkit.toml dir),
+# set (a key=value string or list — helm --set, wins over values files).
+# Omit repo to use chart as a full reference (e.g. oci://...). Manifest rows:
+# name + manifest (URL or repo-relative path, kubectl apply --server-side).
+# Deps in the same wave (default 0) install in parallel; waves run in
+# ascending order — bump wave when a dep needs another's CRDs/controllers.
+#
+# [[deps]]
+# name = "crossplane"
+# repo = "https://charts.crossplane.io/stable"
+# version = "2.3.4"
+# namespace = "crossplane-system"
+# values = "manifests/values/crossplane.yaml"
+#
+# [[deps]]
+# name = "cert-manager-crds"
+# manifest = "https://github.com/cert-manager/cert-manager/releases/download/v1.16.2/cert-manager.crds.yaml"
+
 [namespaces]
 dbs = "dbs"
 monitoring = "monitoring"
@@ -49,9 +77,13 @@ output = ".env"             # generated env file
 [external_secrets]
 gcp_credentials = "~/dotconfig/tmp/secret-puller.json"
 secret_name = "gcp-sm-credentials"
+store_name = "gcp-secret-manager"  # ClusterSecretStore name your ExternalSecrets reference
+# project_id = "my-gcp-project"    # unset = read project_id from the creds JSON
+# chart_version = "0.18.2"         # ESO helm chart version; unset = latest
 
 [flux]
 # owner = "my-org"          # GitHub user/org; leave unset to derive from `gh api user`
+# gh_user = "my-user"       # gh account for the bootstrap token (multi-account setups); unset = active account
 repository = "gitops"
 branch = "main"
 path = "clusters/local"
@@ -59,6 +91,36 @@ personal = true
 
 [tilt]
 enabled = true
+
+[manager]
+namespace = "devkit-manager" # dashboard namespace
+image = "devkit-manager"     # local image name (side-loaded via kind)
+tag = "dev"
+port = 8300                  # local port for `devkit manager open`
+
+# Fleet manager (devkit fleet): one hub on an always-on machine, push agents on
+# machines that run Bun, agentless probes for everything else.
+[fleet]
+port = 9300                          # hub listen port
+hub = "http://localhost:9300"        # hub URL used by agent/status/open
+token = ""                           # bearer token gating reports ("" = open)
+db = "~/.local/share/devkit/fleet.db"
+interval = 10                        # agent report cadence (seconds)
+probe_interval = 30                  # hub probe cadence (seconds)
+retention_hours = 48                 # sample history retention
+stale_after = 60                     # seconds without a report -> stale
+offline_after = 300                  # seconds without a report -> offline
+
+# Agentless devices (phones, tablets, printers, IoT). With `port` the hub does
+# a TCP connect; without it an ICMP ping.
+# [[fleet.probes]]
+# name = "yuri-phone"
+# host = "192.168.1.42"
+#
+# [[fleet.probes]]
+# name = "nas"
+# host = "192.168.1.10"
+# port = 445
 
 # Endpoints printed after `devkit up`.
 [[endpoints]]

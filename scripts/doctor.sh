@@ -33,7 +33,7 @@ for cmd in brew cargo rustup nu stow git; do
 done
 
 # Optional but recommended
-for cmd in just cargo-binstall cargo-liner bun uv; do
+for cmd in just cargo-binstall cargo-liner bun uv nvim tree-sitter; do
     if command -v "$cmd" &> /dev/null; then
         ok "$cmd"
     else
@@ -110,7 +110,8 @@ check_stow "$HOME/.config/zsh"
 check_stow "$HOME/.config/nushell"
 check_stow "$HOME/.config/starship"
 check_stow "$HOME/.config/zed"
-check_stow "$HOME/.local/bin/up"
+check_stow "$HOME/.config/nvim"
+check_stow "$HOME/.local/bin/update"
 check_stow "$HOME/.local/bin/csort"
 
 # 5. Generated output freshness
