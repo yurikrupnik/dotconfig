@@ -77,6 +77,7 @@ brew "uv"                                # uv — fast Python package & project 
 brew "vals"                              # vals — secrets/config value loader (Helm-friendly)
 brew "kubescape"                         # kubescape — Kubernetes security & compliance scanner
 brew "bacon"                             # bacon — background Rust code checker
+brew "cargo-binstall"                    # cargo-binstall — prebuilt-binary installer used by cargo-liner
 brew "nushell"                           # nushell — structured-data shell
 brew "fzf"                               # fzf — general-purpose fuzzy finder
 brew "bat"                               # bat — `cat` with syntax highlighting & git integration

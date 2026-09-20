@@ -33,6 +33,8 @@ cargo-readme = "*"
 cargo-tarpaulin = "*"
 cargo-sort = "*"
 checker = "*"
+rumdl = "*"
+typos-cli = "*"
 
 # Dependency management
 cargo-outdated = "*"
@@ -52,6 +54,9 @@ protobuf-codegen = "*"
 
 # Cross-compilation
 cross = "*"
+
+# Kubernetes (no brew formula for kopium; binstall fetches the prebuilt release)
+kopium = "*"
 
 [defaults.ship]
 # Use cargo-binstall when available (much faster than compiling from source)

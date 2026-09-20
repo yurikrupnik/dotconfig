@@ -207,15 +207,19 @@ def update-node [files: list<string>, cfg: record]: nothing -> list<record> {
         }
         section $"Node ($pm) — ($f)"
 
-        # Step 1: bump package.json
+        # Step 1: bump package.json. `cargo upgrade` at a workspace root walks
+        # every member; ncu does NOT — without --workspaces it touches only the
+        # root manifest and every member's direct deps stay put. --root keeps the
+        # root itself in the run. ncu reads each workspace's own .ncurc.
+        let ws_flags = if (is-node-workspace-root $f) { ["--workspaces" "--root"] } else { [] }
         let bump_ok = if $cfg.mode == "fast" {
             true  # let the install step do whatever within semver
         } else if $has_ncu {
             try-run "ncu" {
                 if $cfg.cooldown > 0 {
-                    ^ncu --cooldown $cfg.cooldown --target latest -u
+                    ^ncu ...$ws_flags --cooldown $cfg.cooldown --target latest -u
                 } else {
-                    ^ncu --target latest -u
+                    ^ncu ...$ws_flags --target latest -u
                 }
             }
         } else {
