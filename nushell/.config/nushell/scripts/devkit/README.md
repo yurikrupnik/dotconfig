@@ -35,13 +35,40 @@ devkit cluster create -n dev -w 2
 | Group | Commands |
 |-------|----------|
 | lifecycle | `devkit up` — single generator; extras opt-in: `--istio --core --gitops --observability --flux` (ingress always on). `devkit down [--keep-cluster]`, `devkit status` |
-| `cluster` | `create`, `delete`, `list`, `status`, `setup` (`--dbs`/`--istio`/`--flux`/`--external-secrets`), `deps` (install `[[deps]]` helm charts/manifests from devkit.toml), `migrate`, `gitops`, `observability` |
+| `cluster` | `create`, `delete`, `list`, `status`, `setup` (`--dbs`/`--istio`/`--flux`/`--external-secrets`), `deps` (install `[[deps]]` helm charts/manifests from devkit.toml), `migrate`, `gitops`, `observability`, `flux-ui` (port-forward the Flux Web UI) |
 | `dev` | `up`, `down`, `logs`, `ps`, `restart`, `prune`, `kompose`, `reset` |
 | `manager` | `up` (build image → `kind load` → deploy), `open` (port-forward + browser), `status`, `down` |
 | `fleet` | `hub` (run the fleet hub), `agent` (report this machine; `--once` for cron/smoke), `status`, `open` |
 | `secrets` | `fetch`, `vault`, `load`, `list`, `verify` |
 | `setup` | `install`, `build`, `check`, `test`, `vault-setup`, `all` |
 | config | `devkit config` (expanded view), `devkit config --data` (raw record for piping), `devkit config --path`, `devkit config init` |
+
+### `devkit cluster setup --flux` — operator-managed Flux
+
+Flux is installed through the [ControlPlane Flux
+Operator](https://fluxoperator.dev/) (helm chart + a `FluxInstance` built from
+`[flux]` in `devkit.toml`), never `flux bootstrap`:
+
+- **No commits, no bootstrap race.** The controllers and the `flux-system`
+  `GitRepository`/`Kustomization` are declared by the `FluxInstance`, so
+  re-running against a recreated Kind cluster is a plain no-op instead of
+  failing on an empty commit ([fluxcd/flux2#3467](https://github.com/fluxcd/flux2/issues/3467)).
+- **Repo is prepared, not populated.** Missing repo → created private; missing
+  `flux.branch` → branched off the default branch; missing `flux.path` →
+  seeded with a `README.md` (an empty sync path fails reconciliation).
+- **Read-only access, org-safe.** `flux.auth = "auto"` mints a fresh ECDSA
+  deploy key per cluster into the `flux-system` secret; when the repo/org
+  forbids deploy keys (GitHub 422 *"Deploy keys are disabled for this
+  repository"*) it says so and falls back to HTTPS basic auth with the `gh`
+  token. Force one with `"ssh"` / `"token"`. Existing secrets are reused.
+- **Bootstrap takeover.** On a cluster/repo previously bootstrapped with the
+  CLI, the operator adopts the controllers in place, then devkit deletes
+  `<flux.path>/flux-system/` in one commit — leaving it would make the
+  bootstrap manifests and the operator fight over the same objects. Skip with
+  `--keep-flux-bootstrap`.
+- **Web UI.** The operator pod serves the Flux status dashboard:
+  `devkit cluster flux-ui` (port-forward + browser, `flux.ui_port`, default
+  9080). Unauthenticated read-only — local clusters only.
 
 ### `devkit manager` — role-gated dashboard
 

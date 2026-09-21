@@ -92,7 +92,7 @@ export def "devkit up" [
     --core                           # Apply the core infrastructure overlay
     --gitops                         # Apply the GitOps overlay
     --observability                  # Deploy the observability stack
-    --flux                           # Bootstrap Flux GitOps
+    --flux                           # Install Flux via the Flux Operator (+ Web UI)
     --dry-run                        # Preview without executing
     --verbose (-v)                   # Verbose output
 ] {
@@ -159,25 +159,36 @@ export def "devkit up" [
             info $"Applying core overlay: ($core_path)"
             kubectl apply -k $core_path
         } else {
-            warn $"Core overlay not found: ($core_path)"
+            warn $"Core overlay not found: ($core_path) — skipping \(set [paths.overlays].core in devkit.toml\)"
         }
     }
 
-    # GitOps overlay
+    # GitOps overlay. Missing overlay is a warning, not a failure: extras are
+    # opt-in and must never abort the rest of `up` (notably --flux below).
     if $gitops {
-        info "Deploying GitOps resources..."
-        devkit cluster gitops --target $target
+        let gitops_path = (overlay-path $cfg.paths.overlays.gitops $target)
+        if ($gitops_path | path exists) {
+            info "Deploying GitOps resources..."
+            devkit cluster gitops --target $target
+        } else {
+            warn $"GitOps overlay not found: ($gitops_path) — skipping \(set [paths.overlays].gitops in devkit.toml\)"
+        }
     }
 
     # Observability stack
     if $observability {
-        info "Deploying observability stack..."
-        devkit cluster observability --target $target
+        let obs_path = (overlay-path $cfg.paths.overlays.observability $target)
+        if ($obs_path | path exists) {
+            info "Deploying observability stack..."
+            devkit cluster observability --target $target
+        } else {
+            warn $"Observability overlay not found: ($obs_path) — skipping \(set [paths.overlays].observability in devkit.toml\)"
+        }
     }
 
-    # Flux GitOps bootstrap
+    # Flux GitOps (Flux Operator + FluxInstance)
     if $flux {
-        info "Bootstrapping Flux GitOps..."
+        info "Installing Flux..."
         devkit cluster setup --flux
     }
 

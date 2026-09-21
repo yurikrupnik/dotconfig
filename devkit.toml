@@ -56,11 +56,11 @@ apps_dir = "apps"
 compose_file = "manifests/dockers/compose.yaml"
 default_target = "dev"      # default --target for overlay commands
 
-[paths.overlays]
-# `{target}` is replaced by the --target flag (dev/staging/prod).
-core = "manifests/k8s/overlays/{target}"
-gitops = "manifests/k8s/overlays/{target}"
-observability = "manifests/k8s/overlays/{target}"
+#[paths.overlays]
+## `{target}` is replaced by the --target flag (dev/staging/prod).
+#core = "manifests/k8s/overlays/{target}"
+#gitops = "manifests/k8s/overlays/{target}"
+#observability = "manifests/k8s/overlays/{target}"
 
 [database]
 port = 5433
@@ -85,16 +85,16 @@ store_name = "gcp-secret-manager"  # ClusterSecretStore name your ExternalSecret
 # devkit installs Flux with the ControlPlane Flux Operator (helm chart +
 # FluxInstance), never `flux bootstrap` — no commits are pushed and the
 # operator pod serves the Flux Web UI (`devkit cluster flux-ui`).
-# owner = "my-org"          # GitHub user/org; leave unset to derive from `gh api user`
+owner = "yurikrupnik-org"          # GitHub user/org; leave unset to derive from `gh api user`
 # gh_user = "my-user"       # gh account for the API token (multi-account setups); unset = active account
-repository = "gitops"       # created (private) if it does not exist
+repository = "gitops"
 branch = "main"
-path = "clusters/local"     # sync path in the repo; seeded if missing
+path = "clusters/local"     # sync path in the repo; created if missing
 auth = "auto"               # auto | ssh (deploy key) | token (HTTPS basic auth)
 namespace = "flux-system"
 version = "2.x"             # Flux distribution version
 registry = "ghcr.io/fluxcd"
-components = ["source-controller", "kustomize-controller", "helm-controller", "notification-controller"]
+components = ["source-watcher", "image-automation-controller", "image-reflector-controller", "source-controller", "kustomize-controller", "helm-controller", "notification-controller"]
 # operator_version = "0.60.0"  # flux-operator chart version; unset = latest
 cluster_type = "kubernetes" # kubernetes | openshift | aws | azure | gcp
 ui_port = 9080              # local port for `devkit cluster flux-ui`

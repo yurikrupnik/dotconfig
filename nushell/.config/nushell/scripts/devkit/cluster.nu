@@ -25,6 +25,7 @@ export def "devkit cluster" [] {
     print "  devkit cluster migrate [-p PORT -u USER ...]         run DB migrations"
     print "  devkit cluster gitops [-e TARGET] [--dry-run]        apply GitOps overlay"
     print "  devkit cluster observability [-e TARGET] [--dry-run] deploy observability stack"
+    print "  devkit cluster flux-ui [-p PORT] [--no-open]         open the Flux Web UI"
 }
 
 # Create a local Kind cluster using KCL configuration
@@ -254,9 +255,10 @@ export def "devkit cluster status" [
 
 # Post-cluster setup - deploy common infrastructure
 export def "devkit cluster setup" [
-    --flux                           # Bootstrap Flux GitOps
+    --flux                           # Install Flux via the Flux Operator (+ Web UI)
     --flux-repo: string              # Flux repository (default: config flux.repository)
     --flux-owner: string             # GitHub owner/org (default: config flux.owner, else gh user)
+    --keep-flux-bootstrap            # Keep `<sync path>/flux-system/` in the repo (skip migration cleanup)
     --istio                          # Install Istio
     --dbs                            # Deploy database services from compose
     --external-secrets               # Install ESO + GCP credentials + ClusterSecretStore
@@ -318,77 +320,7 @@ export def "devkit cluster setup" [
     }
 
     if $flux {
-        info "Bootstrapping Flux..."
-        require-bin "flux"
-        require-bin "gh"
-
-        let flux_repo = (if ($flux_repo | is-empty) { $cfg.flux.repository } else { $flux_repo })
-
-        # Token account: config flux.gh_user if set, else the active gh account.
-        # Bootstrap pushes commits, so the account needs WRITE on the repo —
-        # with multiple gh logins the active one is often the wrong identity.
-        let gh_user = ($cfg.flux.gh_user? | default "")
-        let token_args = (if ($gh_user | is-empty) { [] } else { ["--user" $gh_user] })
-        let token_result = (do { gh auth token ...$token_args } | complete)
-        if $token_result.exit_code != 0 {
-            let who = (if ($gh_user | is-empty) { "" } else { $" for user '($gh_user)'" })
-            error $"GitHub CLI not authenticated($who). Run 'gh auth login' first."
-            exit 1
-        }
-
-        let owner = (if ($flux_owner | is-empty) {
-            let cfg_owner = ($cfg.flux.owner? | default "")
-            if ($cfg_owner | is-not-empty) { $cfg_owner } else if ($gh_user | is-not-empty) { $gh_user } else { (gh api user --jq '.login' | str trim) }
-        } else { $flux_owner })
-        let token = ($token_result.stdout | str trim)
-        let branch = $cfg.flux.branch
-        let sync_path = $cfg.flux.path
-
-        # Re-running `flux bootstrap` against a repo that already carries
-        # identical manifests fails on the no-op commit (fluxcd/flux2#3467) —
-        # exactly what happens every time a Kind cluster is recreated. If the
-        # repo is already bootstrapped, re-attach this cluster instead:
-        # install controllers, mint a fresh read-only deploy key, and recreate
-        # the sync objects. No commits are pushed.
-        let bootstrapped = ((do {
-            with-env { GH_TOKEN: $token } {
-                gh api $"repos/($owner)/($flux_repo)/contents/($sync_path)/flux-system/gotk-components.yaml?ref=($branch)"
-            }
-        } | complete).exit_code) == 0
-
-        if $bootstrapped {
-            info $"Repo ($owner)/($flux_repo) already bootstrapped — re-attaching cluster \(no commits\)..."
-            flux install
-
-            let ssh_url = $"ssh://git@github.com/($owner)/($flux_repo)"
-            let key_out = (flux create secret git flux-system --url $ssh_url --ssh-key-algorithm ecdsa --ssh-ecdsa-curve p384 | complete)
-            if $key_out.exit_code != 0 {
-                error $"Failed to create git secret: ($key_out.stderr)"
-                exit 1
-            }
-            let pub_key = ($key_out.stderr + $key_out.stdout
-                | lines
-                | where {|l| $l | str contains "ecdsa-sha2"}
-                | first
-                | str replace --regex '.*(ecdsa-sha2\S+\s+\S+).*' '$1')
-
-            let ctx = (kubectl config current-context | str trim)
-            let title = $"flux-system-($ctx)-(date now | format date '%Y%m%d%H%M%S')"
-            with-env { GH_TOKEN: $token } {
-                gh api $"repos/($owner)/($flux_repo)/keys" -f $"title=($title)" -f $"key=($pub_key)" -F read_only=true | ignore
-            }
-
-            flux create source git flux-system --url $ssh_url --branch $branch --secret-ref flux-system --interval 1m
-            flux create kustomization flux-system --source GitRepository/flux-system --path $"./($sync_path)" --prune true --interval 10m
-            success $"Flux re-attached to ($owner)/($flux_repo) @ ($sync_path)"
-        } else {
-            let extra_args = (if $cfg.flux.personal { ["--personal"] } else { [] })
-
-            with-env { GITHUB_TOKEN: $token } {
-                flux bootstrap github --owner $owner --repository $flux_repo --branch $branch --path $sync_path ...$extra_args
-            }
-            success "Flux bootstrapped"
-        }
+        setup-flux $cfg ($flux_repo | default "") ($flux_owner | default "") $keep_flux_bootstrap
     }
 }
 
@@ -525,7 +457,7 @@ export def "devkit cluster gitops" [
     let gitops_path = (overlay-path $cfg.paths.overlays.gitops $target)
 
     if not ($gitops_path | path exists) {
-        error $"GitOps overlay not found: ($gitops_path)"
+        error $"GitOps overlay not found: ($gitops_path) \(set [paths.overlays].gitops in devkit.toml\)"
         exit 1
     }
 
@@ -553,7 +485,7 @@ export def "devkit cluster observability" [
     let monitoring_ns = $cfg.namespaces.monitoring
 
     if not ($obs_path | path exists) {
-        error $"Observability overlay not found: ($obs_path)"
+        error $"Observability overlay not found: ($obs_path) \(set [paths.overlays].observability in devkit.toml\)"
         exit 1
     }
 
@@ -573,5 +505,289 @@ export def "devkit cluster observability" [
             info $"Check status: flux get helmreleases -n ($monitoring_ns)"
         }
     }
+}
+
+# --- Flux (operator-managed) -------------------------------------------------
+#
+# devkit installs Flux through the ControlPlane Flux Operator instead of
+# `flux bootstrap`: the operator owns the controllers and the flux-system
+# GitRepository/Kustomization declaratively via a FluxInstance, so re-running
+# against a recreated Kind cluster never pushes a commit (the no-op-commit
+# failure of fluxcd/flux2#3467 is gone) and the operator pod serves the Flux
+# Web UI (`devkit cluster flux-ui`).
+
+const FLUX_OPERATOR_CHART = "oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator"
+
+# GitHub token for Flux repo operations: config flux.gh_user when set, else the
+# active gh account. Repo/deploy-key writes need an account with WRITE access —
+# with multiple gh logins the active one is often the wrong identity.
+def flux-token [cfg: record]: nothing -> string {
+    let gh_user = ($cfg.flux.gh_user? | default "")
+    let token_args = (if ($gh_user | is-empty) { [] } else { ["--user" $gh_user] })
+    let r = (do { gh auth token ...$token_args } | complete)
+    if $r.exit_code != 0 {
+        let who = (if ($gh_user | is-empty) { "" } else { $" for user '($gh_user)'" })
+        error $"GitHub CLI not authenticated($who). Run 'gh auth login' first."
+        exit 1
+    }
+    $r.stdout | str trim
+}
+
+# Make sure owner/repo, the sync branch and the sync path all exist. Unlike
+# `flux bootstrap`, the operator never creates repo content, and a GitRepository
+# pointing at a missing branch/path leaves the Kustomization failing forever.
+def ensure-flux-repo [owner: string, repo: string, branch: string, sync_path: string, token: string] {
+    with-env { GH_TOKEN: $token } {
+        if ((do { gh api $"repos/($owner)/($repo)" } | complete).exit_code != 0) {
+            info $"Creating GitHub repo ($owner)/($repo) \(private\)..."
+            let r = (do { gh repo create $"($owner)/($repo)" --private --add-readme } | complete)
+            if $r.exit_code != 0 {
+                error $"Failed to create ($owner)/($repo): ($r.stderr | str trim)"
+                exit 1
+            }
+        }
+
+        if ((do { gh api $"repos/($owner)/($repo)/branches/($branch)" } | complete).exit_code != 0) {
+            let default_branch = (gh api $"repos/($owner)/($repo)" --jq '.default_branch' | str trim)
+            let sha = (gh api $"repos/($owner)/($repo)/git/ref/heads/($default_branch)" --jq '.object.sha' | str trim)
+            gh api $"repos/($owner)/($repo)/git/refs" -f $"ref=refs/heads/($branch)" -f $"sha=($sha)" | ignore
+            info $"Created branch '($branch)' from '($default_branch)'"
+        }
+
+        if ((do { gh api $"repos/($owner)/($repo)/contents/($sync_path)?ref=($branch)" } | complete).exit_code != 0) {
+            let content = ("# Flux sync path created by devkit\n" | encode base64)
+            (gh api --method PUT $"repos/($owner)/($repo)/contents/($sync_path)/README.md"
+                -f "message=devkit: seed flux sync path"
+                -f $"content=($content)"
+                -f $"branch=($branch)") | ignore
+            info $"Seeded sync path ($sync_path)/README.md"
+        }
+    }
+}
+
+# HTTPS basic-auth pull secret (username `git`, password = GitHub token).
+def create-flux-token-secret [ns: string, token: string] {
+    let r = (do {
+        kubectl -n $ns create secret generic flux-system --from-literal=username=git $"--from-literal=password=($token)"
+    } | complete)
+    if $r.exit_code != 0 {
+        error $"Failed to create git pull secret: ($r.stderr | str trim)"
+        exit 1
+    }
+    success "Git pull secret 'flux-system' created \(HTTPS token auth\)"
+}
+
+# Ensure the `flux-system` pull secret exists and report the scheme the
+# FluxInstance must sync with: "ssh" (read-only deploy key minted per cluster)
+# or "token" (HTTPS basic auth). `auth` is config flux.auth:
+#   auto  — deploy key, falling back to token when the repo rejects it
+#           (orgs commonly disable deploy keys: GitHub answers 422
+#           "Deploy keys are disabled for this repository")
+#   ssh   — deploy key or bust
+#   token — HTTPS only, never touches the repo's keys
+def ensure-flux-git-secret [ns: string, owner: string, repo: string, token: string, auth: string]: nothing -> string {
+    let existing = (do { kubectl -n $ns get secret flux-system -o jsonpath='{.data}' } | complete)
+    if $existing.exit_code == 0 {
+        let scheme = (if ($existing.stdout | str contains "identity") { "ssh" } else { "token" })
+        info $"Git pull secret 'flux-system' already present \(($scheme) auth\) — reusing"
+        return $scheme
+    }
+
+    if $auth == "token" {
+        create-flux-token-secret $ns $token
+        return "token"
+    }
+
+    require-bin "flux"
+    let ssh_url = $"ssh://git@github.com/($owner)/($repo)"
+    let key_out = (do {
+        flux create secret git flux-system --namespace $ns --url $ssh_url --ssh-key-algorithm ecdsa --ssh-ecdsa-curve p384
+    } | complete)
+    if $key_out.exit_code != 0 {
+        error $"Failed to create git secret: ($key_out.stderr)"
+        exit 1
+    }
+
+    # Read the public key back from the secret — parsing it out of the CLI
+    # output silently yields garbage when the format changes.
+    let pub_key = (kubectl -n $ns get secret flux-system -o jsonpath='{.data.identity\.pub}'
+        | decode base64 | decode | str trim)
+
+    let ctx = (kubectl config current-context | str trim)
+    let title = $"flux-system-($ctx)-(date now | format date '%Y%m%d%H%M%S')"
+    let reg = (do {
+        with-env { GH_TOKEN: $token } {
+            gh api $"repos/($owner)/($repo)/keys" -f $"title=($title)" -f $"key=($pub_key)" -F read_only=true
+        }
+    } | complete)
+
+    if $reg.exit_code == 0 {
+        success $"Deploy key '($title)' registered on ($owner)/($repo) \(read-only\)"
+        return "ssh"
+    }
+
+    let why = ($reg.stderr + $reg.stdout | str trim | lines | last)
+    if $auth == "ssh" {
+        error $"($owner)/($repo) rejected the deploy key: ($why)"
+        do { kubectl -n $ns delete secret flux-system } | complete
+        exit 1
+    }
+
+    warn $"($owner)/($repo) rejected the deploy key — falling back to HTTPS token auth: ($why)"
+    do { kubectl -n $ns delete secret flux-system } | complete
+    create-flux-token-secret $ns $token
+    "token"
+}
+
+# Drop `<sync_path>/flux-system/` (gotk-components.yaml, gotk-sync.yaml,
+# kustomization.yaml) from the repo in a single commit. Mandatory when taking
+# over a cluster bootstrapped with `flux bootstrap`: those manifests declare the
+# same controllers and the same GitRepository/Kustomization the operator now
+# owns, so leaving them in the sync path makes the two fight over every object.
+# No-op when the directory is absent.
+def prune-flux-bootstrap [owner: string, repo: string, branch: string, sync_path: string, token: string] {
+    let dir = $"($sync_path)/flux-system"
+
+    with-env { GH_TOKEN: $token } {
+        if ((do { gh api $"repos/($owner)/($repo)/contents/($dir)/gotk-components.yaml?ref=($branch)" } | complete).exit_code != 0) {
+            return
+        }
+
+        info $"Removing bootstrap manifests ($dir)/ — the operator owns Flux now..."
+        let head = (gh api $"repos/($owner)/($repo)/git/ref/heads/($branch)" --jq '.object.sha' | str trim)
+        let base_tree = (gh api $"repos/($owner)/($repo)/git/commits/($head)" --jq '.tree.sha' | str trim)
+        let blobs = (gh api $"repos/($owner)/($repo)/git/trees/($base_tree)?recursive=1" --jq '.tree[] | select(.type == "blob") | .path'
+            | lines
+            | where {|p| $p | str starts-with $"($dir)/" })
+        if ($blobs | is-empty) { return }
+
+        # A tree entry with a null sha deletes the path.
+        let tree = ({
+            base_tree: $base_tree
+            tree: ($blobs | each {|p| { path: $p, mode: "100644", type: "blob", sha: null } })
+        } | to json | gh api --method POST $"repos/($owner)/($repo)/git/trees" --input - --jq '.sha' | str trim)
+
+        let commit = ({
+            message: "devkit: remove flux bootstrap manifests (Flux is operator-managed)"
+            tree: $tree
+            parents: [$head]
+        } | to json | gh api --method POST $"repos/($owner)/($repo)/git/commits" --input - --jq '.sha' | str trim)
+
+        gh api --method PATCH $"repos/($owner)/($repo)/git/refs/heads/($branch)" -f $"sha=($commit)" | ignore
+        success $"Pruned ($dir)/ from ($owner)/($repo) \(commit ($commit | str substring 0..6)\)"
+    }
+}
+
+# FluxInstance mirroring the old bootstrap arguments, built from config [flux].
+# `scheme` ("ssh" | "token") must match the flux-system pull secret.
+def flux-instance [cfg: record, owner: string, repo: string, scheme: string]: nothing -> string {
+    let f = $cfg.flux
+    let url = (if $scheme == "ssh" {
+        $"ssh://git@github.com/($owner)/($repo).git"
+    } else {
+        $"https://github.com/($owner)/($repo).git"
+    })
+    {
+        apiVersion: "fluxcd.controlplane.io/v1"
+        kind: "FluxInstance"
+        metadata: { name: "flux", namespace: $f.namespace }
+        spec: {
+            distribution: { version: $f.version, registry: $f.registry }
+            components: $f.components
+            cluster: { type: $f.cluster_type, multitenant: false, networkPolicy: true, domain: "cluster.local" }
+            sync: {
+                kind: "GitRepository"
+                url: $url
+                ref: $"refs/heads/($f.branch)"
+                path: $f.path
+                pullSecret: "flux-system"
+            }
+        }
+    } | to yaml
+}
+
+# Install the Flux Operator and hand it a FluxInstance. Idempotent: safe to
+# re-run on an existing cluster and on a cluster previously bootstrapped with
+# `flux bootstrap` (the operator takes over the controllers in place).
+def setup-flux [cfg: record, repo_override: string, owner_override: string, keep_bootstrap: bool] {
+    require-bin "gh"
+    require-bin "helm"
+
+    let f = $cfg.flux
+    let ns = $f.namespace
+    let repo = (if ($repo_override | is-empty) { $f.repository } else { $repo_override })
+    let token = (flux-token $cfg)
+    let gh_user = ($f.gh_user? | default "")
+    let owner = (if ($owner_override | is-empty) {
+        let cfg_owner = ($f.owner? | default "")
+        if ($cfg_owner | is-not-empty) {
+            $cfg_owner
+        } else if ($gh_user | is-not-empty) {
+            $gh_user
+        } else {
+            (with-env { GH_TOKEN: $token } { gh api user --jq '.login' } | str trim)
+        }
+    } else { $owner_override })
+
+    ensure-flux-repo $owner $repo $f.branch $f.path $token
+
+    do { kubectl create namespace $ns } | complete
+    let scheme = (ensure-flux-git-secret $ns $owner $repo $token ($f.auth? | default "auto"))
+
+    info "Installing Flux Operator..."
+    let version_args = (if ($f.operator_version? | default "" | is-empty) { [] } else { ["--version" $f.operator_version] })
+    let r = (do {
+        helm upgrade --install flux-operator $FLUX_OPERATOR_CHART ...$version_args --namespace $ns --create-namespace --wait --timeout 10m
+    } | complete)
+    if $r.exit_code != 0 {
+        error $"Flux Operator install failed \(exit ($r.exit_code)\)"
+        print ($r.stdout + $r.stderr)
+        exit 1
+    }
+
+    info $"Applying FluxInstance \(distribution ($f.version), sync ($owner)/($repo)@($f.branch):($f.path)\)..."
+    (flux-instance $cfg $owner $repo $scheme) | kubectl apply -f -
+
+    let w = (do { kubectl -n $ns wait fluxinstance/flux --for=condition=Ready --timeout=300s } | complete)
+    if $w.exit_code != 0 {
+        warn $"FluxInstance not ready yet — inspect with: kubectl -n ($ns) describe fluxinstance flux"
+        info $"Flux Web UI: devkit cluster flux-ui"
+        return
+    }
+    success $"Flux syncing ($owner)/($repo) @ ($f.path) \(operator-managed\)"
+
+    # Only once the operator actually owns the objects: pruning earlier lets the
+    # still-live bootstrap Kustomization garbage-collect them.
+    if $keep_bootstrap {
+        let dir = $"($f.path)/flux-system"
+        if ((do { with-env { GH_TOKEN: $token } { gh api $"repos/($owner)/($repo)/contents/($dir)/gotk-components.yaml?ref=($f.branch)" } } | complete).exit_code == 0) {
+            warn $"($dir)/ still in the repo — bootstrap manifests and the operator will fight over Flux. Re-run without --keep-flux-bootstrap to prune them."
+        }
+    } else {
+        prune-flux-bootstrap $owner $repo $f.branch $f.path $token
+    }
+
+    info $"Flux Web UI: devkit cluster flux-ui"
+}
+
+# Port-forward the Flux Operator service and open the built-in Flux Web UI (blocks).
+export def "devkit cluster flux-ui" [
+    --port (-p): int = -1  # Local port (default: config flux.ui_port)
+    --no-open              # Do not launch a browser
+] {
+    require-bin "kubectl"
+
+    let cfg = (resolve-config)
+    let ns = $cfg.flux.namespace
+    let port = (if $port < 0 { $cfg.flux.ui_port } else { $port })
+
+    if ((do { kubectl -n $ns get deploy flux-operator } | complete).exit_code != 0) {
+        error $"Flux Operator not found in namespace '($ns)'. Run 'devkit cluster setup --flux' first."
+        exit 1
+    }
+
+    info $"Flux UI: http://localhost:($port)  \(Ctrl-C to stop\)"
+    if (not $no_open) and (is-macos) { do { ^open $"http://localhost:($port)" } | complete }
+    kubectl -n $ns port-forward svc/flux-operator $"($port):9080"
 }
 

@@ -113,14 +113,29 @@ export const DEFAULTS = {
         chart_version: ""                  # ESO chart version; empty = latest
     }
 
-    # Flux GitOps bootstrap
+    # Flux GitOps. devkit installs Flux with the ControlPlane Flux Operator
+    # (helm chart + FluxInstance), not `flux bootstrap`: nothing is committed to
+    # the repo, re-running on a recreated cluster is a no-op, and the operator
+    # pod serves the Flux Web UI (`devkit cluster flux-ui`).
     flux: {
         owner: ""              # GitHub user/org; empty = derive from `gh api user`
-        gh_user: ""            # gh account for the bootstrap token (multi-account); empty = active account
-        repository: "gitops"
+        gh_user: ""            # gh account for the API token (multi-account); empty = active account
+        repository: "gitops"   # repo devkit creates/reads the cluster state from
         branch: "main"
-        path: "clusters/local"
-        personal: true
+        path: "clusters/local" # sync path inside the repo; seeded if missing
+        # Git auth for the sync: "auto" mints a read-only deploy key and falls
+        # back to HTTPS token auth when the repo/org forbids deploy keys,
+        # "ssh" fails instead of falling back, "token" always uses HTTPS.
+        auth: "auto"
+        namespace: "flux-system"
+        version: "2.x"         # Flux distribution version (FluxInstance spec.distribution.version)
+        registry: "ghcr.io/fluxcd"
+        # Controllers the operator installs; add image-reflector-controller /
+        # image-automation-controller / source-watcher when needed.
+        components: ["source-controller" "kustomize-controller" "helm-controller" "notification-controller"]
+        operator_version: ""   # flux-operator helm chart version; empty = latest
+        cluster_type: "kubernetes"  # kubernetes | openshift | aws | azure | gcp
+        ui_port: 9080          # local port for `devkit cluster flux-ui`
     }
 
     # Endpoints printed after `up`. Each row: { label, url }.
