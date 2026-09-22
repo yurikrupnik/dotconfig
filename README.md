@@ -19,6 +19,7 @@ This:
 4. Symlinks `output/` and hand-written packages into `$HOME` via GNU stow
 5. Bootstraps `cargo-binstall` + `cargo-liner` and installs global cargo tools from `config/cargo/liner.toml`
 6. Installs global npm/bun packages from `config/node/package.json`
+7. Installs gcloud components (`skaffold`) when `gcloud` is present
 
 After install, run `just doctor` to verify everything is wired correctly.
 
