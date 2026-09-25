@@ -1,3 +1,7 @@
+# cask "restatedev"                           # Postman — API client
+cask "restate"                           # Postman — API client
+cask "restate-server"                           # Postman — API client
+cask "httpie-desktop"
 tap "kcl-lang/tap"
 brew "kcl-lang/tap/kcl"                  # KCL — configuration language for cloud-native
 tap "KusionStack/tap"
@@ -145,7 +149,6 @@ cask "1password"                         # 1Password — password manager
 cask "lens"                              # Lens — Kubernetes desktop IDE
 cask "coderabbit"                        # CodeRabbit — AI code review
 cask "postman"                           # Postman — API client
-cask "httpie-desktop"                    # HTTPie Desktop — API client GUI
 # cask "gcloud-cli"
 # cask "docker"
 # cask "jetbrains-toolbox"

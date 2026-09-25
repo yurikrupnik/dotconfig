@@ -11,14 +11,14 @@ Sources of truth:
 - `config/shell/config.toml` — aliases, `[functions.*]` (become bash scripts on
   PATH), `[environment]` (emitted to zsh + nushell)
 - `config/scripts/*.nu|sh` — hand-written scripts, copied to `~/.local/bin/<name>`
-  with extension stripped (`upkg.nu` → `upkg`, `devkit.sh` → `devkit`)
+  with extension stripped (`upkg.nu` → `upkg`, `mcp.nu` → `mcp`)
 - `config/brew/Brewfile`, `config/cargo/liner.toml`, `config/node/package.json`,
   `config/uv/tools.txt` — machine packages, installed/refreshed by `update`
 - Hand-written stow packages at repo root (`zsh/`, `nushell/`, `zed/`, ...)
 
 After editing generated sources: `just regen` (generate + restow). Hand-written
-packages (e.g. `nushell/.config/nushell/scripts/devkit/`) are symlinked — edits
-are live immediately, no regen.
+packages (e.g. `nvim/`, `zed/`) are symlinked — edits are live immediately, no
+regen.
 
 ## Naming constraints
 
@@ -37,8 +37,12 @@ are live immediately, no regen.
   remaining steps. Other `[functions.*]` keep `set -e` (abort on first failure).
 - `upkg` — update *project* deps in $PWD (cargo/node/uv, workspace-aware,
   OSV scans, cooldown; `--fast`/`--paranoid`); source: `config/scripts/upkg.nu`
-- `devkit` — kind/compose local-env engine; nu module in
-  `nushell/.config/nushell/scripts/devkit/`, bash launcher in `config/scripts/`
+- `devkit` — kind/compose local-env engine. **Not in this repo**: it lives in
+  toolkit (`~/shluviza.com/toolkit/apps/devkit`) and is installed by
+  `bun nx run devkit:link` (or `devkit:install`) from there, which owns
+  `~/.local/bin/devkit`, `~/.local/lib/devkit` and
+  `~/.config/nushell/scripts/devkit`. `devkit.toml` here is only this repo's
+  per-repo config for it.
 - `just doctor` — health check; `just outdated` — preview refresh
 
 ## Environment notes

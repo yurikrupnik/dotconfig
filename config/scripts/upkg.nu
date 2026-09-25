@@ -3,7 +3,7 @@
 #
 # Modes:
 #   (default)    safe   — OSV-Scanner pre/post, --ignore-scripts, cooldown gate for npm,
-#                          post-update build/lint/test via just or nx
+#                          post-update build/lint/test via just, task or nx
 #   --fast              — skip all checks/tests, just update --latest. Use knowingly.
 #   --paranoid          — safe + cargo-vet + Socket (Socket needs an API token;
 #                          skipped with a warning when absent)
@@ -290,17 +290,30 @@ def update-uv [files: list<string>, cfg: record]: nothing -> list<record> {
 
 # ---------- Post-update checks ----------
 
+# `check` is conventionally the aggregate gate (fmt+lint+test+audit); running it
+# alongside its constituents triples the work.
+def pick-gates [names: list<string>]: nothing -> list<string> {
+    let candidates = ($names | where { |r| $r in ["build" "lint" "test" "check"] })
+    if "check" in $candidates { ["check"] } else { $candidates }
+}
+
 def detect-task-runner []: nothing -> record {
     if ("justfile" | path exists) {
         let summary = try {
             ^just --summary | str trim | split row " "
         } catch { [] }
-        # `check` is conventionally the aggregate gate (fmt+lint+test+audit);
-        # running it alongside its constituents triples the work.
-        let candidates = ($summary | where { |r| $r in ["build" "lint" "test" "check"] })
-        let recipes = if "check" in $candidates { ["check"] } else { $candidates }
+        let recipes = (pick-gates $summary)
         if not ($recipes | is-empty) {
             return {kind: "just", recipes: $recipes}
+        }
+    }
+    if (["Taskfile.yml" "Taskfile.yaml" "taskfile.yml" "taskfile.yaml"] | any { |f| $f | path exists }) {
+        let names = try {
+            ^task --list-all --json | from json | get tasks.name
+        } catch { [] }
+        let recipes = (pick-gates $names)
+        if not ($recipes | is-empty) {
+            return {kind: "task", recipes: $recipes}
         }
     }
     if ("nx.json" | path exists) {
@@ -312,7 +325,7 @@ def detect-task-runner []: nothing -> record {
 def run-checks []: nothing -> record {
     let runner = (detect-task-runner)
     if $runner.kind == "none" {
-        warn "no justfile or nx.json — skipping post-update checks"
+        warn "no justfile, Taskfile or nx.json — skipping post-update checks"
         return {ok: true, runner: "none", failed: []}
     }
     section $"Post-update checks via ($runner.kind)"
@@ -320,6 +333,10 @@ def run-checks []: nothing -> record {
         "just" => ($runner.recipes | each { |r|
             section $"just ($r)"
             {name: $"just ($r)", ok: (try-run $"just ($r)" { ^just $r })}
+        }),
+        "task" => ($runner.recipes | each { |r|
+            section $"task ($r)"
+            {name: $"task ($r)", ok: (try-run $"task ($r)" { ^task $r })}
         }),
         "nx" => [{
             name: "bun nx affected -t lint build test"
