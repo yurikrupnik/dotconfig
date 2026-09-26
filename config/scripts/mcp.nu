@@ -17,7 +17,8 @@ const DEFAULT_CONFIG = "~/dotconfig/config/mcp/servers.json"
 
 # Per-target: where to write, what format, replace vs merge, which top-level key holds the servers map.
 # "replace" wipes the whole file. "merge" preserves all other top-level keys, replacing only `key`.
-const TARGETS = {
+# Exported: `toolbelt govern` audits every client file listed here.
+export const TARGETS = {
     "claude-code":    { path: ".mcp.json",                                                       format: "json", strategy: "replace", key: "mcpServers" }
     "claude-desktop": { path: "~/Library/Application Support/Claude/claude_desktop_config.json", format: "json", strategy: "merge",   key: "mcpServers" }
     "cursor":         { path: "~/.cursor/mcp.json",                                              format: "json", strategy: "replace", key: "mcpServers" }

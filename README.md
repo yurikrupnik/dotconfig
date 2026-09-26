@@ -40,6 +40,20 @@ just                        # List all recipes
 just doctor                 # Verify install health (symlinks, freshness, deps)
 just outdated               # Preview what `u` would refresh
 
+toolbelt                    # Dashboard: every brew/mise/cargo/node/uv tool + alias/function/script,
+                            #   per-shell usage, value vs code you maintain, unused tools, alias gaps
+toolbelt tools -s brew      # Table view (filters: --source --status --shell; --json on every view)
+toolbelt value|gaps|shells|ui  # custom-code ROI · hand-typed repeats · shell cards · interactive browser
+toolbelt govern             # Read-only security/governance audit: shells, gcp, mcp, agents, clusters —
+                            #   management clusters + the children they created (CAPI/Crossplane/vcluster/Flux/Argo)
+toolbelt govern -s clusters -c <ctx>  # one management cluster and its children; --all adds passing checks
+toolbelt manage             # AI agent (claude; -a omp) plans installs from the `also`/status/managed columns:
+                            #   dedupe managers, install missing, declare/uninstall drift, drop unused (plan only)
+toolbelt manage --apply     # same, then confirm each action: runs brew/mise/cargo/bun/uv + edits config/ declarations
+
+# zsh .zsh_history is deduped, so zsh/.config/zsh/.zshrc logs every run to
+# ~/.local/state/toolbelt/zsh.tsv (preexec hook); nu counts come from history.sqlite3.
+
 just regen                  # Regenerate output/ from config/ + restow
 just stow / unstow          # Re-apply or remove stowed symlinks
 just stow-dry               # Preview stow operations
@@ -157,8 +171,8 @@ dotconfig/
 │   └── scripts/                        # Hand-written scripts (any language)
 │       ├── mcp.nu                      # → ~/.local/bin/mcp
 │       ├── nx-run.nu                   # → ~/.local/bin/nx-run
+│       ├── toolbelt.nu                 # → ~/.local/bin/toolbelt (tool inventory + usage/value dashboard)
 │       ├── upkg.nu                     # → ~/.local/bin/upkg
-│       └── README.md                   # When to write a script; bash vs nu
 ├── scripts/
 │   ├── doctor.sh                       # Health check (commands, symlinks, freshness)
 │   ├── outdated.sh                     # Preview pending updates (brew/rust/node)

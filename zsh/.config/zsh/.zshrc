@@ -52,6 +52,21 @@ setopt hist_ignore_all_dups
 setopt hist_save_no_dups
 setopt hist_find_no_dups
 
+# Run log for `toolbelt` (config/scripts/toolbelt.nu): the settings above keep
+# one copy of each command line, so history can't say how OFTEN a tool runs.
+# One line per command: <epoch-seconds>\t<command>. Space-prefixed commands are
+# skipped, same as hist_ignore_space. Builtins only — no fork per command.
+zmodload -F zsh/datetime p:EPOCHSECONDS
+_toolbelt_log_file="${XDG_STATE_HOME:-$HOME/.local/state}/toolbelt/zsh.tsv"
+[[ -f $_toolbelt_log_file ]] || { mkdir -p "${_toolbelt_log_file:h}" && : >> "$_toolbelt_log_file" && chmod 600 "$_toolbelt_log_file"; }
+_toolbelt_log() {
+    [[ $1 == ' '* ]] && return
+    local cmd=${1//$'\n'/ }
+    print -r -- "$EPOCHSECONDS"$'\t'"${cmd//$'\t'/ }" >> "$_toolbelt_log_file"
+}
+autoload -Uz add-zsh-hook
+add-zsh-hook preexec _toolbelt_log
+
 autoload -Uz compinit && compinit
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
 
