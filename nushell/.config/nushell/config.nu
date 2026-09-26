@@ -77,6 +77,11 @@ if ('~/.cache/direnv/init.nu' | path expand | path exists) {
     source ~/.cache/direnv/init.nu
 }
 
+# Mise (per-project runtimes)
+if ('~/.cache/mise/init.nu' | path expand | path exists) {
+    use ~/.cache/mise/init.nu
+}
+
 # Source generated configuration (aliases, functions, environment variables)
 if ('~/.config/nushell/generated.nu' | path expand | path exists) {
     source ~/.config/nushell/generated.nu

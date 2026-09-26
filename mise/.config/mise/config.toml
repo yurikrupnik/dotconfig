@@ -1,0 +1,7 @@
+# Global mise config (stowed to ~/.config/mise/config.toml).
+#
+# Policy: mise only provides runtimes pinned by a project's mise.toml /
+# .mise.toml. CLIs belong to one owner: config/brew/Brewfile, then
+# config/cargo/liner.toml, config/node/package.json, config/uv/tools.txt.
+# Keep [tools] empty here; `mise prune` removes versions no tracked project needs.
+[tools]

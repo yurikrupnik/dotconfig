@@ -11,6 +11,12 @@ $env.PATH = ($env.PATH | split row (char esep) | prepend [
     $"($env.HOME)/Library/Application Support/JetBrains/Toolbox/scripts"
 ])
 
+# Cargo (Rust). Prepended before Homebrew so brew wins, matching zsh's order
+# (.zshrc sources ~/.cargo/env, then `brew shellenv` prepends brew).
+if ($"($env.HOME)/.cargo/env" | path exists) {
+    $env.PATH = ($env.PATH | prepend $"($env.HOME)/.cargo/bin")
+}
+
 # Homebrew
 if ('/opt/homebrew/bin/brew' | path exists) {
     # Load Homebrew environment
@@ -23,9 +29,10 @@ if ('/opt/homebrew/bin/brew' | path exists) {
     $env.INFOPATH = $"/opt/homebrew/share/info:($env.INFOPATH? | default '')"
 }
 
-# Cargo (Rust)
-if ($"($env.HOME)/.cargo/env" | path exists) {
-    $env.PATH = ($env.PATH | prepend $"($env.HOME)/.cargo/bin")
+# Mise — only for runtimes pinned by a project's mise.toml (same as zsh).
+if (which mise | is-not-empty) {
+    mkdir ~/.cache/mise
+    ^mise activate nu | save -f ~/.cache/mise/init.nu
 }
 
 # Starship prompt

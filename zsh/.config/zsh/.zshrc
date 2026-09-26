@@ -2,7 +2,7 @@
 [[ -f $HOME/.config/zsh/generated.zsh ]] && source $HOME/.config/zsh/generated.zsh
 # Nix!
 # export NIX_CONF_DIR=$HOME/.config/nix
-. "$HOME/.cargo/env"
+[[ -f "$HOME/.cargo/env" ]] && . "$HOME/.cargo/env"
 
 bindkey -r "^G"
 
@@ -18,8 +18,8 @@ eval "$(starship init zsh)"
 export STARSHIP_CONFIG=~/.config/starship/starship.toml
 # Zoxide
 eval "$(zoxide init --cmd cd zsh)"
-# Mise
-eval "$(mise activate bash)"
+# Mise — only for runtimes pinned by a project's mise.toml; CLIs come from brew/cargo.
+eval "$(mise activate zsh)"
 # export CARAPACE_BRIDGES='zsh,fish,bash,inshellisense' # optional
 # zstyle ':completion:*' format $'\e[2;37mCompleting %d\e[m'
 # source <(carapace _carapace)

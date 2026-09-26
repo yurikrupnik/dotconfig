@@ -1,18 +1,28 @@
 # cargo-liner config - global cargo packages
 # Docs: https://docs.rs/cargo-liner
-# Symlinked from install.sh to $CARGO_HOME/liner.toml
+# Linked to $CARGO_HOME/liner.toml by `just cargo-install`.
 #
 # Run `cargo liner ship` to install/update everything below.
+#
+# Versions: `*` unless a crate publishes prerelease versions. cargo-liner's
+# version check takes "latest" from `cargo search` (prereleases included) and
+# ignores the requirement, while the install itself resolves the newest stable
+# match, so such crates were reinstalled at the same version on every `u`.
+# Those get a pinned line + `skip-check = true`: cargo-binstall then sees the
+# newest match is already installed and does nothing.
 
 [packages]
 # Project scaffolding & generators
 cargo-generate = "*"
 create-tauri-app = "*"
+tauri-cli = { version = "2", skip-check = true }   # 3.0.0-alpha.* on crates.io
 
 # Build tools & task runners
 cargo-make = "*"
-trunk = "*"
+trunk = { version = "0.21", skip-check = true }   # 0.22.0-beta.* on crates.io
 cargo-run-script = "*"
+cargo-watch = "*"
+cargo-component = "*"
 zesh = "*"
 
 # Web frameworks & tools
@@ -22,9 +32,10 @@ wasm-pack = "*"
 
 # Development tools
 cargo-nextest = "*"
+du-dust = "*"
 
 # Code inspection & editing
-cargo-edit = "*"
+cargo-edit = "*"          # cargo upgrade / set-version (add/rm are built into cargo)
 cargo-expand = "*"
 cargo-modules = "*"
 cargo-readme = "*"
@@ -36,10 +47,11 @@ checker = "*"
 rumdl = "*"
 typos-cli = "*"
 
-# Dependency management
+# Dependency management (`cargo tree` is built into cargo)
 cargo-outdated = "*"
-cargo-tree = "*"
 cargo-audit = "*"
+cargo-deny = "*"
+cargo-machete = "*"
 
 # Release & deployment
 cargo-release = "*"
@@ -48,9 +60,11 @@ sccache = "*"
 
 # Database tools
 sqlx-cli = "*"
+sea-orm-cli = "*"
 
-# Protocol buffers
-protobuf-codegen = "*"
+# Protocol buffers / codegen
+protobuf-codegen = { version = "3", skip-check = true }   # 4.x: `-release`-suffixed library versions
+typeshare-cli = "*"
 
 # Cross-compilation
 cross = "*"

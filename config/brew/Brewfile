@@ -4,6 +4,7 @@ brew "restatedev/tap/restate"            # restate — Restate CLI
 cask "httpie-desktop"
 tap "kcl-lang/tap"
 brew "kcl-lang/tap/kcl"                  # KCL — configuration language for cloud-native
+brew "kcl-lang/tap/kcl-lsp"              # kcl-lsp — KCL language server
 tap "KusionStack/tap"
 brew "KusionStack/tap/kusion"            # Kusion — app delivery engine for k8s/cloud
 tap "ariga/tap"
@@ -69,7 +70,9 @@ brew "istioctl"                          # istioctl — Istio service mesh CLI
 brew "crossplane"                        # crossplane — cloud infra via Kubernetes APIs
 brew "stefanprodan/tap/timoni"           # timoni — CUE-based package manager for Kubernetes
 brew "deno"                              # Deno — secure JS/TS runtime
-brew "oven-sh/bun/bun"                   # Bun — JS runtime, bundler, package manager
+brew "bun"                               # Bun — JS runtime, bundler, package manager (homebrew/core)
+tap "nubjs/tap"
+brew "nubjs/tap/nub"                     # nub — fast TypeScript runtime/package manager augmenting Node
 brew "buf"                               # buf — modern Protobuf tooling (lint, breaking, generate)
 brew "k6"                                # k6 — developer-centric load testing
 brew "just"                              # just — command runner (Justfile, like make)
@@ -94,6 +97,8 @@ brew "kubevela"                          # KubeVela — modern application deliv
 brew "kubeseal"                          # kubeseal — CLI for Bitnami Sealed Secrets
 brew "k9s"                               # k9s — Kubernetes cluster TUI
 brew "kind"                              # kind — local Kubernetes clusters using Docker nodes
+brew "k3d"                               # k3d — k3s clusters in Docker
+brew "kyverno"                           # kyverno — Kubernetes policy engine CLI
 brew "gh"                                # gh — GitHub CLI
 brew "lazygit"                           # lazygit — terminal UI for git
 brew "argocd"                            # argocd — Argo CD CLI (GitOps for k8s)
@@ -107,7 +112,9 @@ brew "minikube"                          # minikube — local Kubernetes
 brew "kubectx"                           # kubectx/kubens — switch k8s contexts & namespaces
 brew "pulumi"                            # Pulumi — infrastructure as code in real languages
 brew "tilt"                              # Tilt — local Kubernetes dev environments
+brew "temporal"                          # Temporal CLI — local dev server + workflow admin
 brew "trivy"                             # Trivy — vulnerability & misconfig scanner
+brew "gitleaks"                          # gitleaks — secret scanner (lefthook pre-commit + CI)
 brew "tlrc"                              # tlrc — Rust client for tldr (simplified man pages)
 brew "duf"                               # duf — disk usage / free utility TUI
 brew "eza"                               # eza — modern replacement for `ls`
