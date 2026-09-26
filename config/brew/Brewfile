@@ -1,6 +1,6 @@
-# cask "restatedev"                           # Postman — API client
-cask "restate"                           # Postman — API client
-cask "restate-server"                           # Postman — API client
+tap "restatedev/tap"
+brew "restatedev/tap/restate-server"     # Restate — durable execution server
+brew "restatedev/tap/restate"            # restate — Restate CLI
 cask "httpie-desktop"
 tap "kcl-lang/tap"
 brew "kcl-lang/tap/kcl"                  # KCL — configuration language for cloud-native
