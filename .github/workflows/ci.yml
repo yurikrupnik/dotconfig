@@ -1,0 +1,152 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NU_VERSION: "0.115.1"
+  GITLEAKS_VERSION: "8.30.1"
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb # linux_x64
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        with:
+          tool: shellcheck@0.11.0,taplo@0.10.0
+          fallback: none
+      - uses: hustcer/setup-nu@9215c80adb545a85c419d5085b76eb6d082f49e7 # v3.27
+        with:
+          version: ${{ env.NU_VERSION }}
+
+      - name: shellcheck
+        run: shellcheck install.sh bootstrap.sh scripts/*.sh
+
+      - name: taplo check
+        run: taplo check "config/**/*.toml" devkit.toml
+
+      - name: nu-check
+        run: |
+          # config.nu/env.nu `use`/`source` files under ~ at parse time (tool
+          # init scripts, generated.nu); on a real machine setup writes them.
+          # Empty stubs are enough to parse.
+          sed -nE 's|^[[:space:]]*(use\|source)[[:space:]]+~/([^[:space:]]+).*|\2|p' \
+            nushell/.config/nushell/*.nu | sort -u | while IFS= read -r p; do
+            mkdir -p "$(dirname "$HOME/$p")" && touch "$HOME/$p"
+          done
+          # shellcheck disable=SC2016  # $env.NU_FILE is nushell, not bash
+          nucheck() { NU_FILE="$1" nu -n -c 'nu-check --debug $env.NU_FILE' >/dev/null; }
+          rc=0
+          while IFS= read -r f; do
+            if nucheck "$f"; then
+              echo "ok  $f"
+            else
+              echo "::error file=$f::nu-check failed"
+              rc=1
+            fi
+          done < <(find config/scripts -maxdepth 1 -name '*.nu'; find scripts/nu -name '*.nu'; find nushell/.config/nushell -maxdepth 1 -name '*.nu')
+          exit "$rc"
+
+  generator:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        with:
+          tool: shellcheck@0.11.0
+          fallback: none
+      - uses: hustcer/setup-nu@9215c80adb545a85c419d5085b76eb6d082f49e7 # v3.27
+        with:
+          version: ${{ env.NU_VERSION }}
+
+      - name: validate config.toml
+        run: nu scripts/nu/setup-local-machine/shells.nu validate
+
+      - name: generate
+        run: |
+          nu scripts/nu/setup-local-machine/shells.nu generate \
+            --zsh-dir "$RUNNER_TEMP/gen/zsh" \
+            --nu-dir "$RUNNER_TEMP/gen/nu" \
+            --bin-dir "$RUNNER_TEMP/gen/bin"
+
+      - name: check generated output
+        run: |
+          # shellcheck disable=SC2016  # $env.NU_FILE is nushell, not bash
+          nucheck() { NU_FILE="$1" nu -n -c 'nu-check --debug $env.NU_FILE' >/dev/null; }
+          gen="$RUNNER_TEMP/gen"
+          rc=0
+          zsh -n "$gen/zsh/generated.zsh" || { echo "::error::zsh -n generated.zsh failed"; rc=1; }
+          nucheck "$gen/nu/generated.nu" || { echo "::error::nu-check generated.nu failed"; rc=1; }
+          for f in "$gen"/bin/*; do
+            name="$(basename "$f")"
+            case "$(head -n1 "$f")" in
+              *bash*|*/sh)
+                # /bin/bash is macOS stock bash 3.2 — the scripts must parse there.
+                if /bin/bash -n "$f" && shellcheck "$f"; then echo "ok  $name (bash)"
+                else echo "::error::bin/$name failed bash -n/shellcheck"; rc=1; fi
+                ;;
+              *nu)
+                if nucheck "$f"; then echo "ok  $name (nu)"
+                else echo "::error::bin/$name failed nu-check"; rc=1; fi
+                ;;
+              *)
+                echo "::error::bin/$name has an unrecognised shebang: $(head -n1 "$f")"
+                rc=1
+                ;;
+            esac
+          done
+          exit "$rc"
+
+      - name: nu-check config.nu with generated.nu sourced
+        run: |
+          sed -nE 's|^[[:space:]]*(use\|source)[[:space:]]+~/([^[:space:]]+).*|\2|p' \
+            nushell/.config/nushell/*.nu | sort -u | while IFS= read -r p; do
+            mkdir -p "$(dirname "$HOME/$p")" && touch "$HOME/$p"
+          done
+          cp "$RUNNER_TEMP/gen/nu/generated.nu" ~/.config/nushell/generated.nu
+          nu -n -c 'nu-check --debug nushell/.config/nushell/config.nu'
+
+  brewfile:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: check Brewfile entries exist
+        run: scripts/check-brewfile.sh --tap
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: install gitleaks
+        run: |
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSLo "$RUNNER_TEMP/$tarball" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$tarball"
+          echo "$GITLEAKS_SHA256  $RUNNER_TEMP/$tarball" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP" gitleaks
+      - name: gitleaks (full history)
+        run: '"$RUNNER_TEMP/gitleaks" git --redact --verbose --exit-code 1 .'

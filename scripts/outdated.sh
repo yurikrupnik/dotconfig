@@ -9,6 +9,7 @@ NC='\033[0m'
 
 section() { echo -e "\n${GREEN}==>${NC} $1"; }
 dim()     { echo -e "${DIM}$1${NC}"; }
+indent()  { while IFS= read -r line; do printf '  %s\n' "$line"; done; }
 
 if command -v brew &> /dev/null; then
     section "Homebrew"
@@ -16,7 +17,7 @@ if command -v brew &> /dev/null; then
     if [ -z "$out" ]; then
         dim "  all packages up to date"
     else
-        echo "$out" | sed 's/^/  /'
+        indent <<< "$out"
     fi
 fi
 
@@ -31,7 +32,7 @@ if command -v bun &> /dev/null; then
     if [ -z "$out" ]; then
         dim "  all globals up to date"
     else
-        echo "$out" | sed 's/^/  /'
+        indent <<< "$out"
     fi
 elif command -v npm &> /dev/null; then
     section "Npm globals"
@@ -39,7 +40,7 @@ elif command -v npm &> /dev/null; then
     if [ -z "$out" ]; then
         dim "  all globals up to date"
     else
-        echo "$out" | sed 's/^/  /'
+        indent <<< "$out"
     fi
 fi
 
@@ -49,7 +50,7 @@ if command -v uv &> /dev/null; then
     if [ -z "$out" ]; then
         dim "  all tools up to date"
     else
-        echo "$out" | sed 's/^/  /'
+        indent <<< "$out"
     fi
 fi
 

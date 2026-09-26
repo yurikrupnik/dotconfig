@@ -1,0 +1,12 @@
+# gitleaks false positives in pushed history (verified by hand 2026-09-26):
+# external-secrets webhook --for=condition=…, compose flag placeholders, sha256 lock
+# digests, an s3 key-prefix literal, a base64 demo value in a kcl example.
+# .cargo/config.toml SERVICE_*_KEY (4d6200f) is deliberately NOT listed: real-looking keys.
+466fb806c9ad1d7563280a260ecdd865de8305dc:scripts/kcl/manager/be/cluster_example.k:generic-api-key:38
+466fb806c9ad1d7563280a260ecdd865de8305dc:scripts/nu/index.nu:generic-api-key:165
+7ada2c933b143f26eb4bb7a924e29573062ff3fc:docker-compose.yml:generic-api-key:105
+7ada2c933b143f26eb4bb7a924e29573062ff3fc:docker-compose.yml:generic-api-key:77
+7ada2c933b143f26eb4bb7a924e29573062ff3fc:scripts/nu/local-dev/post-cluster.nu:generic-api-key:236
+dd68fea8b5bf13c692e16271f5473af41dd68a80:src/operator/controllers/bedrock_access.rs:generic-api-key:596
+fbfe7a10f418e58dde43632f906d0a711356af8b:scripts/nu/index.nu:generic-api-key:110
+fc806cdfa1474ef3fd7fd2b682b4b52cd8a094af:scripts/kcl/getting-started/.up/.lock.json:generic-api-key:1

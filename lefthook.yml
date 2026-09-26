@@ -1,0 +1,51 @@
+# Git hooks — `lefthook install` once per clone (brew "lefthook").
+# Mirrors the fast checks in .github/workflows/ci.yml on staged files only.
+pre-commit:
+  parallel: true
+  jobs:
+    - name: gitleaks
+      run: |
+        if command -v gitleaks >/dev/null 2>&1; then
+          gitleaks git --pre-commit --staged --redact --no-banner --verbose
+        else
+          echo "! gitleaks not installed — secret scan skipped (brew install gitleaks)" >&2
+        fi
+
+    - name: shellcheck
+      glob: "*.sh"
+      run: shellcheck {staged_files}
+
+    - name: nu-check
+      glob: "*.nu"
+      run: |
+        rc=0
+        for f in {staged_files}; do
+          NU_FILE="$f" nu -n -c 'nu-check --debug $env.NU_FILE' >/dev/null || { echo "✗ nu-check: $f" >&2; rc=1; }
+        done
+        exit "$rc"
+
+    - name: taplo
+      glob: "*.toml"
+      run: taplo check {staged_files}
+
+    - name: generator-validate
+      glob:
+        - "config/shell/config.toml"
+        - "config/scripts/*"
+      run: nu scripts/nu/setup-local-machine/shells.nu validate
+
+commit-msg:
+  jobs:
+    - name: conventional-commit
+      run: |
+        subject="$(sed -n '1p' "{1}")"
+        case "$subject" in
+          "Merge "*|"Revert "*) exit 0 ;;
+        esac
+        if printf '%s\n' "$subject" | grep -Eq '^(feat|fix|chore|docs|refactor|perf|test|ci|build|revert)(\([^)]+\))?!?: [^ ]'; then
+          exit 0
+        fi
+        echo "✗ commit subject must follow Conventional Commits: type(scope)?: subject" >&2
+        echo "  types: feat fix chore docs refactor perf test ci build revert" >&2
+        echo "  got:   $subject" >&2
+        exit 1
