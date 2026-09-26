@@ -25,6 +25,8 @@ tap "hashicorp/tap"
 brew "hashicorp/tap/vault"               # Vault — secrets management
 brew "hashicorp/tap/terraform"           # Terraform — infrastructure as code
 brew "qemu"                              # QEMU — generic machine emulator / virtualizer
+brew "lima"                              # Lima — Linux/macOS VMs (just sandbox-linux / sandbox-mac)
+cask "utm" if OS.mac?                     # UTM — VM GUI; Windows 11 ARM sandbox (see dotconfig skill platforms.md)
 brew "tbls"                              # tbls — generate database documentation
 brew "jless"                             # jless — TUI JSON/YAML viewer (pager for structured data)
 brew "mise"                              # mise — polyglot runtime/version manager (Node, Python, …)
@@ -44,7 +46,7 @@ brew "poppler"                           # poppler — PDF rendering library (pd
 brew "fd"                                # fd — simple, fast alternative to `find`
 brew "ripgrep"                           # ripgrep (rg) — fast recursive grep
 brew "p7zip"                             # p7zip — 7-Zip archive utility
-brew "ImageMagick"                       # ImageMagick — image manipulation toolkit
+brew "imagemagick"                       # ImageMagick — image manipulation toolkit
 brew "jj"                                # Jujutsu — git-compatible VCS with better UX
 brew "hey"                               # hey — HTTP load generator
 brew "bottom"                            # bottom (btm) — graphical system/process monitor TUI
