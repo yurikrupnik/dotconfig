@@ -17,7 +17,124 @@ const REPO_NAME = $REPO_DIR | path basename
 
 # Hand-written stow packages that live at the top of the repo (not under output/).
 # output/ is for generator output only; anything you hand-edit goes here.
-const HAND_WRITTEN_PACKAGES = ["zellij", "zed", "starship", "zsh", "nushell", "pnpm", "bun", "nvim"]
+const HAND_WRITTEN_PACKAGES = ["zed", "starship", "zsh", "nushell", "pnpm", "bun", "nvim", "mise"]
+
+# Packages the generator writes under output/. Anything else found there is stale
+# (e.g. an old `bash` package) and is removed by `generate`.
+const GENERATED_PACKAGES = ["zsh", "nu", "bin"]
+
+const TOP_LEVEL_KEYS = ["aliases", "functions", "environment"]
+const FUNCTION_KEYS = ["description", "command", "commands", "on_error"]
+
+# Aliases are textual; nushell aliases can't carry shell syntax. Anything needing
+# it belongs in [functions.*] (a bash script on PATH, identical in every shell).
+const ALIAS_FORBIDDEN = ["'", '$(', '`', '&&', '||', ';', '|']
+
+# Names that nushell resolves to a builtin/keyword before any alias of ours.
+def nu_builtins []: nothing -> list<string> {
+    help commands | where command_type in [built-in keyword] | get name
+}
+
+# Hand-written scripts that become ~/.local/bin/<stem>. Dotfiles and READMEs are skipped.
+def script_files [scripts_dir: string]: nothing -> table<name: string, stem: string> {
+    if not ($scripts_dir | path exists) {
+        return []
+    }
+    ls $scripts_dir
+        | where type == file
+        | get name
+        | where {|p|
+            let base = $p | path basename
+            not ($base | str starts-with ".") and ($base | str lowercase) != "readme.md"
+        }
+        | each {|p| { name: $p, stem: ($p | path parse | get stem) } }
+}
+
+# Every problem in config.toml + config/scripts/, not just the first. Anything the
+# generator would otherwise emit silently wrong (typo'd keys, a script overwriting a
+# function, shell syntax nushell can't alias) is an error here.
+def config_errors [config: record, scripts_dir: string]: nothing -> list<string> {
+    mut errors = []
+
+    for key in ($config | columns | where $it not-in $TOP_LEVEL_KEYS) {
+        $errors = $errors | append $"unknown top-level table [($key)]; allowed: ($TOP_LEVEL_KEYS | str join ', ')"
+    }
+
+    let aliases = $config | get -o aliases | default {}
+    let functions = $config | get -o functions | default {}
+    let environment = $config | get -o environment | default {}
+    let scripts = script_files $scripts_dir
+    let fn_names = $functions | columns
+
+    for entry in ($aliases | transpose key value) {
+        if ($entry.value | describe) != "string" {
+            $errors = $errors | append $"aliases.($entry.key): value must be a string"
+            continue
+        }
+        for token in $ALIAS_FORBIDDEN {
+            if ($entry.value | str contains $token) {
+                $errors = $errors | append $"aliases.($entry.key): contains `($token)`; aliases are textual and can't carry shell syntax into nushell. Move it to [functions.($entry.key)]."
+                break
+            }
+        }
+        if $entry.key in $fn_names {
+            $errors = $errors | append $"aliases.($entry.key): same name as [functions.($entry.key)]"
+        }
+        if $entry.key in $scripts.stem {
+            $errors = $errors | append $"aliases.($entry.key): same name as script config/scripts/($scripts | where stem == $entry.key | first | get name | path basename)"
+        }
+    }
+
+    for entry in ($functions | transpose key value) {
+        let name = $entry.key
+        let func = $entry.value
+        if ($func | describe | str starts-with "record") == false {
+            $errors = $errors | append $"functions.($name): must be a table"
+            continue
+        }
+        for key in ($func | columns | where $it not-in $FUNCTION_KEYS) {
+            $errors = $errors | append $"functions.($name): unknown key `($key)`; allowed: ($FUNCTION_KEYS | str join ', ')"
+        }
+        let has_command = "command" in $func
+        let has_commands = "commands" in $func
+        if $has_command and $has_commands {
+            $errors = $errors | append $"functions.($name): set `command` or `commands`, not both"
+        } else if not ($has_command or $has_commands) {
+            $errors = $errors | append $"functions.($name): needs `command` or `commands`"
+        } else if $has_commands and (($func.commands | describe) !~ '^list<string>' or ($func.commands | is-empty)) {
+            $errors = $errors | append $"functions.($name): `commands` must be a non-empty list of strings"
+        } else if $has_command and ($func.command | describe) != "string" {
+            $errors = $errors | append $"functions.($name): `command` must be a string"
+        }
+        let on_error = $func | get -o on_error | default "abort"
+        if $on_error not-in ["abort", "continue"] {
+            $errors = $errors | append $"functions.($name): on_error = '($on_error)' is not supported; use \"abort\" \(the default) or \"continue\"."
+        }
+        if $name in $scripts.stem {
+            $errors = $errors | append $"functions.($name): same name as script config/scripts/($scripts | where stem == $name | first | get name | path basename), which would overwrite it in ~/.local/bin"
+        }
+    }
+
+    for dup in ($scripts | group-by stem | transpose stem files | where ($it.files | length) > 1) {
+        $errors = $errors | append $"config/scripts: ($dup.files.name | path basename | str join ' and ') both install as ~/.local/bin/($dup.stem)"
+    }
+
+    let env_errors = $environment | transpose key value | each {|entry|
+        [{|k, v| zsh_env $k $v}, {|k, v| nu_env $k $v}] | each {|emit|
+            try { do $emit $entry.key $entry.value | ignore; null } catch {|e| $e.msg }
+        }
+    } | flatten | compact
+    $errors = $errors | append $env_errors
+
+    $errors | uniq
+}
+
+def assert_valid [config: record, scripts_dir: string] {
+    let errors = config_errors $config $scripts_dir
+    if ($errors | is-not-empty) {
+        error make { msg: $"config is invalid:\n  - ($errors | str join "\n  - ")" }
+    }
+}
 
 # Wrap a string as a POSIX single-quoted literal (valid in zsh and bash).
 # Closes-and-reopens to embed `'`: `it's me` → `'it'\''s me'`. Safe for any
@@ -110,9 +227,6 @@ def generate_zsh [config: record, output_dir: string] {
     if "aliases" in $config {
         $content = $content + "# Aliases\n"
         for entry in ($config.aliases | transpose key value) {
-            if ($entry.value | str contains "'") {
-                error make { msg: $"alias '($entry.key)' contains a single quote. Shell aliases are textual substitution — even properly escaped, the body re-parses at call time and fails. Move it to [functions.($entry.key)] in config.toml; the generated bash script handles embedded quotes correctly." }
-            }
             $content = $content + $"alias ($entry.key)=(sh_q $entry.value)\n"
         }
         $content = $content + "\n"
@@ -131,9 +245,11 @@ def generate_zsh [config: record, output_dir: string] {
     log info $"Generated zsh config: ($output_file)"
 }
 
-# nushell: aliases + env only. Alias values containing bash syntax ($(…), &&) become def blocks.
-# Aliases targeting a [functions.*] bin script are emitted with a `^` prefix so they
-# call the external script even when its name shadows a nu builtin (e.g. `update`).
+# nushell: aliases + env only. Alias bodies are plain commands (config_errors rejects
+# shell syntax). Aliases targeting a [functions.*] bin script are emitted with a `^`
+# prefix so they call the external script even when its name shadows a nu builtin
+# (e.g. `update`). Aliases whose own name is a nu builtin (`ls`) are zsh-only:
+# shadowing it would replace nu's structured command with text output.
 def generate_nushell [config: record, output_dir: string] {
     reset_dir $output_dir
     let output_file = $output_dir | path join "generated.nu"
@@ -141,32 +257,17 @@ def generate_nushell [config: record, output_dir: string] {
     mut content = "# Generated from config.toml — do not edit by hand.\n\n"
 
     if "aliases" in $config {
+        let fn_names = $config | get -o functions | default {} | columns
+        let builtins = nu_builtins
         $content = $content + "# Aliases\n"
         for entry in ($config.aliases | transpose key value) {
-            let val = $entry.value
-            if ($val | str contains "'") {
-                error make { msg: $"alias '($entry.key)' contains a single quote, which can't be safely emitted as a bare nushell alias. Move it to [functions.($entry.key)] in config.toml — bash handles embedded quotes via the generated script on PATH." }
+            if $entry.key in $builtins {
+                log info $"nu: skipping alias ($entry.key) — shadows the nu builtin; zsh only"
+                continue
             }
-            let has_subshell = $val | str contains '$('
-            let has_andand = $val | str contains '&&'
-            let fn_names = if "functions" in $config { $config.functions | columns } else { [] }
-            let first_word = $val | split row " " | first
-
-            if $has_subshell or $has_andand {
-                $content = $content + $"export def ($entry.key) [] {\n"
-                let converted = $val
-                    | str replace -a '&&' ';'
-                    | str replace -r '\$\(([^)]+)\)' '(^$1 | str trim)'
-                let commands = $converted | split row ';' | each {|cmd| $cmd | str trim}
-                for cmd in $commands {
-                    $content = $content + $"    ^($cmd)\n"
-                }
-                $content = $content + "}\n"
-            } else if $first_word in $fn_names {
-                $content = $content + $"export alias ($entry.key) = ^($val)\n"
-            } else {
-                $content = $content + $"export alias ($entry.key) = ($val)\n"
-            }
+            let first_word = $entry.value | split row " " | first
+            let body = if $first_word in $fn_names { $"^($entry.value)" } else { $entry.value }
+            $content = $content + $"export alias ($entry.key) = ($body)\n"
         }
         $content = $content + "\n"
     }
@@ -244,17 +345,8 @@ def generate_bin_scripts [config: record, output_dir: string] {
         let name = $entry.key
         let func = $entry.value
         let script_path = $output_dir | path join $name
-        let commands = if "commands" in $func {
-            $func.commands
-        } else if "command" in $func {
-            [$func.command]
-        } else {
-            []
-        }
+        let commands = if "commands" in $func { $func.commands } else { [$func.command] }
         let on_error = $func | get -o on_error | default "abort"
-        if $on_error not-in ["abort", "continue"] {
-            error make { msg: $"functions.($name): on_error = '($on_error)' is not supported; use \"abort\" \(the default) or \"continue\"." }
-        }
 
         mut content = "#!/usr/bin/env bash\n"
         $content = $content + "# Generated from config.toml — do not edit by hand.\n"
@@ -293,45 +385,71 @@ def generate_bin_scripts [config: record, output_dir: string] {
 # These are hand-written scripts in any language (nu, bash, python, …). The shebang in
 # each file determines the interpreter; the extension is for editor support and gets stripped.
 def generate_user_scripts [scripts_dir: string, output_dir: string] {
-    if not ($scripts_dir | path exists) {
-        return
-    }
-
     mkdir $output_dir
 
-    for file in (ls $scripts_dir | where type == file) {
-        let src = $file.name
-        let basename = $src | path basename
-        # Skip dotfiles and READMEs
-        if ($basename | str starts-with ".") or ($basename | str lowercase) == "readme.md" {
-            continue
-        }
-        let stem = $basename | path parse | get stem
-        let dest = $output_dir | path join $stem
-
-        cp $src $dest
+    for script in (script_files $scripts_dir) {
+        let dest = $output_dir | path join $script.stem
+        cp $script.name $dest
         ^chmod +x $dest
-        log info $"Installed user script: ($src) → ($dest)"
+        log info $"Installed user script: ($script.name) → ($dest)"
     }
 }
 
-# Remove dangling symlinks in target_dir that point into stale_dir (a now-empty source).
-# Called after pruning output/bin so ~/.local/bin/ doesn't accumulate broken symlinks.
-def remove_dangling_links [target_dir: string, source_dir: string] {
-    if not ($target_dir | path exists) {
-        return
-    }
-    for entry in (ls $target_dir | where type == symlink) {
-        let resolved = try { $entry.name | path expand } catch { "" }
-        # path expand on a dangling symlink still returns the would-be target
-        if not ($resolved | path exists) {
-            let link_target = (^readlink $entry.name | str trim)
-            if ($link_target | str contains "dotconfig/output/bin") {
-                log info $"Removing dangling symlink: ($entry.name) → ($link_target)"
-                rm $entry.name
+# Where stowed links live. stow never deletes a link whose source file is gone (a
+# file dropped from a package, a removed package, a pruned output/ dir), so those
+# dangle until something sweeps them. Depth-limited roots avoid walking caches.
+const LINK_ROOTS = [
+    { path: "~", depth: 1 }
+    { path: "~/.local/bin", depth: 1 }
+    { path: "~/.cargo", depth: 1 }
+    { path: "~/.config", depth: 8 }
+]
+
+# Symlinks under $HOME that point into this repo and no longer resolve.
+def dangling_repo_links []: nothing -> list<string> {
+    let repo = $REPO_DIR | path expand
+    $LINK_ROOTS
+        | each {|root| { path: ($root.path | path expand), depth: $root.depth } }
+        | where {|root| $root.path | path exists }
+        | each {|root| ^find $root.path -maxdepth $root.depth -type l | lines }
+        | flatten
+        | where {|link|
+            let target = ^readlink $link | str trim
+            let abs = if ($target | str starts-with "/") {
+                $target
+            } else {
+                $link | path dirname | path join $target | path expand --no-symlink
             }
+            ($abs | str starts-with $"($repo)/") and not ($abs | path exists)
+        }
+}
+
+def remove_dangling_links [dry_run: bool] {
+    for link in (dangling_repo_links) {
+        if $dry_run {
+            log info $"Would remove dangling symlink: ($link)"
+        } else {
+            log info $"Removing dangling symlink: ($link)"
+            rm $link
         }
     }
+}
+
+# Check config.toml + config/scripts/ without writing anything. Exit 1 listing
+# every problem; `generate` runs the same checks and refuses invalid config.
+export def "main validate" [
+    --config-path: string = $"($REPO_DIR)/config/shell/config.toml"
+    --scripts-dir: string = $"($REPO_DIR)/config/scripts"
+] {
+    let errors = config_errors (load_config ($config_path | path expand)) ($scripts_dir | path expand)
+    if ($errors | is-empty) {
+        print "config OK"
+        return
+    }
+    for e in $errors {
+        print -e $"✗ ($e)"
+    }
+    exit 1
 }
 
 export def "main generate" [
@@ -343,9 +461,21 @@ export def "main generate" [
     --targets: list<string> = ["zsh", "nu", "bin", "scripts"]
 ] {
     let config_path = $config_path | path expand
+    let scripts_dir = $scripts_dir | path expand
     let config = load_config $config_path
 
     log info $"Loading config from: ($config_path)"
+    assert_valid $config $scripts_dir
+
+    # output/ is generator-owned: drop packages we no longer generate, or stow
+    # would keep linking them (a leftover `bash` package once collected history).
+    let output_dir = $REPO_DIR | path join "output"
+    if ($output_dir | path exists) {
+        for stale in (ls $output_dir | where type == dir | where { ($in.name | path basename) not-in $GENERATED_PACKAGES }) {
+            log info $"Removing stale generated package: ($stale.name)"
+            rm -rf $stale.name
+        }
+    }
 
     if "zsh" in $targets {
         generate_zsh $config ($zsh_dir | path expand)
@@ -371,130 +501,89 @@ export def "main generate" [
     }
 
     if "scripts" in $targets {
-        generate_user_scripts ($scripts_dir | path expand) $bin_expanded
-    }
-
-    # Clear out symlinks in ~/.local/bin/ that point at executables we no longer emit.
-    if ("bin" in $targets) or ("scripts" in $targets) {
-        remove_dangling_links ("~/.local/bin" | path expand) $bin_expanded
+        generate_user_scripts $scripts_dir $bin_expanded
     }
 
     log info "Generation complete"
 }
 
-def run_stow [stow_dir: string, target_dir: string, item: string, dry_run: bool] {
-    let item_dir = $stow_dir | path join $item
-    if not ($item_dir | path exists) {
-        log warning $"Skipping ($item): directory not found at ($item_dir)"
-        return
-    }
+# Run one stow (or `stow -D`) and report success; callers aggregate failures.
+def run_stow [stow_dir: string, target_dir: string, item: string, dry_run: bool, --delete]: nothing -> bool {
+    let verb = if $delete { "unstow" } else { "stow" }
+    let args = [--no-folding -d $stow_dir -t $target_dir -v]
+        | append (if $delete { [-D] } else { [] })
+        | append (if $dry_run { [--no] } else { [] })
+        | append $item
 
-    let stow_cmd = if $dry_run {
-        $"stow --no-folding -d ($stow_dir) -t ($target_dir) --no -v ($item)"
-    } else {
-        $"stow --no-folding -d ($stow_dir) -t ($target_dir) -v ($item)"
-    }
-
-    log info $"Running: ($stow_cmd)"
-    let result = (bash -c $stow_cmd | complete)
+    log info $"Running: stow ($args | str join ' ')"
+    let result = ^stow ...$args | complete
 
     if $result.exit_code != 0 {
-        log error $"Failed to stow ($item): ($result.stderr)"
-    } else {
-        log info $"Successfully stowed ($item)"
-        if ($result.stdout | str length) > 0 {
-            print $result.stdout
-        }
+        log error $"Failed to ($verb) ($item): ($result.stderr | str trim)"
+        return false
     }
+    log info $"($verb) ok: ($item)"
+    if ($result.stdout | str length) > 0 {
+        print $result.stdout
+    }
+    true
 }
 
-def run_unstow [stow_dir: string, target_dir: string, item: string, dry_run: bool] {
-    let item_dir = $stow_dir | path join $item
-    if not ($item_dir | path exists) {
-        log warning $"Skipping ($item): directory not found at ($item_dir)"
-        return
-    }
-
-    let stow_cmd = if $dry_run {
-        $"stow -D -d ($stow_dir) -t ($target_dir) --no -v ($item)"
-    } else {
-        $"stow -D -d ($stow_dir) -t ($target_dir) -v ($item)"
-    }
-
-    log info $"Running: ($stow_cmd)"
-    let result = (bash -c $stow_cmd | complete)
-
-    if $result.exit_code != 0 {
-        log error $"Failed to unstow ($item): ($result.stderr)"
-    } else {
-        log info $"Successfully unstowed ($item)"
-        if ($result.stdout | str length) > 0 {
-            print $result.stdout
-        }
-    }
-}
-
-export def "main stow" [
-    --items: list<string> = []
-    --dry-run
-] {
+# Resolve which packages to act on. Unknown package names and declared-but-missing
+# packages are errors, not silent skips.
+def select_packages [items: list<string>]: nothing -> table<dir: string, name: string> {
     let repo_dir = $REPO_DIR | path expand
     let output_dir = $repo_dir | path join "output"
+    let all = ($GENERATED_PACKAGES | each {|p| { dir: $output_dir, name: $p } })
+        | append ($HAND_WRITTEN_PACKAGES | each {|p| { dir: $repo_dir, name: $p } })
+
+    let unknown = $items | where $it not-in $all.name
+    if ($unknown | is-not-empty) {
+        error make { msg: $"Unknown package\(s): ($unknown | str join ', '). Known: ($all.name | uniq | str join ', ')" }
+    }
+    let selected = if ($items | is-empty) { $all } else { $all | where name in $items }
+
+    let missing = $selected | where {|p| not ($p.dir | path join $p.name | path exists) }
+    if ($missing | is-not-empty) {
+        let paths = $missing | each {|p| $p.dir | path join $p.name } | str join ', '
+        error make { msg: $"Package dir\(s) missing: ($paths). Generated packages need `generate` first; hand-written ones must exist at the repo root." }
+    }
+    $selected
+}
+
+def stow_all [items: list<string>, dry_run: bool, delete: bool] {
     let target_dir = "~" | path expand
+    let selected = select_packages $items
+    log info $"Target: ($target_dir); packages: ($selected.name | str join ', ')"
 
-    if not ($output_dir | path exists) {
-        error make { msg: $"Output directory not found: ($output_dir)\nRun 'main generate' first." }
+    let failed = $selected | where {|p|
+        if $delete {
+            not (run_stow $p.dir $target_dir $p.name $dry_run --delete)
+        } else {
+            not (run_stow $p.dir $target_dir $p.name $dry_run)
+        }
     }
 
-    # Generated packages live under output/; hand-written ones at the repo root.
-    let generated = ls $output_dir | where type == dir | get name | path basename
-    let hand_written = $HAND_WRITTEN_PACKAGES | where ($it in (ls $repo_dir | where type == dir | get name | path basename))
+    remove_dangling_links $dry_run
 
-    let selected_generated = if ($items | is-empty) { $generated } else { $items | where ($it in $generated) }
-    let selected_hand_written = if ($items | is-empty) { $hand_written } else { $items | where ($it in $hand_written) }
-
-    log info $"Stow target: ($target_dir)"
-    log info $"Generated packages: ($selected_generated | str join ', ')"
-    log info $"Hand-written packages: ($selected_hand_written | str join ', ')"
-
-    for item in $selected_generated {
-        run_stow $output_dir $target_dir $item $dry_run
+    if ($failed | is-not-empty) {
+        error make { msg: $"stow failed for: ($failed.name | str join ', ')" }
     }
-    for item in $selected_hand_written {
-        run_stow $repo_dir $target_dir $item $dry_run
-    }
+}
 
+# Stow every package, or only the named ones: `shells.nu stow mise zsh`.
+export def "main stow" [
+    --dry-run
+    ...items: string
+] {
+    stow_all $items $dry_run false
     log info "Stow apply complete"
 }
 
 export def "main unstow" [
-    --items: list<string> = []
     --dry-run
+    ...items: string
 ] {
-    let repo_dir = $REPO_DIR | path expand
-    let output_dir = $repo_dir | path join "output"
-    let target_dir = "~" | path expand
-
-    if not ($output_dir | path exists) {
-        error make { msg: $"Output directory not found: ($output_dir)\nRun 'main generate' first." }
-    }
-
-    let generated = ls $output_dir | where type == dir | get name | path basename
-    let hand_written = $HAND_WRITTEN_PACKAGES | where ($it in (ls $repo_dir | where type == dir | get name | path basename))
-
-    let selected_generated = if ($items | is-empty) { $generated } else { $items | where ($it in $generated) }
-    let selected_hand_written = if ($items | is-empty) { $hand_written } else { $items | where ($it in $hand_written) }
-
-    log info $"Unstow target: ($target_dir)"
-    log info $"Generated packages: ($selected_generated | str join ', ')"
-    log info $"Hand-written packages: ($selected_hand_written | str join ', ')"
-
-    for item in $selected_generated {
-        run_unstow $output_dir $target_dir $item $dry_run
-    }
-    for item in $selected_hand_written {
-        run_unstow $repo_dir $target_dir $item $dry_run
-    }
-
+    stow_all $items $dry_run true
     log info "Stow remove complete"
 }

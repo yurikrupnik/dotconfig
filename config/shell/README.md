@@ -20,30 +20,28 @@ Use `[functions.X]` when **all** of these are true:
 In other words: when you can express the whole thing as a list of one-line strings.
 
 ```toml
-[functions.update]
-description = "Refresh installed packages on this machine"
+[functions.dsp]
+description = "Prune all docker data: containers, images, networks, volumes"
 commands = [
-    "brew update",
-    "brew upgrade",
-    "rustup update",
-    "just -f $HOME/dotconfig/justfile cargo-install",
-    "bun update --global --latest",
+    "docker system prune -af",
+    "docker volume prune -af"
 ]
 ```
 
-This is emitted as `~/.local/bin/update`:
+This is emitted as `~/.local/bin/dsp`:
 
 ```bash
 #!/usr/bin/env bash
+# Generated from config.toml — do not edit by hand.
 set -euo pipefail
-# Refresh installed packages on this machine
+DOTCONFIG_DIR="${DOTCONFIG_DIR:-$HOME/dotconfig}"
+# Prune all docker data: containers, images, networks, volumes
 
-brew update
-brew upgrade
-rustup update
-just -f $HOME/dotconfig/justfile cargo-install
-bun update --global --latest
+docker system prune -af
+docker volume prune -af
 ```
+
+Allowed keys: `description`, `command` (one string) or `commands` (non-empty list), `on_error`. Anything else is rejected by `shells.nu validate`.
 
 Commands that have a justfile recipe (`brew bundle`, `cargo liner ship`) are routed through `just -f …` to keep the source of truth single. See `config/shell/config.toml` for the full live pipeline.
 
@@ -88,20 +86,22 @@ Migration from TOML to script is mechanical: copy the `commands` array into a sc
 
 ## Name collisions
 
-Bare names — like `update`, `sort`, `generate` — collide with **nushell builtins**. Once a function lives on `PATH`, nu still resolves those names to the builtin, not your script. Pick names that don't shadow builtins (see `help commands` in nu to check).
+Bare names — like `update`, `sort`, `generate` — collide with **nushell builtins**. Once a function lives on `PATH`, nu still resolves those names to the builtin, not your script; the generator emits aliases pointing at a function with `^` (`u = ^update`). Aliases whose own name is a nu builtin (`ls`) are emitted for zsh only. An alias, a function, and a `config/scripts/` file may not share a name — validation rejects it.
 
 ## Top-level tables
 
+Only these three; any other table (e.g. a `[function.x]` typo) fails validation.
+
 | Table | Purpose |
 |---|---|
-| `[aliases]` | One-liner aliases. Emitted as `alias X='Y'` for zsh and `export alias X = Y` for nu. Values with `$(…)` or `&&` are auto-promoted to `def` blocks in nu, since nu aliases don't support shell substitution. |
+| `[aliases]` | One-liner aliases. Emitted as `alias X='Y'` for zsh and `export alias X = Y` for nu. Plain commands only: `'`, `$(`, backticks, `&&`, `\|\|`, `;`, `\|` are rejected — use `[functions.X]` instead. |
 | `[functions.X]` | Sequence-of-commands functions. Emitted as bash scripts on `PATH`. See above. |
-| `[environment]` | Environment variables exported in every shell. Booleans are written as `true`/`false`. |
+| `[environment]` | Environment variables exported in every shell. Booleans are written as `true`/`false`; only `$HOME` and `$DOTCONFIG_DIR` may be referenced. |
 
 ## After editing
 
 ```bash
-just regen        # regenerate output/ + restow
+just regen        # validate, regenerate output/ + restow
 ```
 
 Or just `u` (the daily refresher, `~/.local/bin/update`) which calls `shells.nu generate` and `stow` at the end.
