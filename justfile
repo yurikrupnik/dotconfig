@@ -7,13 +7,22 @@ shells := "nu scripts/nu/setup-local-machine/shells.nu"
 
 default:
     @just --list
-    devkit
 
+# devkit lives in the toolkit repo (see AGENTS.md); this repo only holds devkit.toml
 devkit:
     devkit
 
-up:
+# Local platform via devkit. Not named `up`: that shadows the Upbound CLI.
+dev-up:
     devkit up --istio --core --gitops --observability --flux
+
+# Package-manager network traffic goes through Socket Firewall. Interactive
+# shells get it from the sfw aliases in config.toml; scripts don't expand
+# aliases, so recipes call `sfw` explicitly. install.sh bootstraps sfw first.
+[private]
+require-sfw:
+    @command -v sfw >/dev/null || { echo "sfw not on PATH; bootstrap it once: bun add --global sfw" >&2; exit 1; }
+
 # Fresh-machine bootstrap (brew, rust, cargo-liner, shells, stow)
 install:
     ./install.sh
@@ -45,17 +54,21 @@ brew-preflight:
 brew-install:
     ./scripts/brew-preflight.sh --apply
 
-# Install/update global cargo packages via cargo-liner (bootstraps binstall + liner)
-cargo-install:
+# Install/update global cargo packages via cargo-liner (cargo-binstall comes from the Brewfile)
+cargo-install: require-sfw
     #!/usr/bin/env bash
     set -euo pipefail
     if ! command -v cargo-binstall &> /dev/null; then
-        echo "==> Installing cargo-binstall..."
-        cargo install cargo-binstall
+        echo "cargo-binstall missing; it is declared in the Brewfile: just brew-install" >&2
+        exit 1
     fi
+    # sfw MITMs TLS with a per-run CA it exports as SSL_CERT_FILE. cargo honors
+    # it (CARGO_HTTP_CAINFO); cargo-binstall only trusts its bundled roots unless
+    # given BINSTALL_HTTPS_ROOT_CERTS, and fails with UnknownIssuer otherwise.
+    sfw_cargo() { sfw bash -c 'BINSTALL_HTTPS_ROOT_CERTS="$SSL_CERT_FILE" exec cargo "$@"' _ "$@"; }
     if ! command -v cargo-liner &> /dev/null; then
         echo "==> Installing cargo-liner..."
-        cargo binstall cargo-liner --no-confirm
+        sfw_cargo binstall cargo-liner --no-confirm
     fi
     liner_src="{{ justfile_directory() }}/config/cargo/liner.toml"
     liner_dest="${CARGO_HOME:-$HOME/.cargo}/liner.toml"
@@ -63,15 +76,16 @@ cargo-install:
         echo "==> Linking cargo-liner config: $liner_dest -> $liner_src"
         ln -sfn "$liner_src" "$liner_dest"
     fi
-    cargo liner ship --no-fail-fast
+    sfw_cargo liner ship
 
-# Install/refresh global node packages declared in config/node/package.json
-node-install:
-    cd config/node && bun add --global $(jq -r '.dependencies | to_entries[] | "\(.key)@\(.value)"' package.json)
+# Install global node packages declared in config/node/package.json (writes their
+# ranges into bun's global manifest, so a later `bun update --global` honors them)
+node-install: require-sfw
+    cd config/node && sfw bun add --global $(jq -r '.dependencies | to_entries[] | "\(.key)@\(.value)"' package.json)
 
-# Install/refresh global Python CLI tools declared in config/uv/tools.txt
-uv-install:
-    awk '!/^[[:space:]]*(#|$)/ {print $1}' config/uv/tools.txt | while IFS= read -r pkg; do uv tool install "$pkg" || echo "  ! uv tool install $pkg failed"; done
+# Install global Python CLI tools declared in config/uv/tools.txt
+uv-install: require-sfw
+    awk '!/^[[:space:]]*(#|$)/ {print $1}' config/uv/tools.txt | while IFS= read -r pkg; do sfw uv tool install "$pkg" || echo "  ! uv tool install $pkg failed"; done
 
 # Verify the install is healthy (commands, symlinks, freshness)
 doctor:

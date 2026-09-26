@@ -57,10 +57,13 @@ description = "Refresh installed packages on this machine"
 # `set -e`, a failed `rustup self update` skipped cargo/node/uv/gcloud/regen.
 # "continue" runs every step and exits 1 with a list of what failed.
 on_error = "continue"
+# Network-fetching steps call `sfw` explicitly: this runs as a bash script, where
+# the interactive sfw aliases above don't apply. brew isn't sfw-supported.
 commands = [
     "brew update",
+    # brew bundle upgrades every outdated Brewfile entry (formulae + casks), so
+    # there is no separate `brew upgrade`: it would only touch undeclared drift.
     "just -f $DOTCONFIG_DIR/justfile brew-install",
-    "brew upgrade",
     "brew cleanup",
     # Self-update is its own step: `rustup update` bundles it, and its
     # exec-the-new-binary replace step fails intermittently on macOS — which
@@ -71,12 +74,12 @@ commands = [
     # brew package; `rustup update` alone never installs it.
     "rustup component add rust-analyzer",
     "just -f $DOTCONFIG_DIR/justfile cargo-install",
-    # Order matters: `--latest` ignores the ranges in config/node/package.json,
-    # so node-install runs afterwards to restore pinned versions (typescript@6.*).
-    "bun update --global --latest",
+    # node-install writes config/node/package.json's ranges into bun's global
+    # manifest; `bun update` (no --latest) then upgrades within those ranges.
     "just -f $DOTCONFIG_DIR/justfile node-install",
+    "sfw bun update --global",
     "just -f $DOTCONFIG_DIR/justfile uv-install",
-    "uv tool upgrade --all",
+    "sfw uv tool upgrade --all",
     "gcloud components update --quiet",
     "just -f $DOTCONFIG_DIR/justfile regen"
 ]
@@ -129,3 +132,9 @@ no_proxy = "localhost,127.0.0.1,::1,.test"
 HOMEBREW_NO_AUTO_UPDATE = "1"
 HOMEBREW_NO_INSTALL_CLEANUP = "1"
 HOMEBREW_BUNDLE_FILE = "$DOTCONFIG_DIR/config/brew/Brewfile"
+
+# cargo-binstall (used by `cargo liner ship`): only the crate's own published
+# binaries or a source build — never QuickInstall's third-party builds, which
+# also report every install to a stats server.
+BINSTALL_STRATEGIES = "crate-meta-data,compile"
+BINSTALL_DISABLE_TELEMETRY = "true"
