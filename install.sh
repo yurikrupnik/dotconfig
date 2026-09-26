@@ -11,15 +11,17 @@ Usage: ./install.sh [-h|--help]
 Fresh-machine bootstrap. Idempotent — safe to re-run.
 
 Steps:
-  1. Install Homebrew (if missing)
-  2. brew bundle --file=config/brew/Brewfile
-  3. rustup update
+  1. Install Homebrew (if missing) and load 'brew shellenv' for this session
+  2. scripts/brew-preflight.sh --apply — trust Brewfile taps, then 'brew bundle' (fails hard)
+  3. Rust: install rustup via sh.rustup.rs (if missing), 'rustup update', add rust-analyzer
   4. Verify nushell is on PATH
-  5. just regen — generate shell configs + bin/ scripts and stow into \$HOME
-  6. just cargo-install — bootstrap cargo-binstall + cargo-liner, link config, 'cargo liner ship'
-  7. bun/npm install --global from config/node/package.json
-  8. uv tool install from config/uv/tools.txt
+  5. Bootstrap sfw (Socket Firewall) via 'bun add --global sfw' (if missing)
+  6. just regen — generate shell configs + bin/ scripts and stow into \$HOME
+  7. just cargo-install — bootstrap cargo-binstall + cargo-liner, link config, 'cargo liner ship'
+  8. just node-install — bun add --global from config/node/package.json
+  9. just uv-install — uv tool install from config/uv/tools.txt
 
+Set BREW_TRUST_NEW_TAPS=1 to trust new Brewfile taps without the prompt.
 After install: run 'just doctor' to verify, then 'u' (from your shell) for periodic refreshes.
 EOF
     exit 0
@@ -47,40 +49,84 @@ log_error() {
     echo -e "${RED}==>${NC} $1"
 }
 
+# Prepend a directory to PATH for this session (no-op if already present).
+path_prepend() {
+    case ":$PATH:" in
+        *":$1:"*) ;;
+        *) export PATH="$1:$PATH" ;;
+    esac
+}
+
 # Detect OS
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 
 log_info "Detected OS: $OS ($ARCH)"
 
-# Step 1: Install Homebrew (macOS/Linux)
-if ! command -v brew &> /dev/null; then
+# Locate brew even when it is installed but not yet on PATH (fresh shell right
+# after the Homebrew installer, which only prints PATH instructions).
+find_brew() {
+    if command -v brew &> /dev/null; then
+        command -v brew
+        return 0
+    fi
+    local candidates
+    if [[ "$OS" == "Darwin" ]]; then
+        candidates="/opt/homebrew/bin/brew /usr/local/bin/brew"
+    else
+        candidates="/home/linuxbrew/.linuxbrew/bin/brew $HOME/.linuxbrew/bin/brew"
+    fi
+    local c
+    for c in $candidates; do
+        if [[ -x "$c" ]]; then
+            echo "$c"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Step 1: Install Homebrew (macOS/Linux) and load its environment
+if BREW_BIN="$(find_brew)"; then
+    log_info "Homebrew already installed ($BREW_BIN)"
+else
     log_info "Installing Homebrew..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-    # Add Homebrew to PATH for this session
-    if [[ "$OS" == "Linux" ]]; then
-        eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+    if ! BREW_BIN="$(find_brew)"; then
+        log_error "Homebrew install finished but brew was not found"
+        exit 1
     fi
-else
-    log_info "Homebrew already installed"
+fi
+# Add Homebrew to PATH for this session
+eval "$("$BREW_BIN" shellenv)"
+
+# Step 2: Install packages via Brewfile. Call the preflight script directly:
+# `just` itself is installed by the Brewfile, so it may not exist yet.
+log_info "Installing packages from Brewfile..."
+if ! "$DOTCONFIG_DIR/scripts/brew-preflight.sh" --apply; then
+    log_error "Brewfile install failed (scripts/brew-preflight.sh --apply). Fix the errors above and re-run ./install.sh"
+    exit 1
 fi
 
-# Step 2: Install packages via Brewfile
-log_info "Installing packages from Brewfile..."
-(cd "$DOTCONFIG_DIR" && just brew-install) || log_warn "Some brew packages failed to install"
-
-# Step 3: Ensure Rust toolchain is up to date
+# Step 3: Rust toolchain. rustup is not in the Brewfile; use the official
+# installer. --no-modify-path: PATH is managed by the generated shell configs.
+CARGO_ENV="${CARGO_HOME:-$HOME/.cargo}/env"
+if ! command -v rustup &> /dev/null && [[ -f "$CARGO_ENV" ]]; then
+    # shellcheck source=/dev/null
+    . "$CARGO_ENV"
+fi
 if command -v rustup &> /dev/null; then
     log_info "Updating Rust toolchain..."
     rustup update
-    # rust-analyzer is a rustup component, not a brew package. Without this the
-    # ~/.cargo/bin/rust-analyzer shim exists but fails with "Unknown binary".
-    rustup component add rust-analyzer || log_warn "Failed to add rust-analyzer component"
 else
-    log_error "Rust not found after brew install. Please check Brewfile"
-    exit 1
+    log_info "Installing Rust via rustup..."
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+    # shellcheck source=/dev/null
+    . "$CARGO_ENV"
 fi
+# rust-analyzer is a rustup component, not a brew package. Without this the
+# ~/.cargo/bin/rust-analyzer shim exists but fails with "Unknown binary".
+rustup component add rust-analyzer || log_warn "Failed to add rust-analyzer component"
 
 # Step 4: Ensure Nushell is available
 if ! command -v nu &> /dev/null; then
@@ -88,20 +134,38 @@ if ! command -v nu &> /dev/null; then
     exit 1
 fi
 
-# Step 5: Generate shell configs + stow them
+# Step 5: Bootstrap sfw (Socket Firewall). The cargo/node/uv install recipes
+# run their package managers through sfw, so it must be on PATH first.
+# This one install is unavoidably unproxied: sfw cannot vet its own download.
+BUN_BIN_DIR="${BUN_INSTALL:-$HOME/.bun}/bin"
+path_prepend "$BUN_BIN_DIR"
+if ! command -v sfw &> /dev/null; then
+    if ! command -v bun &> /dev/null; then
+        log_error "bun not found (expected from the Brewfile); cannot bootstrap sfw"
+        exit 1
+    fi
+    log_info "Installing sfw (Socket Firewall) via bun..."
+    bun add --global sfw
+    if ! command -v sfw &> /dev/null; then
+        log_error "sfw installed but not on PATH (looked in $BUN_BIN_DIR)"
+        exit 1
+    fi
+fi
+
+# Step 6: Generate shell configs + stow them
 log_info "Generating + stowing shell configurations..."
 (cd "$DOTCONFIG_DIR" && just regen)
 
-# Step 6: Install global cargo packages (recipe bootstraps cargo-binstall + cargo-liner,
+# Step 7: Install global cargo packages (recipe bootstraps cargo-binstall + cargo-liner,
 # links the liner config, then runs 'cargo liner ship').
 log_info "Installing global Cargo packages via cargo-liner..."
 (cd "$DOTCONFIG_DIR" && just cargo-install) || log_warn "Some cargo packages failed to install"
 
-# Step 7: Install global node packages via bun (installed by Brewfile in step 2)
+# Step 8: Install global node packages via bun (installed by Brewfile in step 2)
 log_info "Installing global node packages..."
 (cd "$DOTCONFIG_DIR" && just node-install) || log_warn "Failed to install some global node packages"
 
-# Step 8: Install global uv (Python) tools from config/uv/tools.txt
+# Step 9: Install global uv (Python) tools from config/uv/tools.txt
 if command -v uv &> /dev/null; then
     log_info "Installing global uv tools..."
     (cd "$DOTCONFIG_DIR" && just uv-install) || log_warn "Failed to install some uv tools"

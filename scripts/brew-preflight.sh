@@ -41,7 +41,12 @@ fi
 
 # Declared taps: explicit `tap "owner/name"` plus implicit owner/name from
 # `brew "owner/name/formula"` and `cask "owner/name/formula"`.
-mapfile -t DECLARED_TAPS < <(awk '
+# Arrays are filled with `while read` (not bash-4 `mapfile`) so this runs on
+# macOS stock /bin/bash 3.2; expand them as ${arr[@]+"${arr[@]}"} under set -u.
+DECLARED_TAPS=()
+while IFS= read -r line; do
+    DECLARED_TAPS+=("$line")
+done < <(awk '
     /^[[:space:]]*tap "/ {
         match($0, /"[^"]+"/); print tolower(substr($0, RSTART+1, RLENGTH-2)); next
     }
@@ -56,7 +61,10 @@ N_CASKS=$(grep -cE   '^[[:space:]]*cask "' "$BREWFILE" || true)
 
 # Trusted taps (parse `brew trust --json v1`; python3 is on every modern macOS,
 # avoids a hard dependency on jq during the fresh-machine bootstrap).
-mapfile -t TRUSTED_TAPS < <(brew trust --json v1 2>/dev/null | python3 -c '
+TRUSTED_TAPS=()
+while IFS= read -r line; do
+    TRUSTED_TAPS+=("$line")
+done < <(brew trust --json v1 2>/dev/null | python3 -c '
 import json, sys
 try:
     data = json.load(sys.stdin)
