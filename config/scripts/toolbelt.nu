@@ -157,20 +157,24 @@ def brew-items [repo: string]: nothing -> list<record> {
     $f_items ++ $c_items
 }
 
+# `local`: installed from a path or git checkout (key "name ver (path+file://…)").
+# Those are dev builds of the user's own crates; liner.toml can only name
+# crates.io packages, where the same name may be someone else's crate.
 def cargo-crates []: nothing -> list<record> {
     let p = $env.CARGO_HOME? | default ($env.HOME | path join .cargo) | path join .crates2.json
     if not ($p | path exists) { return [] }
     open $p | get installs | transpose key v
-    | each {|r| {name: ($r.key | split row " " | first), bins: $r.v.bins} }
+    | each {|r| {name: ($r.key | split row " " | first), bins: $r.v.bins, local: ($r.key !~ '\(registry\+')} }
 }
 
 def cargo-items [repo: string, crates: list<record>]: nothing -> list<record> {
-    let declared = try { open ($repo | path join config cargo liner.toml) | get packages | columns } catch { [] }
+    # cargo-liner installs itself (justfile cargo-install); it is never listed in liner.toml.
+    let declared = try { open ($repo | path join config cargo liner.toml) | get packages | columns } catch { [] } | append cargo-liner
     $declared | append $crates.name | uniq | each {|n|
         let c = $crates | where name == $n | get -o 0
         mk {
             source: cargo name: $n bins: ($c.bins? | default [$n]) installed: ($c != null)
-            managed: (if $n in $declared { "declared" } else { "drift" })
+            managed: (if $n in $declared { "declared" } else if ($c.local? | default false) { "local" } else { "drift" })
         }
     }
 }
@@ -261,6 +265,12 @@ def script-desc [file: string]: nothing -> string {
     | str replace -r '^#\s*' ''
 }
 
+# A [functions.*] table's command list: `commands` (list) or `command` (one string),
+# the two forms shells.nu accepts.
+def fn-commands [f: record]: nothing -> list<string> {
+    if "commands" in $f { $f.commands } else { [($f.command? | default "")] | compact --empty }
+}
+
 def custom-items [repo: string]: nothing -> list<record> {
     let cfg = open ($repo | path join config shell config.toml)
     let aliases = $cfg.aliases? | default {} | transpose name exp | each {|a|
@@ -270,7 +280,7 @@ def custom-items [repo: string]: nothing -> list<record> {
         }
     }
     let functions = $cfg.functions? | default {} | transpose name f | each {|f|
-        let cmds = $f.f.commands
+        let cmds = fn-commands $f.f
         mk {
             source: function name: $f.name bins: [$f.name] managed: "dotconfig"
             desc: ($f.f.description? | default "") code: ($cmds | length) body: $cmds
@@ -875,7 +885,7 @@ PATH order, first wins: mise global, node (bun global), uv, brew/cask, cargo. A 
 Row fields:
 - status: missing (declared, not installed) | shadowed (installed, but every bin is served by another manager first) | unused (installed, 0 runs) | rare (<3 runs) | active (<20) | core | gui, editor, lib, init (not run from a shell: launched by the GUI, the editor, or shell init; 0 uses is NOT evidence of disuse)
 - uses, zsh, nu, bash: runs counted from shell history, including runs through the user's own aliases/functions/scripts. last: date of the last run.
-- managed: declared (listed in the repo's Brewfile / liner.toml / package.json / uv tools.txt) | drift (installed but undeclared, so a new machine will not get it) | global, project (mise)
+- managed: declared (listed in the repo's Brewfile / liner.toml / package.json / uv tools.txt) | drift (installed but undeclared, so a new machine will not get it) | local (cargo build from a path/git checkout: not declarable) | global, project (mise)
 - also: "also X" = manager X ships the same bins but loses on PATH; "shadowed by X" = X wins, so this copy never runs.
 - allowed: the only actions valid for this row. Never pick anything else.
 
@@ -886,15 +896,18 @@ Actions:
 - undeclare: drop a declaration without touching the machine (for example, a missing entry that is a typo or duplicates an installed row, such as a case mismatch).
 
 Goals, in priority order:
-1. One manager per binary. For every also/shadowed pair, keep the copy that wins PATH, or the declared one, and uninstall the other. A mise project copy pins a version for some repo; removing it frees disk, and that repo reinstalls it with `mise install`.
+1. One manager per binary. For every also/shadowed pair, keep the copy that wins PATH, or the declared one, and uninstall the other.
 2. Declarations match the machine. Declare drift that is used, or that plausibly serves the editor, shell init, or another tool. Uninstall drift that is unused and serves nothing. For a missing row: install it if it looks wanted; undeclare it if it looks wrong.
 3. Unused declared tools: uninstall only when clearly unneeded, for example 0 runs, no editor/init role, and superseded by another row. When unsure, leave it alone.
 Brew rows of kind lib (no bins) are usually dependencies of other formulae; leave them unless clearly drift.
 Skip rows that need no change. Give each action a one-line reason that cites the evidence (status, uses, last, also). The summary is 1-3 sentences.'#
 
+# mise `project` rows are runtimes a repo pins in its own mise.toml — the one job
+# mise keeps (AGENTS.md "Package ownership"). They are owned by that repo, not by
+# dotconfig, so they're never manage candidates; `mise prune` handles unpinned ones.
 def manage-candidates [tools: list<record>]: nothing -> list<record> {
     $tools | where {|t|
-        $t.source in $MANAGEABLE and (
+        $t.source in $MANAGEABLE and not ($t.source == "mise" and $t.managed == "project") and (
             $t.overlap != "" or $t.status in [missing unused shadowed rare] or $t.managed == "drift"
         )
     }
@@ -1576,7 +1589,7 @@ def govern-agents [repo: string, inv: list<record>]: nothing -> list<record> {
         }
     } | compact
     let cfg = open ($repo | path join config shell config.toml)
-    let fn_bodies = $cfg.functions? | default {} | transpose name f | each {|x| {name: $x.name, body: ($x.f.commands? | default [] | str join "; ")} }
+    let fn_bodies = $cfg.functions? | default {} | transpose name f | each {|x| {name: $x.name, body: (fn-commands $x.f | str join "; ")} }
     let launchers = $cfg.aliases? | default {} | transpose name body | append $fn_bodies
     let launcher_f = $launchers | where {|l| $l.body =~ $AGENT_YOLO_RE } | each {|l|
         finding agents $"alias ($l.name)" "human approval" high $"launches an agent with approvals off: ($l.body)"
