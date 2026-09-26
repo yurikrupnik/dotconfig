@@ -14,11 +14,33 @@ Sources of truth:
   with extension stripped (`upkg.nu` → `upkg`, `mcp.nu` → `mcp`)
 - `config/brew/Brewfile`, `config/cargo/liner.toml`, `config/node/package.json`,
   `config/uv/tools.txt` — machine packages, installed/refreshed by `update`
-- Hand-written stow packages at repo root (`zsh/`, `nushell/`, `zed/`, ...)
+- Hand-written stow packages at repo root (`zsh/`, `nushell/`, `zed/`, `mise/`, ...)
 
-After editing generated sources: `just regen` (generate + restow). Hand-written
-packages (e.g. `nvim/`, `zed/`) are symlinked — edits are live immediately, no
-regen.
+After editing generated sources: `just regen` (validate + generate + restow).
+`nu scripts/nu/setup-local-machine/shells.nu validate` checks config.toml and
+config/scripts alone; generate refuses invalid config. Hand-written packages
+(e.g. `nvim/`, `zed/`) are symlinked — edits are live immediately, no regen.
+A new hand-written package must be added to `HAND_WRITTEN_PACKAGES` in shells.nu.
+
+## Package ownership
+
+One manager per CLI: Brewfile first, else liner.toml / package.json /
+tools.txt. mise is for project-pinned runtimes only; its global config
+(`mise/.config/mise/config.toml`) stays empty. `just doctor` fails on
+undeclared brew/cargo/uv/bun installs — declare or uninstall, never ignore.
+Crates that publish prerelease versions need `{ version = "<major>", skip-check = true }`
+in liner.toml (cargo-liner's check ignores the requirement), or `u` reinstalls them every run.
+
+## Checks
+
+- Commits: Conventional Commits (`type(scope): subject`), one concern per
+  commit; enforced by lefthook `commit-msg`. Pre-commit runs gitleaks,
+  shellcheck, nu-check, taplo, and generator validate.
+- CI (`.github/workflows/ci.yml`) mirrors those plus
+  `scripts/check-brewfile.sh --tap` and a full-history gitleaks scan. New
+  gitleaks false positives go in `.gitleaksignore` by fingerprint, only after
+  checking the value is not a real secret.
+- Bash scripts must run on macOS stock bash 3.2 (no `mapfile`, no assoc arrays).
 
 ## Naming constraints
 
@@ -26,7 +48,10 @@ regen.
   builtin — the generator emits `alias u = ^update` (caret) for any alias whose
   target is a `[functions.*]` name. Bare names shadowing nu builtins
   (`update`, `sort`, `generate`) need `^name` in nu.
+- Aliases are plain commands: `$(`, `&&`, `;`, `|`, quotes → use `[functions.*]`.
+  Aliases named like a nu builtin (`ls`) are emitted for zsh only.
 - Don't name anything `up` — that's the Upbound CLI (brew `upbound/tap/up`).
+  The devkit platform recipe is `just dev-up`.
 
 ## Key commands
 
@@ -58,13 +83,17 @@ regen.
   `~/.local/bin/devkit`, `~/.local/lib/devkit` and
   `~/.config/nushell/scripts/devkit`. `devkit.toml` here is only this repo's
   per-repo config for it.
-- `just doctor` — health check; `just outdated` — preview refresh
+- `just doctor` — health check (incl. dangling links + drift); `just outdated` — preview refresh
 
 ## Environment notes
 
 - `NO_PROXY=localhost,127.0.0.1,::1,.test` is set globally because the sfw
   (Socket Firewall) aliases (`cargo`→`sfw cargo`, `bun`, `pnpm`, `uv`) inject
   HTTP(S)_PROXY into children; tests hitting reserved `.test` hosts must bypass.
+- Aliases don't apply in scripts: `update` steps and the justfile package
+  recipes call `sfw` explicitly. sfw MITMs TLS with a per-run CA
+  (`SSL_CERT_FILE`); cargo-binstall ignores it unless given
+  `BINSTALL_HTTPS_ROOT_CERTS` — see the `cargo-install` recipe.
 - nushell `$"..."` interpolation: bare `(word)` executes as a subexpression —
   escape literal parens (`\(s\)`). External commands failing mid-script kill
   nu scripts unless wrapped in `try {}` or `| complete`.
