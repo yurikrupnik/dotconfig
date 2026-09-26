@@ -11,7 +11,7 @@
     "pyright": "*",
     "sfw": "*",
     "socket": "*",
-    "typescript": "6.*",
+    "typescript": "*",
     "typescript-language-server": "*",
     "vscode-langservers-extracted": "*",
     "yaml-language-server": "*"

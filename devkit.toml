@@ -123,14 +123,14 @@ offline_after = 300                  # seconds without a report -> offline
 
 # Agentless devices (phones, tablets, printers, IoT). With `port` the hub does
 # a TCP connect; without it an ICMP ping.
-# [[fleet.probes]]
-# name = "yuri-phone"
-# host = "192.168.1.42"
-#
-# [[fleet.probes]]
-# name = "nas"
-# host = "192.168.1.10"
-# port = 445
+[[fleet.probes]]
+name = "yuri-phone"
+host = "192.168.1.42"
+
+[[fleet.probes]]
+name = "nas"
+host = "192.168.1.10"
+port = 445
 
 # Endpoints printed after `devkit up`.
 [[endpoints]]

@@ -37,6 +37,21 @@ regen.
   remaining steps. Other `[functions.*]` keep `set -e` (abort on first failure).
 - `upkg` — update *project* deps in $PWD (cargo/node/uv, workspace-aware,
   OSV scans, cooldown; `--fast`/`--paranoid`); source: `config/scripts/upkg.nu`
+- `toolbelt` — read-only dashboard of every tool dotconfig installs (brew, cask,
+  mise, cargo, node, uv, ~/.local/bin, aliases, functions, scripts, just
+  recipes): per-shell usage, status, custom-code ROI, alias gaps. Source:
+  `config/scripts/toolbelt.nu`. zsh run counts come from the preexec logger in
+  `zsh/.config/zsh/.zshrc` (`~/.local/state/toolbelt/zsh.tsv`) because
+  `.zsh_history` is deduped; keep that path in sync with `zsh-log-path`.
+  `toolbelt govern` is the read-only security/governance audit (shells, gcp,
+  mcp, agents, clusters: management clusters + children via CAPI, Crossplane,
+  vcluster, Flux, Argo CD). It reads MCP client paths from `mcp.nu`'s exported
+  `TARGETS` — keep that `export const`.
+  `toolbelt manage` is the only mutating subcommand: an AI agent (`claude -p`
+  with `--json-schema`, or `-a omp`) picks install/uninstall/declare/undeclare
+  for rows with `also`/shadowed, missing/unused/rare status or drift; toolbelt
+  validates picks against `allowed-actions` and builds the commands/declaration
+  edits itself. Plan-only unless `--apply` (confirms each action).
 - `devkit` — kind/compose local-env engine. **Not in this repo**: it lives in
   toolkit (`~/shluviza.com/toolkit/apps/devkit`) and is installed by
   `bun nx run devkit:link` (or `devkit:install`) from there, which owns
