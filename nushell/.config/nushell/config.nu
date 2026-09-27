@@ -82,10 +82,11 @@ if ('~/.cache/mise/init.nu' | path expand | path exists) {
     use ~/.cache/mise/init.nu
 }
 
-# Source generated configuration (aliases, functions, environment variables)
-if ('~/.config/nushell/generated.nu' | path expand | path exists) {
-    source ~/.config/nushell/generated.nu
-}
+# Source generated configuration (aliases, functions, environment variables).
+# Top-level `source` on a const path: inside an `if` block the aliases would
+# be scoped to that block. `source null` is a no-op when the file is missing.
+const generated_nu = if ('~/.config/nushell/generated.nu' | path expand | path exists) { '~/.config/nushell/generated.nu' } else { null }
+source $generated_nu
 
 # Keybindings
 # Unbind Ctrl+G (similar to zsh bindkey -r "^G")

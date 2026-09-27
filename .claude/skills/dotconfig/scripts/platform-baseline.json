@@ -1,0 +1,656 @@
+[
+  {
+    "rule": "posix-only",
+    "file": ".github/workflows/ci.yml",
+    "text": "- name: install zsh",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": ".github/workflows/ci.yml",
+    "text": "run: sudo apt-get update && sudo apt-get install -y --no-install-recommends zsh",
+    "count": 1
+  },
+  {
+    "rule": "mac-command",
+    "file": "bootstrap.sh",
+    "text": "echo \"Opening the installer: xcode-select --install\"",
+    "count": 1
+  },
+  {
+    "rule": "mac-command",
+    "file": "bootstrap.sh",
+    "text": "echo \"macOS: xcode-select --install\"",
+    "count": 1
+  },
+  {
+    "rule": "mac-command",
+    "file": "bootstrap.sh",
+    "text": "if ! xcode-select -p &> /dev/null; then",
+    "count": 1
+  },
+  {
+    "rule": "mac-command",
+    "file": "bootstrap.sh",
+    "text": "xcode-select --install || true",
+    "count": 1
+  },
+  {
+    "rule": "cask",
+    "file": "config/brew/Brewfile",
+    "text": "cask \"claude-code\"                       # Claude Code — Anthropic's coding agent CLI/app",
+    "count": 1
+  },
+  {
+    "rule": "cask",
+    "file": "config/brew/Brewfile",
+    "text": "cask \"coderabbit\"                        # CodeRabbit — AI code review",
+    "count": 1
+  },
+  {
+    "rule": "cask",
+    "file": "config/brew/Brewfile",
+    "text": "cask \"codex\"                             # Codex — OpenAI coding agent desktop app",
+    "count": 1
+  },
+  {
+    "rule": "cask",
+    "file": "config/brew/Brewfile",
+    "text": "cask \"lm-studio\"                         # LM Studio — desktop GUI for local LLMs",
+    "count": 1
+  },
+  {
+    "rule": "cask",
+    "file": "config/brew/Brewfile",
+    "text": "cask \"obsidian\"                          # Obsidian — local-first markdown notes",
+    "count": 1
+  },
+  {
+    "rule": "cask",
+    "file": "config/brew/Brewfile",
+    "text": "cask \"warp\"                              # Warp — modern terminal",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/brew/Brewfile",
+    "text": "brew \"stow\"                              # GNU Stow — symlink farm manager (dotfiles)",
+    "count": 1
+  },
+  {
+    "rule": "mac-path",
+    "file": "config/scripts/mcp.nu",
+    "text": "\"claude-desktop\": { path: \"~/Library/Application Support/Claude/claude_desktop_config.json\", format: \"json\", strategy: \"merge\",   key: \"mcpServers\" }",
+    "count": 1
+  },
+  {
+    "rule": "mac-command",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "const WRAPPERS = [sudo time nohup exec command builtin noglob env caffeinate sfw]",
+    "count": 1
+  },
+  {
+    "rule": "mac-path",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "let managed = [\"/Library/Application Support/ClaudeCode/managed-settings.json\" \"/etc/claude-code/managed-settings.json\"]",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "$env.XDG_STATE_HOME? | default ($env.HOME | path join .local state) | path join toolbelt zsh.tsv",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "$it | merge $u | insert direct ($u.zsh + $u.nu + $u.bash) | insert last $s.last",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "(if (group-other-any $m) { finding gcp (tilde $p) \"credential files private\" crit $\"SA key is ($m): chmod 600\" })",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "(if (group-other-any $m) { finding gcp ADC \"credential files private\" high $\"(tilde $adc) is ($m): chmod 600\" })",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "- uses, zsh, nu, bash: runs counted from shell history, including runs through the user's own aliases/functions/scripts. last: date of the last run.",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "[($env.ZDOTDIR? | default ($env.HOME | path join .config zsh) | path join .zsh_history)",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "[(finding mcp (tilde $f.path) \"credential files private\" high $\"holds live tokens and is ($m): chmod 600\")]",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "^chmod 600 $path",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "^chmod 700 $dir",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "const RUNNERS = [nu bash sh zsh]",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "const SHELL_OF = {zh: zsh, zl: zsh, nd: nu, nt: nu, bh: bash}",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "def read-zsh-history [path: string]: nothing -> list<record> {",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "def zsh-history-paths []: nothing -> list<string> {",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "def zsh-log-path []: nothing -> string {",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "finding agents $c.agent \"credential files private\" high $\"(tilde $c.path) is ($m): chmod 600\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "finding shells $h.shell \"history private\" med $\"(tilde $h.path) is ($m): chmod 600\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "let fixed_logs = [{shell: zsh, path: (zsh-log-path)} {shell: nu, path: (nu-db-path)} {shell: nu, path: (nu-txt-path)} {shell: bash, path: (bash-history-path)}]",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "let history = zsh-history-paths | each {|p| {shell: zsh, path: $p} } | append $fixed_logs | where {|h| $h.path | path exists }",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "let leak_f = [zsh nu bash] | each {|sh|",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "let log_note = if $e.zl == 0 { \"run log empty (starts in new zsh sessions)\" } else { $\"($e.zl) runs logged since (fmt-date $e.zl_since)\" }",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "let rc = [zsh/.config/zsh/.zshrc zsh/.zshenv nushell/.config/nushell/config.nu nushell/.config/nushell/env.nu]",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "let zdot = $env.ZDOTDIR? | default ($home | path join .config zsh)",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "let zh = zsh-history-paths | each {|p| read-zsh-history $p } | flatten",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "let zl = if (zsh-log-path | path exists) {",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "open --raw (zsh-log-path) | decode utf-8 | lines",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "uses: $t.uses zsh: $t.zsh nu: $t.nu bash: $t.bash last: (fmt-date $t.last)",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "zsh: $t.zsh nu: $t.nu bash: $t.bash last: (fmt-date $t.last)",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "{shell: zsh, path: ($home | path join .zshenv)}",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "{shell: zsh, path: ($zdot | path join .zshrc)}",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "{shell: zsh, path: ($zdot | path join generated.zsh)}",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "{shell: zsh, wired: ($env.HOME | path join .config zsh generated.zsh), evidence: $\"($e.zh) distinct history lines · ($log_note)\"}",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "config/scripts/toolbelt.nu",
+    "text": "{zsh: ([$s.zh $s.zl] | math max), nu: ($s.nd + $s.nt), bash: $s.bh}",
+    "count": 1
+  },
+  {
+    "rule": "mac-command",
+    "file": "config/shell/config.toml",
+    "text": "BROWSER = \"open\"",
+    "count": 1
+  },
+  {
+    "rule": "mac-path",
+    "file": "install.sh",
+    "text": "candidates=\"/opt/homebrew/bin/brew /usr/local/bin/brew\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "install.sh",
+    "text": "/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "install.sh",
+    "text": "6. just regen — generate shell configs + bin/ scripts and stow into \\$HOME",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "justfile",
+    "text": "if [ ! -L \"$liner_dest\" ] || [ \"$(readlink \"$liner_dest\")\" != \"$liner_src\" ]; then",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "justfile",
+    "text": "ln -sfn \"$liner_src\" \"$liner_dest\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "justfile",
+    "text": "regen: generate stow",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "justfile",
+    "text": "stow-dry:",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "justfile",
+    "text": "stow:",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "justfile",
+    "text": "{{ shells }} stow",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "justfile",
+    "text": "{{ shells }} stow --dry-run",
+    "count": 1
+  },
+  {
+    "rule": "mac-path",
+    "file": "nushell/.config/nushell/env.nu",
+    "text": "$\"($env.HOME)/Library/Application Support/JetBrains/Toolbox/scripts\"",
+    "count": 1
+  },
+  {
+    "rule": "mac-path",
+    "file": "nushell/.config/nushell/env.nu",
+    "text": "$env.HOMEBREW_CELLAR = \"/opt/homebrew/Cellar\"",
+    "count": 1
+  },
+  {
+    "rule": "mac-path",
+    "file": "nushell/.config/nushell/env.nu",
+    "text": "$env.HOMEBREW_PREFIX = \"/opt/homebrew\"",
+    "count": 1
+  },
+  {
+    "rule": "mac-path",
+    "file": "nushell/.config/nushell/env.nu",
+    "text": "$env.HOMEBREW_REPOSITORY = \"/opt/homebrew\"",
+    "count": 1
+  },
+  {
+    "rule": "mac-path",
+    "file": "nushell/.config/nushell/env.nu",
+    "text": "$env.INFOPATH = $\"/opt/homebrew/share/info:($env.INFOPATH? | default '')\"",
+    "count": 1
+  },
+  {
+    "rule": "mac-path",
+    "file": "nushell/.config/nushell/env.nu",
+    "text": "$env.MANPATH = $\"/opt/homebrew/share/man:($env.MANPATH? | default '')\"",
+    "count": 1
+  },
+  {
+    "rule": "mac-path",
+    "file": "nushell/.config/nushell/env.nu",
+    "text": "$env.PATH = ($env.PATH | prepend '/opt/homebrew/bin')",
+    "count": 1
+  },
+  {
+    "rule": "mac-path",
+    "file": "nushell/.config/nushell/env.nu",
+    "text": "$env.PATH = ($env.PATH | prepend '/opt/homebrew/sbin')",
+    "count": 1
+  },
+  {
+    "rule": "mac-path",
+    "file": "nushell/.config/nushell/env.nu",
+    "text": "if ('/opt/homebrew/bin/brew' | path exists) {",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/doctor.sh",
+    "text": "bad \"$path is a regular file (stow conflict?)\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/doctor.sh",
+    "text": "bad \"Dangling symlinks (run 'just stow'):\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/doctor.sh",
+    "text": "case \"$(readlink \"$link\")\" in *\"$REPO_NAME\"/*) echo \"$link\" ;; esac",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/doctor.sh",
+    "text": "check_freshness \"output/zsh\" \"$DOTCONFIG_DIR/output/zsh/.config/zsh/generated.zsh\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/doctor.sh",
+    "text": "check_stow \"$HOME/.config/zsh\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/doctor.sh",
+    "text": "for cmd in brew cargo rustup nu stow git sfw; do",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/doctor.sh",
+    "text": "ok \"$path/ (unfolded; e.g. ${stowed##\"$path\"/} → $(readlink \"$stowed\"))\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/doctor.sh",
+    "text": "resolved=\"$(readlink \"$path\")\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/doctor.sh",
+    "text": "target=\"$(readlink \"$LINER_DEST\")\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/nu/setup-local-machine/shells.nu",
+    "text": "^chmod +x $dest",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/nu/setup-local-machine/shells.nu",
+    "text": "^chmod +x $script_path",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/nu/setup-local-machine/shells.nu",
+    "text": "const GENERATED_PACKAGES = [\"zsh\", \"nu\", \"bin\"]",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/nu/setup-local-machine/shells.nu",
+    "text": "const HAND_WRITTEN_PACKAGES = [\"zed\", \"starship\", \"zsh\", \"nushell\", \"pnpm\", \"bun\", \"nvim\", \"mise\"]",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/nu/setup-local-machine/shells.nu",
+    "text": "error make { msg: $\"stow failed for: ($failed.name | str join ', ')\" }",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/nu/setup-local-machine/shells.nu",
+    "text": "export def \"main stow\" [",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/nu/setup-local-machine/shells.nu",
+    "text": "if \"zsh\" in $targets {",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/nu/setup-local-machine/shells.nu",
+    "text": "let output_file = $output_dir | path join \"generated.zsh\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/nu/setup-local-machine/shells.nu",
+    "text": "let result = ^stow ...$args | complete",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/nu/setup-local-machine/shells.nu",
+    "text": "let target = ^readlink $link | str trim",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/nu/setup-local-machine/shells.nu",
+    "text": "let verb = if $delete { \"unstow\" } else { \"stow\" }",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/nu/setup-local-machine/shells.nu",
+    "text": "log info $\"Generated zsh config: ($output_file)\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/nu/setup-local-machine/shells.nu",
+    "text": "log info $\"Running: stow ($args | str join ' ')\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/nu/setup-local-machine/shells.nu",
+    "text": "log info $\"nu: skipping alias ($entry.key) — shadows the nu builtin; zsh only\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "scripts/nu/setup-local-machine/shells.nu",
+    "text": "mut content = \"#!/usr/bin/env bash\\n\"",
+    "count": 1
+  },
+  {
+    "rule": "mac-path",
+    "file": "zsh/.config/zsh/.zshrc",
+    "text": "JETBRAINS_SCRIPTS=\"$HOME/Library/Application Support/JetBrains/Toolbox/scripts\"",
+    "count": 1
+  },
+  {
+    "rule": "mac-path",
+    "file": "zsh/.config/zsh/.zshrc",
+    "text": "eval \"$(/opt/homebrew/bin/brew shellenv)\"",
+    "count": 1
+  },
+  {
+    "rule": "mac-path",
+    "file": "zsh/.config/zsh/.zshrc",
+    "text": "if [ -f '/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc' ]; then . '/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc'; fi",
+    "count": 1
+  },
+  {
+    "rule": "mac-path",
+    "file": "zsh/.config/zsh/.zshrc",
+    "text": "if [ -f '/opt/homebrew/share/google-cloud-sdk/path.zsh.inc' ]; then . '/opt/homebrew/share/google-cloud-sdk/path.zsh.inc'; fi",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "zsh/.config/zsh/.zshrc",
+    "text": "[[ -f $HOME/.config/zsh/generated.zsh ]] && source $HOME/.config/zsh/generated.zsh",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "zsh/.config/zsh/.zshrc",
+    "text": "[[ -f $_toolbelt_log_file ]] || { mkdir -p \"${_toolbelt_log_file:h}\" && : >> \"$_toolbelt_log_file\" && chmod 600 \"$_toolbelt_log_file\"; }",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "zsh/.config/zsh/.zshrc",
+    "text": "_toolbelt_log_file=\"${XDG_STATE_HOME:-$HOME/.local/state}/toolbelt/zsh.tsv\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "zsh/.config/zsh/.zshrc",
+    "text": "add-zsh-hook preexec _toolbelt_log",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "zsh/.config/zsh/.zshrc",
+    "text": "autoload -Uz add-zsh-hook",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "zsh/.config/zsh/.zshrc",
+    "text": "eval \"$(direnv hook zsh)\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "zsh/.config/zsh/.zshrc",
+    "text": "eval \"$(mise activate zsh)\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "zsh/.config/zsh/.zshrc",
+    "text": "eval \"$(starship init zsh)\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "zsh/.config/zsh/.zshrc",
+    "text": "eval \"$(zoxide init --cmd cd zsh)\"",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "zsh/.config/zsh/.zshrc",
+    "text": "if [ -f '/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc' ]; then . '/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc'; fi",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "zsh/.config/zsh/.zshrc",
+    "text": "if [ -f '/opt/homebrew/share/google-cloud-sdk/path.zsh.inc' ]; then . '/opt/homebrew/share/google-cloud-sdk/path.zsh.inc'; fi",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "zsh/.config/zsh/.zshrc",
+    "text": "zmodload -F zsh/datetime p:EPOCHREALTIME",
+    "count": 1
+  },
+  {
+    "rule": "posix-only",
+    "file": "zsh/.zshenv",
+    "text": "ZDOTDIR=$HOME/.config/zsh",
+    "count": 1
+  }
+]

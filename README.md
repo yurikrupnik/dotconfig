@@ -49,9 +49,24 @@ toolbelt govern -s clusters -c <ctx>  # one management cluster and its children;
 toolbelt manage             # AI agent (claude; -a omp) plans installs from the `also`/status/managed columns:
                             #   dedupe managers, install missing, declare/uninstall drift, drop unused (plan only)
 toolbelt manage --apply     # same, then confirm each action: runs brew/mise/cargo/bun/uv + edits config/ declarations
+toolbelt cost --since 7day  # Per command: runs, failures, total/avg time, last run (zsh run log + nu history);
+                            #   --shell zsh|nu|all, --top N; adds calltrace's traced processes + caller → callee edges
 
-# zsh .zsh_history is deduped, so zsh/.config/zsh/.zshrc logs every run to
-# ~/.local/state/toolbelt/zsh.tsv (preexec hook); nu counts come from history.sqlite3.
+# zsh .zsh_history is deduped, so zsh/.config/zsh/.zshrc logs every finished run (start, exit
+# status, duration) to ~/.local/state/toolbelt/zsh.tsv (preexec/precmd hooks); nu runs come
+# from history.sqlite3.
+
+ctrun <cmd> [args]          # alias for `calltrace run -- <cmd>`: record every process <cmd> spawns (caller → callee tree)
+calltrace ls|report|flame|stats  # recorded runs · one run's summary · flame graph · per-command counts across runs
+                            #   calltrace lives in toolkit (crates/calltrace): `bun nx run calltrace:install` there
+
+ghfleet                     # Every GitHub repo (you + your orgs) in explore: metadata, settings, config files,
+                            #   CI workflows + last run, CD (Argo CD/Flux), Kyverno validations, KEDA scalers
+ghfleet scan -m keda        # Table/--json; -o owner,org · --missing kyverno|keda|cd|ci · --cd flux · -c cached
+ghfleet show|validate <o/r> # One repo's full record · `kyverno apply` of repo + baseline policies to its manifests
+ghfleet add <o/r> [-f params.yaml] [--keda-max 20 …] [--apply] [--context <ctx>]
+                            #   generate missing Kyverno ValidatingPolicies / KEDA ScaledObjects from params;
+                            #   plan only, --apply opens a PR (or applies to <ctx>, server dry-run when planning)
 
 just regen                  # Validate config, regenerate output/ from config/ + restow
 just stow / unstow          # Re-apply or remove stowed symlinks
@@ -59,6 +74,7 @@ just stow-dry               # Preview stow operations
 nu scripts/nu/setup-local-machine/shells.nu validate   # Check config.toml + config/scripts only
 nu scripts/nu/setup-local-machine/shells.nu stow mise  # Stow selected packages
 scripts/check-brewfile.sh   # Every Brewfile tap/brew/cask exists (no installs; --tap adds missing taps)
+just ci-tekton              # ci.yml's checks as a Tekton PipelineRun in the devkit Kind cluster (working tree)
 ```
 
 `u`/`update` is the daily refresher; `./install.sh` is for fresh machines. In nushell, `update` is a builtin, so use `u` (aliased to `^update`) or type `^update`. (Not named `up` — that would shadow the Upbound CLI from the Brewfile.)
@@ -148,8 +164,11 @@ just uv-install
 ## Checks
 
 - **Git hooks** (`lefthook.yml`, enable with `lefthook install`): gitleaks on staged changes, shellcheck, nu-check, taplo, `shells.nu validate`, and a Conventional Commits `commit-msg` check (`type(scope): subject`).
-- **CI** (`.github/workflows/ci.yml`): lint (shellcheck, taplo, nu-check), generator (validate, generate to a temp dir, syntax-check + shellcheck every output), Brewfile (`scripts/check-brewfile.sh --tap`), and a gitleaks scan of the full history. Known false positives are fingerprinted in `.gitleaksignore`.
+- **CI** (`.github/workflows/ci.yml`): lint (shellcheck, taplo, nu-check), generator on macOS + Ubuntu (validate, generate to a temp dir, syntax-check + shellcheck every output), Brewfile (`scripts/check-brewfile.sh --tap`), and a gitleaks scan of the full history. Known false positives are fingerprinted in `.gitleaksignore`. Every lint/generator/secrets step is one `scripts/ci.sh <step>` call, shared with Tekton and `verify.nu`.
+- **CI on Tekton, locally**: `just ci-tekton` (`scripts/nu/ci-tekton.nu`) runs the lint, generator and secrets jobs as three parallel Tasks (`manifests/tekton/ci.yaml`) in the devkit Kind cluster. It builds `manifests/dockers/ci.Dockerfile` (ci.yml's pinned, sha256-verified tools + the working tree — tracked and untracked, never ignored files), tags it by image ID, `kind load`s it (no registry), starts a PipelineRun, streams `tkn` logs and exits with the run's verdict. One-time setup: `devkit cluster create` then `devkit cluster deps` (Tekton Pipelines LTS comes from `devkit.toml` `[[deps]]`). The Brewfile job stays on GitHub Actions (needs Homebrew on macOS).
 - **Machine**: `just doctor`, `just outdated`. `./install.sh` is idempotent — re-running is the simplest end-to-end test.
+- **Hooks + CI generator job, locally**: `nu .claude/skills/dotconfig/scripts/verify.nu` runs lefthook's pre-commit jobs on every tracked file plus CI's generator job in a temp dir (`--brewfile` adds the Brewfile check, `--machine` adds doctor). `nu .claude/skills/dotconfig/scripts/platform-audit.nu` lists code tied to one OS (`--events` prints one NDJSON event per hit; `--watch` keeps streaming NDJSON — current hits, then `new`/`resolved` events as tracked files are saved or `git add`/`rm`'d; `--diff` reports new/resolved hits vs `platform-baseline.json` and exits 1 on new ones).
+- **Sandboxes** (`scripts/nu/sandbox.nu`, Lima from the Brewfile): `just sandbox-linux` / `just sandbox-mac` clone a pristine Ubuntu 24.04 / macOS VM, copy the working tree in (tracked + untracked, never ignored files like `.env`; no host mounts), run `./install.sh`, open a shell, and delete the VM on exit. `--keep` stops instead of deleting the VM and the next run reuses it (idempotency test); one session per OS at a time, `--fresh` drops it, `--shell` skips install, `--template <lima template>` picks another distro; `just sandbox-clean` removes all sandbox VMs including the cached bases. The first macOS run restores an IPSW (~20 GB). Windows has no automated sandbox (Lima has no Windows guests): use the `utm` cask with Windows 11 ARM.
 
 ## File Structure
 
@@ -159,6 +178,7 @@ dotconfig/
 ├── bootstrap.sh                        # Clone + install (for curl piping)
 ├── justfile                            # Task runner (wraps the scripts below)
 ├── .editorconfig                       # Cross-editor formatting
+├── .claude/skills/                     # Agent skills: dotconfig (manage, verify, port), add-shell-command
 ├── config/                             # Source of truth (hand-edited)
 │   ├── brew/Brewfile                   # Homebrew packages
 │   ├── cargo/liner.toml                # Global cargo tools
@@ -168,19 +188,29 @@ dotconfig/
 │   │   ├── config.toml                 # Aliases / env / sequence-of-command functions
 │   │   └── README.md                   # When to use [functions.X]
 │   └── scripts/                        # Hand-written scripts (any language)
+│       ├── ghfleet.nu                  # → ~/.local/bin/ghfleet (GitHub repos: CI/CD/Kyverno/KEDA audit + add)
 │       ├── kgov.nu                     # → ~/.local/bin/kgov (toolbelt govern findings in explore)
 │       ├── mcp.nu                      # → ~/.local/bin/mcp
 │       ├── nx-run.nu                   # → ~/.local/bin/nx-run
 │       ├── toolbelt.nu                 # → ~/.local/bin/toolbelt (tool inventory + usage/value dashboard)
 │       ├── upkg.nu                     # → ~/.local/bin/upkg
 │       └── README.md                   # When to write a script; bash vs nu
+├── manifests/
+│   ├── dockers/ci.Dockerfile           # Tekton CI image: ci.yml's toolchain + working tree
+│   └── tekton/ci.yaml                  # Tekton Tasks + Pipeline mirroring ci.yml (just ci-tekton)
 ├── scripts/
 │   ├── brew-preflight.sh               # Tap-trust check + brew bundle (bash 3.2-safe)
 │   ├── check-brewfile.sh               # Every Brewfile entry exists (CI + local)
+│   ├── ci.sh                           # CI steps, shared by ci.yml, Tekton and verify.nu
 │   ├── doctor.sh                       # Health check (commands, symlinks, freshness, drift)
 │   ├── outdated.sh                     # Preview pending updates (brew/rust/node/uv)
-│   └── nu/setup-local-machine/
-│       └── shells.nu                   # Generator + stow driver
+│   └── nu/
+│       ├── ci-tekton.nu                # Build CI image, kind load, run the Tekton pipeline (just ci-tekton)
+│       ├── sandbox.nu                  # Disposable Lima VMs running install.sh (just sandbox-*)
+│       ├── worktree.nu                 # Working-tree tarball (no ignored files) for sandbox + CI image
+│       └── setup-local-machine/
+│           └── shells.nu               # Generator + stow driver
+├── devkit.toml                         # This repo's devkit config (Kind cluster, [[deps]] incl. Tekton)
 ├── output/                             # Generated; NOT committed to git
 │   ├── bin/.local/bin/                 # Functions from TOML + scripts from config/scripts/
 │   ├── zsh/.config/zsh/generated.zsh   # Generated zsh aliases + env

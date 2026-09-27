@@ -1,0 +1,114 @@
+# dotconfig CI on Tekton: the lint / generator / secrets jobs of
+# .github/workflows/ci.yml as three parallel Tasks, each step one
+# `scripts/ci.sh <step>` call inside the CI image (manifests/dockers/ci.Dockerfile).
+# The brewfile job is not here: it needs Homebrew on macOS.
+#
+# The image carries the working tree and is side-loaded into the Kind cluster,
+# never pulled: `just ci-tekton` builds it, loads it, applies this file and
+# starts a PipelineRun with params.image set. Steps always set `command`, so
+# Tekton never asks a registry for the image's entrypoint.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dotconfig-ci
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: dotconfig-lint
+  namespace: dotconfig-ci
+spec:
+  params:
+    - name: image
+      type: string
+  stepTemplate:
+    image: $(params.image)
+    workingDir: /src
+    securityContext:
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+  steps:
+    - name: shellcheck
+      command: [scripts/ci.sh, shellcheck]
+    - name: taplo
+      command: [scripts/ci.sh, taplo]
+    - name: nu-check
+      command: [scripts/ci.sh, nu-check]
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: dotconfig-generator
+  namespace: dotconfig-ci
+spec:
+  params:
+    - name: image
+      type: string
+  stepTemplate:
+    image: $(params.image)
+    workingDir: /src
+    securityContext:
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+    env:
+      # Steps are separate containers; /workspace is the volume they share.
+      - name: CI_GEN_DIR
+        value: /workspace/gen
+  steps:
+    - name: validate
+      command: [scripts/ci.sh, validate]
+    - name: generate
+      command: [scripts/ci.sh, generate]
+    - name: check-generated
+      command: [scripts/ci.sh, check-generated]
+    - name: nu-check-config
+      command: [scripts/ci.sh, nu-check-config]
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: dotconfig-secrets
+  namespace: dotconfig-ci
+spec:
+  params:
+    - name: image
+      type: string
+  stepTemplate:
+    image: $(params.image)
+    workingDir: /src
+    securityContext:
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+  steps:
+    - name: gitleaks
+      command: [scripts/ci.sh, gitleaks]
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: dotconfig-ci
+  namespace: dotconfig-ci
+spec:
+  params:
+    - name: image
+      type: string
+      description: CI image (with the working tree) already loaded into the Kind nodes
+  tasks:
+    - name: lint
+      taskRef:
+        name: dotconfig-lint
+      params:
+        - name: image
+          value: $(params.image)
+    - name: generator
+      taskRef:
+        name: dotconfig-generator
+      params:
+        - name: image
+          value: $(params.image)
+    - name: secrets
+      taskRef:
+        name: dotconfig-secrets
+      params:
+        - name: image
+          value: $(params.image)

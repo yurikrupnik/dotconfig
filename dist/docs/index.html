@@ -1,0 +1,1103 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="monodocs">
+<title>dotconfig</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --bg-soft: #131a23;
+  --bg-code: #0a0e14;
+  --panel: #111820;
+  --border: #212a35;
+  --border-soft: #1a222c;
+  --fg: #d7dee8;
+  --fg-dim: #8b98a9;
+  --fg-bright: #f2f6fb;
+  --accent: #6cb6ff;
+  --accent-soft: rgba(108, 182, 255, 0.14);
+  --rust: #e08c50;
+  --typescript: #56a3ff;
+  --javascript: #e3c05c;
+  --kcl: #7ed0a8;
+  --nushell: #45c6ad;
+  --tok-com: #6b7a8d;
+  --tok-str: #9ecf7c;
+  --tok-num: #e0a06a;
+  --tok-kw: #ff7b9c;
+  --tok-ty: #6cd0d0;
+  --tok-lit: #c39cf5;
+  --tok-fn: #8cb6ff;
+  --tok-attr: #e0b062;
+  --tok-key: #7fd1ff;
+  --tok-flag: #d5a3ff;
+  --tok-var: #f0a97e;
+  --tok-punct: #93a1b1;
+  --sidebar: 19rem;
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  --bg: #ffffff;
+  --bg-soft: #f6f8fa;
+  --bg-code: #f6f8fa;
+  --panel: #fbfcfd;
+  --border: #d7dee6;
+  --border-soft: #e6ebf0;
+  --fg: #1f2933;
+  --fg-dim: #5a6774;
+  --fg-bright: #0b1117;
+  --accent: #0a62c4;
+  --accent-soft: rgba(10, 98, 196, 0.1);
+  --tok-com: #6e7781;
+  --tok-str: #0a7d32;
+  --tok-num: #953800;
+  --tok-kw: #cf222e;
+  --tok-ty: #0550ae;
+  --tok-lit: #8250df;
+  --tok-fn: #1f56b8;
+  --tok-attr: #953800;
+  --tok-key: #0550ae;
+  --tok-flag: #8250df;
+  --tok-var: #bc4c00;
+  --tok-punct: #57606a;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font:
+    15px / 1.65 ui-sans-serif,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    sans-serif;
+  display: grid;
+  grid-template-columns: var(--sidebar) minmax(0, 1fr);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.skip {
+  position: absolute;
+  left: -9999px;
+}
+
+.skip:focus {
+  left: 1rem;
+  top: 1rem;
+  z-index: 10;
+  background: var(--panel);
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+}
+
+/* ── sidebar ─────────────────────────────────────────────────────────── */
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--bg-soft);
+  padding: 1.25rem 0.75rem 3rem;
+}
+
+.brand {
+  padding: 0 0.5rem 0.75rem;
+}
+
+.brand-title {
+  display: block;
+  font-weight: 650;
+  color: var(--fg-bright);
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.brand-sub {
+  display: block;
+  color: var(--fg-dim);
+  font-size: 0.78rem;
+}
+
+#filter {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  margin-bottom: 0.9rem;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+#filter:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.nav-group h2 {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--fg-dim);
+  margin: 1rem 0 0.35rem 0.5rem;
+}
+
+.nav-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-item > a {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.28rem 0.5rem;
+  border-radius: 6px;
+  color: var(--fg);
+  font-size: 0.88rem;
+}
+
+.nav-item > a:hover {
+  background: var(--accent-soft);
+  text-decoration: none;
+}
+
+.nav-item.active > a {
+  background: var(--accent-soft);
+  color: var(--fg-bright);
+  font-weight: 600;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--fg-dim);
+}
+
+.lang-rust {
+  background: var(--rust);
+}
+
+.lang-typescript {
+  background: var(--typescript);
+}
+
+.lang-javascript {
+  background: var(--javascript);
+}
+
+.lang-kcl {
+  background: var(--kcl);
+}
+
+.lang-nushell {
+  background: var(--nushell);
+}
+
+.nav-sub {
+  margin: 0 0 0.35rem 1.2rem;
+  border-left: 1px solid var(--border);
+}
+
+.nav-sub a {
+  display: block;
+  padding: 0.14rem 0.6rem;
+  color: var(--fg-dim);
+  font-size: 0.8rem;
+  border-left: 2px solid transparent;
+  margin-left: -1px;
+}
+
+.nav-sub a:hover,
+.nav-sub a.active {
+  color: var(--fg-bright);
+  border-left-color: var(--accent);
+  text-decoration: none;
+}
+
+.nav-item.hidden,
+.nav-group.hidden,
+.project.hidden {
+  display: none;
+}
+
+/* ── content ─────────────────────────────────────────────────────────── */
+
+main {
+  min-width: 0;
+  padding: 2.5rem clamp(1rem, 4vw, 3.5rem) 6rem;
+  max-width: 60rem;
+}
+
+.page-head {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.page-head h1 {
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+  color: var(--fg-bright);
+}
+
+.lede {
+  color: var(--fg-dim);
+  margin: 0.4rem 0 1rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+button,
+.btn {
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 0.32rem 0.7rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+button:hover,
+.btn:hover {
+  border-color: var(--accent);
+  color: var(--fg-bright);
+  text-decoration: none;
+}
+
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0 2rem;
+  font-size: 0.87rem;
+}
+
+.summary-table th,
+.summary-table td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.summary-table th {
+  color: var(--fg-dim);
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.project {
+  border-top: 1px solid var(--border);
+  padding-top: 2rem;
+  margin-top: 2.5rem;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.5rem 0 1.25rem;
+}
+
+.chip {
+  font-size: 0.74rem;
+  padding: 0.16rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--fg-dim);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+.chip.lang {
+  border-color: currentColor;
+}
+
+.chip.api {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.doc h2,
+.doc h3,
+.doc h4,
+.doc h5,
+.doc h6 {
+  color: var(--fg-bright);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  scroll-margin-top: 1.5rem;
+}
+
+.doc h2 {
+  font-size: 1.6rem;
+  margin: 0 0 0.25rem;
+}
+
+.doc h3 {
+  font-size: 1.15rem;
+  margin: 2rem 0 0.5rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.doc h4 {
+  font-size: 1rem;
+  margin: 1.5rem 0 0.4rem;
+}
+
+.doc .hash {
+  opacity: 0;
+  margin-left: 0.4rem;
+  color: var(--fg-dim);
+  font-weight: 400;
+}
+
+.doc h2:hover .hash,
+.doc h3:hover .hash,
+.doc h4:hover .hash {
+  opacity: 1;
+}
+
+.doc table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 0.88rem;
+  display: block;
+  overflow-x: auto;
+}
+
+.doc th,
+.doc td {
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.doc th {
+  background: var(--bg-soft);
+  color: var(--fg-bright);
+}
+
+.doc blockquote {
+  margin: 1rem 0;
+  padding: 0.1rem 1rem;
+  border-left: 3px solid var(--border);
+  color: var(--fg-dim);
+}
+
+.doc code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 0.86em;
+  background: var(--bg-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  padding: 0.07em 0.32em;
+}
+
+.doc hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2rem 0;
+}
+
+figure.code {
+  margin: 1rem 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--bg-code);
+}
+
+figure.code figcaption {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 0.5rem 0.25rem 0.75rem;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+  min-height: 1.9rem;
+}
+
+figure.code .copy {
+  padding: 0.1rem 0.45rem;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+figure.code pre {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+}
+
+figure.code code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.tok-com {
+  color: var(--tok-com);
+  font-style: italic;
+}
+.tok-str {
+  color: var(--tok-str);
+}
+.tok-num {
+  color: var(--tok-num);
+}
+.tok-kw {
+  color: var(--tok-kw);
+}
+.tok-ty {
+  color: var(--tok-ty);
+}
+.tok-lit {
+  color: var(--tok-lit);
+}
+.tok-fn {
+  color: var(--tok-fn);
+}
+.tok-attr {
+  color: var(--tok-attr);
+}
+.tok-key {
+  color: var(--tok-key);
+}
+.tok-flag {
+  color: var(--tok-flag);
+}
+.tok-var {
+  color: var(--tok-var);
+}
+.tok-punct {
+  color: var(--tok-punct);
+}
+
+details.extra {
+  margin: 1.5rem 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+}
+
+details.extra > summary {
+  cursor: pointer;
+  padding: 0.55rem 0.9rem;
+  color: var(--fg-dim);
+  font-size: 0.85rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+details.extra[open] > summary {
+  border-bottom: 1px solid var(--border);
+  color: var(--fg-bright);
+}
+
+details.extra > .doc {
+  padding: 0.5rem 1rem 1rem;
+}
+
+.doc.api {
+  margin-top: 2rem;
+}
+
+.api-lede {
+  color: var(--fg-dim);
+  font-size: 0.85rem;
+  margin: 0.2rem 0 1rem;
+}
+
+.api-group {
+  margin: 0 0 1rem;
+}
+
+.api-kind {
+  margin: 0.8rem 0 0.3rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--fg-dim);
+}
+
+.api-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.api-list > li {
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.api-name code {
+  font-size: 0.86em;
+  background: var(--bg-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  padding: 0.05rem 0.3rem;
+}
+
+.api-sum {
+  color: var(--fg-dim);
+}
+
+.api-meta {
+  color: var(--fg-dim);
+  margin-left: 0.5rem;
+  font-size: 0.74rem;
+}
+
+details.api-mod {
+  margin: 0.35rem 0;
+  border-left: 2px solid var(--border);
+  padding-left: 0.75rem;
+}
+
+details.api-mod > summary .api-sum {
+  margin-left: 0.5rem;
+}
+
+details.api-mod > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--fg);
+}
+
+details.api-mod > .api-body {
+  padding: 0.2rem 0 0.4rem;
+}
+
+.missing {
+  color: var(--fg-dim);
+  font-style: italic;
+}
+
+#empty {
+  color: var(--fg-dim);
+  padding: 2rem 0;
+}
+
+footer.page-foot {
+  margin-top: 4rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 900px) {
+  body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sidebar {
+    position: static;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+@media print {
+  body {
+    display: block;
+    color: #000;
+    background: #fff;
+  }
+
+  .sidebar,
+  .actions,
+  .copy,
+  .hash {
+    display: none;
+  }
+
+  details.extra[open] > .doc,
+  details.extra > .doc,
+  details.api-mod > .api-body {
+    display: block;
+  }
+
+  figure.code,
+  .project {
+    break-inside: avoid;
+  }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<aside class="sidebar">
+<div class="brand"><span class="brand-title">dotconfig</span><span class="brand-sub">5 projects · one document</span></div><input id="filter" type="search" placeholder="Filter projects  /" autocomplete="off" spellcheck="false">
+<nav id="nav"><div class="nav-group"><h2>Workspace</h2><ul><li class="nav-item" data-slug="dotconfig"><a href="#proj-dotconfig"><span class="dot lang-none"></span>dotconfig</a><ul class="nav-sub"><li><a href="#dotconfig--quick-start">Quick Start</a></li><li><a href="#dotconfig--daily-commands">Daily Commands</a></li><li><a href="#dotconfig--what-gets-managed">What Gets Managed</a></li><li><a href="#dotconfig--how-it-works">How It Works</a></li><li><a href="#dotconfig--supply-chain-hardening">Supply-chain hardening</a></li><li><a href="#dotconfig--adding-new-functionality">Adding new functionality</a></li><li><a href="#dotconfig--checks">Checks</a></li><li><a href="#dotconfig--file-structure">File Structure</a></li><li><a href="#dotconfig--command-runners">Command Runners</a></li><li><a href="#dotconfig--supported-platforms">Supported Platforms</a></li></ul></li></ul></div><div class="nav-group"><h2>Config</h2><ul><li class="nav-item" data-slug="dotconfig-global-packages"><a href="#proj-dotconfig-global-packages"><span class="dot lang-javascript"></span>file here</a><ul class="nav-sub"><li><a href="#dotconfig-global-packages--file-here">file here</a></li></ul></li><li class="nav-item" data-slug="scripts"><a href="#proj-scripts"><span class="dot lang-nushell"></span>config/scripts/</a><ul class="nav-sub"><li><a href="#scripts--when-to-put-a-script-here">When to put a script here</a></li><li><a href="#scripts--file-naming">File naming</a></li><li><a href="#scripts--bash-vs-nu-when-to-pick-which">Bash vs nu — when to pick which</a></li><li><a href="#scripts--example">Example</a></li><li><a href="#scripts--after-editing">After editing</a></li><li><a href="#scripts--name-collisions">Name collisions</a></li></ul></li></ul></div><div class="nav-group"><h2>Scripts</h2><ul><li class="nav-item" data-slug="nu"><a href="#proj-nu"><span class="dot lang-nushell"></span>Some Nu scripts</a></li><li class="nav-item" data-slug="setup-local-machine"><a href="#proj-setup-local-machine"><span class="dot lang-nushell"></span>Setup local machine</a><ul class="nav-sub"><li><a href="#setup-local-machine--setup-local-machine">Setup local machine</a></li></ul></li></ul></div></nav>
+</aside>
+<main id="content">
+<header class="page-head"><h1>dotconfig</h1><p class="lede">Every project README in one page — 5/5 documented, languages: JavaScript, Nushell.</p><div class="actions"><button id="theme" type="button">Light theme</button><button id="expand" type="button">Expand all docs</button></div></header>
+<table class="summary-table"><thead><tr><th>Project</th><th>Language</th><th>Kind</th><th>Path</th><th>Docs</th></tr></thead><tbody><tr><td><a href="#proj-dotconfig">dotconfig</a></td><td>&mdash;</td><td>workspace</td><td><code>.</code></td><td><code>README.md</code></td></tr><tr><td><a href="#proj-dotconfig-global-packages">dotconfig-global-packages</a></td><td>JavaScript</td><td>package</td><td><code>config/node</code></td><td><code>config/node/README.md</code></td></tr><tr><td><a href="#proj-scripts">scripts</a></td><td>Nushell</td><td>module</td><td><code>config/scripts</code></td><td><code>config/scripts/README.md</code></td></tr><tr><td><a href="#proj-nu">nu</a></td><td>Nushell</td><td>module</td><td><code>scripts/nu</code></td><td><code>scripts/nu/README.md</code></td></tr><tr><td><a href="#proj-setup-local-machine">setup-local-machine</a></td><td>Nushell</td><td>module</td><td><code>scripts/nu/setup-local-machine</code></td><td><code>scripts/nu/setup-local-machine/README.md</code></td></tr></tbody></table><p id="empty" hidden>No project matches that filter.</p>
+<section class="project" data-slug="dotconfig" data-lang="rust" data-name="dotconfig . workspace Rust "><div class="chips"><span class="chip">workspace</span></div><article class="doc"><h2 id="proj-dotconfig" class="doc-h">dotconfig<a class="hash" href="#proj-dotconfig" aria-label="Permalink">#</a></h2>
+<p>Personal dotfiles and machine setup. One source of truth for shell configs, packages, and tooling — applied via GNU stow.</p>
+<h3 id="dotconfig--quick-start" class="doc-h">Quick Start<a class="hash" href="#dotconfig--quick-start" aria-label="Permalink">#</a></h3><h4 id="dotconfig--fresh-machine" class="doc-h">Fresh Machine<a class="hash" href="#dotconfig--fresh-machine" aria-label="Permalink">#</a></h4><figure class="code" data-lang="bash"><figcaption><span class="lang">bash</span><button class="copy" type="button">copy</button></figcaption><pre><code>git clone https<span class="tok-punct">:</span><span class="tok-punct">/</span><span class="tok-punct">/</span>github<span class="tok-punct">.</span>com<span class="tok-punct">/</span>yurikrupnik<span class="tok-punct">/</span>dotconfig<span class="tok-punct">.</span>git ~<span class="tok-punct">/</span>dotconfig
+cd ~<span class="tok-punct">/</span>dotconfig
+<span class="tok-punct">.</span><span class="tok-punct">/</span>install<span class="tok-punct">.</span>sh
+</code></pre></figure>
+<p>This:</p>
+<ol>
+<li>Installs Homebrew (if missing), puts it on <code>PATH</code>, and runs <code>scripts/brew-preflight.sh --apply</code> (trust new taps, then <code>brew bundle</code>); any bundle failure aborts</li>
+<li>Installs rustup via the official installer if missing (it is not in the Brewfile), updates the toolchain, adds rust-analyzer</li>
+<li>Bootstraps <a href="#dotconfig--supply-chain-hardening"><code>sfw</code></a> (<code>bun add --global sfw</code>, the one unproxied install) so every later package step goes through it</li>
+<li>Generates shell configs and <code>bin/</code> scripts from <code>config/</code> into <code>output/</code>, then symlinks them and the hand-written packages into <code>$HOME</code> via GNU stow</li>
+<li>Installs global cargo tools (<code>config/cargo/liner.toml</code>), npm/bun packages (<code>config/node/package.json</code>) and uv tools (<code>config/uv/tools.txt</code>)</li>
+</ol>
+<p>Non-interactive runs refuse to trust new taps; set <code>BREW_TRUST_NEW_TAPS=1</code> to allow it. After install, run <code>just doctor</code> to verify everything is wired correctly, and <code>lefthook install</code> in the repo to enable the git hooks.</p>
+<h4 id="dotconfig--one-liner-from-anywhere" class="doc-h">One-liner (from anywhere)<a class="hash" href="#dotconfig--one-liner-from-anywhere" aria-label="Permalink">#</a></h4><figure class="code" data-lang="bash"><figcaption><span class="lang">bash</span><button class="copy" type="button">copy</button></figcaption><pre><code>bash <span class="tok-punct">&lt;</span><span class="tok-punct">(</span>curl <span class="tok-flag">-fsSL</span> https<span class="tok-punct">:</span><span class="tok-punct">/</span><span class="tok-punct">/</span>raw<span class="tok-punct">.</span>githubusercontent<span class="tok-punct">.</span>com<span class="tok-punct">/</span>yurikrupnik<span class="tok-punct">/</span>dotconfig<span class="tok-punct">/</span>main<span class="tok-punct">/</span>bootstrap<span class="tok-punct">.</span>sh<span class="tok-punct">)</span>
+</code></pre></figure>
+<p><code>bootstrap.sh</code> clones the repo to <code>~/dotconfig</code> and runs <code>./install.sh</code>.</p>
+<h3 id="dotconfig--daily-commands" class="doc-h">Daily Commands<a class="hash" href="#dotconfig--daily-commands" aria-label="Permalink">#</a></h3><figure class="code" data-lang="bash"><figcaption><span class="lang">bash</span><button class="copy" type="button">copy</button></figcaption><pre><code>u                           <span class="tok-com"># Refresh installed packages (brew + rust + cargo + node + uv + gcloud) and restow</span>
+                            <span class="tok-com">#   — alias for `update`; resolves to ~/.local/bin/update on every shell</span>
+
+just                        <span class="tok-com"># List all recipes</span>
+just doctor                 <span class="tok-com"># Verify install health (symlinks, freshness, dangling links, undeclared installs)</span>
+just outdated               <span class="tok-com"># Preview what `u` would refresh</span>
+
+toolbelt                    <span class="tok-com"># Dashboard: every brew/mise/cargo/node/uv tool + alias/function/script,</span>
+                            <span class="tok-com">#   per-shell usage, value vs code you maintain, unused tools, alias gaps</span>
+toolbelt tools <span class="tok-flag">-s</span> brew      <span class="tok-com"># Table view (filters: --source --status --shell; --json on every view)</span>
+toolbelt value<span class="tok-punct">|</span>gaps<span class="tok-punct">|</span>shells<span class="tok-punct">|</span>ui  <span class="tok-com"># custom-code ROI · hand-typed repeats · shell cards · interactive browser</span>
+toolbelt govern             <span class="tok-com"># Read-only security/governance audit: shells, gcp, mcp, agents, clusters —</span>
+                            <span class="tok-com">#   management clusters + the children they created (CAPI/Crossplane/vcluster/Flux/Argo)</span>
+toolbelt govern <span class="tok-flag">-s</span> clusters <span class="tok-flag">-c</span> <span class="tok-punct">&lt;</span>ctx<span class="tok-punct">&gt;</span>  <span class="tok-com"># one management cluster and its children; --all adds passing checks</span>
+toolbelt manage             <span class="tok-com"># AI agent (claude; -a omp) plans installs from the `also`/status/managed columns:</span>
+                            <span class="tok-com">#   dedupe managers, install missing, declare/uninstall drift, drop unused (plan only)</span>
+toolbelt manage <span class="tok-flag">--apply</span>     <span class="tok-com"># same, then confirm each action: runs brew/mise/cargo/bun/uv + edits config/ declarations</span>
+toolbelt cost <span class="tok-flag">--since</span> <span class="tok-num">7day</span>  <span class="tok-com"># Per command: runs, failures, total/avg time, last run (zsh run log + nu history);</span>
+                            <span class="tok-com">#   --shell zsh|nu|all, --top N; adds calltrace&#39;s traced processes + caller → callee edges</span>
+
+<span class="tok-com"># zsh .zsh_history is deduped, so zsh/.config/zsh/.zshrc logs every finished run (start, exit</span>
+<span class="tok-com"># status, duration) to ~/.local/state/toolbelt/zsh.tsv (preexec/precmd hooks); nu runs come</span>
+<span class="tok-com"># from history.sqlite3.</span>
+
+ctrun <span class="tok-punct">&lt;</span>cmd<span class="tok-punct">&gt;</span> <span class="tok-punct">[</span>args<span class="tok-punct">]</span>          <span class="tok-com"># alias for `calltrace run -- &lt;cmd&gt;`: record every process &lt;cmd&gt; spawns (caller → callee tree)</span>
+calltrace ls<span class="tok-punct">|</span>report<span class="tok-punct">|</span>flame<span class="tok-punct">|</span>stats  <span class="tok-com"># recorded runs · one run&#39;s summary · flame graph · per-command counts across runs</span>
+                            <span class="tok-com">#   calltrace lives in toolkit (crates/calltrace): `bun nx run calltrace:install` there</span>
+
+ghfleet                     <span class="tok-com"># Every GitHub repo (you + your orgs) in explore: metadata, settings, config files,</span>
+                            <span class="tok-com">#   CI workflows + last run, CD (Argo CD/Flux), Kyverno validations, KEDA scalers</span>
+ghfleet scan <span class="tok-flag">-m</span> keda        <span class="tok-com"># Table/--json; -o owner,org · --missing kyverno|keda|cd|ci · --cd flux · -c cached</span>
+ghfleet show<span class="tok-punct">|</span>validate <span class="tok-punct">&lt;</span>o<span class="tok-punct">/</span>r<span class="tok-punct">&gt;</span> <span class="tok-com"># One repo&#39;s full record · `kyverno apply` of repo + baseline policies to its manifests</span>
+ghfleet add <span class="tok-punct">&lt;</span>o<span class="tok-punct">/</span>r<span class="tok-punct">&gt;</span> <span class="tok-punct">[</span><span class="tok-flag">-f</span> params<span class="tok-punct">.</span>yaml<span class="tok-punct">]</span> <span class="tok-punct">[</span><span class="tok-flag">--keda-max</span> <span class="tok-num">20</span> …<span class="tok-punct">]</span> <span class="tok-punct">[</span><span class="tok-flag">--apply</span><span class="tok-punct">]</span> <span class="tok-punct">[</span><span class="tok-flag">--context</span> <span class="tok-punct">&lt;</span>ctx<span class="tok-punct">&gt;</span><span class="tok-punct">]</span>
+                            <span class="tok-com">#   generate missing Kyverno ValidatingPolicies / KEDA ScaledObjects from params;</span>
+                            <span class="tok-com">#   plan only, --apply opens a PR (or applies to &lt;ctx&gt;, server dry-run when planning)</span>
+
+just regen                  <span class="tok-com"># Validate config, regenerate output/ from config/ + restow</span>
+just stow <span class="tok-punct">/</span> unstow          <span class="tok-com"># Re-apply or remove stowed symlinks</span>
+just stow-dry               <span class="tok-com"># Preview stow operations</span>
+nu scripts<span class="tok-punct">/</span>nu<span class="tok-punct">/</span>setup-local-machine<span class="tok-punct">/</span>shells<span class="tok-punct">.</span>nu validate   <span class="tok-com"># Check config.toml + config/scripts only</span>
+nu scripts<span class="tok-punct">/</span>nu<span class="tok-punct">/</span>setup-local-machine<span class="tok-punct">/</span>shells<span class="tok-punct">.</span>nu stow mise  <span class="tok-com"># Stow selected packages</span>
+scripts<span class="tok-punct">/</span>check-brewfile<span class="tok-punct">.</span>sh   <span class="tok-com"># Every Brewfile tap/brew/cask exists (no installs; --tap adds missing taps)</span>
+just ci-tekton              <span class="tok-com"># ci.yml&#39;s checks as a Tekton PipelineRun in the devkit Kind cluster (working tree)</span>
+</code></pre></figure>
+<p><code>u</code>/<code>update</code> is the daily refresher; <code>./install.sh</code> is for fresh machines. In nushell, <code>update</code> is a builtin, so use <code>u</code> (aliased to <code>^update</code>) or type <code>^update</code>. (Not named <code>up</code> — that would shadow the Upbound CLI from the Brewfile.)</p>
+<h3 id="dotconfig--what-gets-managed" class="doc-h">What Gets Managed<a class="hash" href="#dotconfig--what-gets-managed" aria-label="Permalink">#</a></h3><table><thead><tr><th>Component</th><th>Source of truth</th><th>Destination</th></tr></thead><tbody>
+<tr><td>Shell aliases / env vars / sequence-of-command functions</td><td><a href="../../config/shell/README.md"><code>config/shell/config.toml</code></a></td><td>Generated per-shell + <code>~/.local/bin/&lt;name&gt;</code></td></tr>
+<tr><td>Hand-written scripts (any language)</td><td><a href="#proj-scripts"><code>config/scripts/</code></a></td><td><code>~/.local/bin/&lt;name&gt;</code></td></tr>
+<tr><td>Brew packages</td><td><code>config/brew/Brewfile</code></td><td>System</td></tr>
+<tr><td>Cargo tools</td><td><code>config/cargo/liner.toml</code></td><td><code>~/.cargo/bin/</code> (via <a href="https://docs.rs/cargo-liner">cargo-liner</a>, symlinked from <code>$CARGO_HOME/liner.toml</code>)</td></tr>
+<tr><td>npm/bun globals</td><td><code>config/node/package.json</code></td><td>Global node modules</td></tr>
+<tr><td>uv (Python) tools</td><td><code>config/uv/tools.txt</code></td><td><code>~/.local/bin/</code> (via <code>uv tool install</code>, isolated per-tool venvs)</td></tr>
+<tr><td>pnpm config (supply-chain hardening)</td><td><code>pnpm/</code></td><td><code>~/.config/pnpm/config.yaml</code></td></tr>
+<tr><td>bun config (supply-chain hardening)</td><td><code>bun/</code></td><td><code>~/.bunfig.toml</code></td></tr>
+<tr><td>zsh config (hand)</td><td><code>zsh/</code></td><td><code>~/.zshenv</code>, <code>~/.config/zsh/.zshrc</code></td></tr>
+<tr><td>zsh config (generated)</td><td><code>output/zsh/</code></td><td><code>~/.config/zsh/generated.zsh</code></td></tr>
+<tr><td>nushell config (hand)</td><td><code>nushell/</code></td><td><code>~/.config/nushell/config.nu</code>, <code>env.nu</code></td></tr>
+<tr><td>nushell config (generated)</td><td><code>output/nu/</code></td><td><code>~/.config/nushell/generated.nu</code></td></tr>
+<tr><td>starship prompt</td><td><code>starship/</code></td><td><code>~/.config/starship/</code></td></tr>
+<tr><td>zed editor</td><td><code>zed/</code></td><td><code>~/.config/zed/</code></td></tr>
+<tr><td>neovim editor</td><td><code>nvim/</code></td><td><code>~/.config/nvim/</code> (see <a href="../../nvim/.config/nvim/docs/learning-plan.md">the learning plan</a>)</td></tr>
+<tr><td>mise global config (empty on purpose)</td><td><code>mise/</code></td><td><code>~/.config/mise/config.toml</code></td></tr>
+</tbody></table>
+<h4 id="dotconfig--one-owner-per-tool" class="doc-h">One owner per tool<a class="hash" href="#dotconfig--one-owner-per-tool" aria-label="Permalink">#</a></h4>
+<p>Every CLI has exactly one manager: the Brewfile first, then <code>liner.toml</code> (crates with no formula), <code>package.json</code> (node globals), <code>tools.txt</code> (Python CLIs). mise only provides runtimes that a project pins in its own <code>mise.toml</code> — its global config stays empty and <code>mise prune</code> removes anything no project needs. <code>just doctor</code> fails on anything installed through brew, cargo (registry crates), uv or bun that the matching file doesn't declare: declare it or uninstall it.</p>
+<h3 id="dotconfig--how-it-works" class="doc-h">How It Works<a class="hash" href="#dotconfig--how-it-works" aria-label="Permalink">#</a></h3>
+<p>The repo is organized into three roles:</p>
+<ol>
+<li><strong><code>config/</code></strong> — source for things that get <em>generated</em>: shell aliases, env vars, sequence-of-command functions (<code>config/shell/config.toml</code>), and hand-written scripts in any language (<code>config/scripts/</code>).</li>
+<li><strong><code>output/</code></strong> — generator output. <strong>Do not edit by hand. Not committed to git</strong> — rebuilt from <code>config/</code> by <code>shells.nu generate</code>.</li>
+<li><strong>Top-level hand-written stow packages</strong> — <code>zsh/</code>, <code>nushell/</code>, <code>zed/</code>, <code>nvim/</code>, <code>starship/</code>, <code>pnpm/</code>, <code>bun/</code>, <code>mise/</code>. These hold config files that are pure source (no generation step). They're committed to git and stowed as-is.</li>
+</ol>
+<p>The pipeline:</p>
+<ol>
+<li><code>shells.nu generate</code> validates <code>config/shell/config.toml</code> and <code>config/scripts/*</code> (unknown keys, alias/function/script name collisions, shell syntax in aliases, bad env references — every problem is listed, nothing is written), then writes everything to <code>output/</code>. <code>output/bin/</code> is rebuilt from scratch and any <code>output/</code> package it no longer generates is deleted. Aliases named like a nushell builtin (<code>ls</code>) are emitted for zsh only.</li>
+<li><code>shells.nu stow</code> uses GNU stow with <code>--no-folding</code> to symlink the generated packages (<code>zsh</code>, <code>nu</code>, <code>bin</code>) and each entry of <code>HAND_WRITTEN_PACKAGES</code> (<code>zed</code>, <code>starship</code>, <code>zsh</code>, <code>nushell</code>, <code>pnpm</code>, <code>bun</code>, <code>nvim</code>, <code>mise</code>) into <code>$HOME</code>, then deletes symlinks under <code>$HOME</code> that point into the repo but no longer resolve (a removed function, script, or package file). A missing package dir or any stow conflict fails the run. Hand-written and generated packages share target directories (e.g. <code>~/.config/zsh/</code> gets <code>.zshrc</code> from <code>zsh/</code> and <code>generated.zsh</code> from <code>output/zsh/</code>).</li>
+<li><code>config/brew/Brewfile</code>, <code>config/cargo/liner.toml</code>, <code>config/node/package.json</code>, and <code>config/uv/tools.txt</code> declare packages installed by <code>./install.sh</code> and refreshed by <code>u</code>/<code>update</code>.</li>
+</ol>
+<p><strong>On a fresh clone</strong>, <code>output/</code> does not exist. <code>./install.sh</code> runs <code>generate</code> before <code>stow</code>, so it bootstraps correctly. If you ever run <code>just stow</code> directly on a fresh clone, you'll see an error pointing at <code>just generate</code>.</p>
+<h3 id="dotconfig--supply-chain-hardening" class="doc-h">Supply-chain hardening<a class="hash" href="#dotconfig--supply-chain-hardening" aria-label="Permalink">#</a></h3>
+<p>Two layers, defense in depth:</p>
+<ol>
+<li><strong>Package-manager config</strong> (<a href="../../pnpm/.config/pnpm/config.yaml"><code>pnpm/.config/pnpm/config.yaml</code></a>, <a href="../../bun/.bunfig.toml"><code>bun/.bunfig.toml</code></a>) — 7-day minimum release age (skip versions &lt;1 week old, catches &gt;90% of supply-chain attacks since they're flagged within hours), no lifecycle scripts in bun (<code>ignoreScripts = true</code>), no git/tarball sources in pnpm transitive deps (<code>blockExoticSubdeps</code>), and <code>trustPolicy: no-downgrade</code> so a package losing its trusted-publisher signature fails install.</li>
+<li><strong><a href="https://github.com/SocketDev/sfw-free">Socket Firewall</a> (<code>sfw</code>) at install time</strong> — <code>config/shell/config.toml</code> aliases <code>pnpm</code>, <code>bun</code>, <code>cargo</code>, and <code>uv</code> through <code>sfw &lt;name&gt;</code> for interactive shells. Scripts don't expand aliases, so <code>u</code> and the <code>cargo-install</code>/<code>node-install</code>/<code>uv-install</code> recipes call <code>sfw</code> explicitly (they fail if it is missing). sfw intercepts TLS with a per-run CA; cargo reads it from <code>CARGO_HTTP_CAINFO</code>, cargo-binstall needs <code>BINSTALL_HTTPS_ROOT_CERTS</code> (set by the recipe). cargo-binstall is also limited to crate-published binaries or source builds (<code>BINSTALL_STRATEGIES</code>, no third-party QuickInstall). Bypass per-command with the bare binary path (e.g. <code>/opt/homebrew/bin/bun add foo</code>).</li>
+<li><strong><code>upkg</code> batch update flow</strong> (<a href="../../config/scripts/upkg.nu"><code>config/scripts/upkg.nu</code></a>) — when updating project deps, runs OSV-Scanner pre/post, gates new versions through <code>ncu --cooldown 7</code>, passes <code>--ignore-scripts</code> to every PM, and (with <code>--paranoid</code> or <code>--with-sfw</code>) wraps install calls through <code>sfw</code>. The <code>socket</code> CLI is installed globally and runs in <code>--paranoid</code> mode for a post-install risk audit.</li>
+</ol>
+<p>Inspired by <a href="https://www.youtube.com/watch?v=Wq6yMdt11LM">this video</a>.</p>
+<h3 id="dotconfig--adding-new-functionality" class="doc-h">Adding new functionality<a class="hash" href="#dotconfig--adding-new-functionality" aria-label="Permalink">#</a></h3>
+<p>This repo has <strong>two places</strong> to define a new command: pick the one that fits.</p>
+<table><thead><tr><th>You want…</th><th>Put it in…</th><th>Why</th></tr></thead><tbody>
+<tr><td>An alias (<code>k = "kubectl"</code>)</td><td><code>config/shell/config.toml</code> <code>[aliases]</code></td><td>One-liner per shell, no logic</td></tr>
+<tr><td>An env var (<code>EDITOR = "zed"</code>)</td><td><code>config/shell/config.toml</code> <code>[environment]</code></td><td>Exported in every shell</td></tr>
+<tr><td>"Run these N commands in order"</td><td><code>config/shell/config.toml</code> <code>[functions.X]</code></td><td>Emits a bash script on <code>PATH</code>. See <a href="../../config/shell/README.md"><code>config/shell/README.md</code></a>.</td></tr>
+<tr><td>Anything with flags, branches, loops, or structured data</td><td><code>config/scripts/&lt;name&gt;.&lt;ext&gt;</code></td><td>Hand-written file in any language. See <a href="#proj-scripts"><code>config/scripts/README.md</code></a>.</td></tr>
+</tbody></table>
+<p>The shell user types <code>&lt;name&gt;</code> and the shell finds the resulting file on <code>PATH</code> — it doesn't care whether your function came from a TOML block or a hand-written nu script.</p>
+<h4 id="dotconfig--adding-packages" class="doc-h">Adding packages<a class="hash" href="#dotconfig--adding-packages" aria-label="Permalink">#</a></h4><figure class="code" data-lang="bash"><figcaption><span class="lang">bash</span><button class="copy" type="button">copy</button></figcaption><pre><code><span class="tok-com"># Homebrew — add to config/brew/Brewfile</span>
+echo <span class="tok-str">&#39;brew &quot;neovim&quot;&#39;</span> <span class="tok-punct">&gt;</span><span class="tok-punct">&gt;</span> config<span class="tok-punct">/</span>brew<span class="tok-punct">/</span><span class="tok-ty">Brewfile</span>
+brew bundle <span class="tok-flag">--file</span><span class="tok-punct">=</span>config<span class="tok-punct">/</span>brew<span class="tok-punct">/</span><span class="tok-ty">Brewfile</span>
+
+<span class="tok-com"># Cargo — add to config/cargo/liner.toml under [packages]</span>
+just cargo-install
+
+<span class="tok-com"># npm/bun — add to config/node/package.json</span>
+just node-install
+
+<span class="tok-com"># uv (Python CLI tools) — add to config/uv/tools.txt (one tool per line)</span>
+echo <span class="tok-str">&#39;s-tui&#39;</span> <span class="tok-punct">&gt;</span><span class="tok-punct">&gt;</span> config<span class="tok-punct">/</span>uv<span class="tok-punct">/</span>tools<span class="tok-punct">.</span>txt
+just uv-install
+</code></pre></figure><h3 id="dotconfig--checks" class="doc-h">Checks<a class="hash" href="#dotconfig--checks" aria-label="Permalink">#</a></h3>
+<ul>
+<li><strong>Git hooks</strong> (<code>lefthook.yml</code>, enable with <code>lefthook install</code>): gitleaks on staged changes, shellcheck, nu-check, taplo, <code>shells.nu validate</code>, and a Conventional Commits <code>commit-msg</code> check (<code>type(scope): subject</code>).</li>
+<li><strong>CI</strong> (<code>.github/workflows/ci.yml</code>): lint (shellcheck, taplo, nu-check), generator on macOS + Ubuntu (validate, generate to a temp dir, syntax-check + shellcheck every output), Brewfile (<code>scripts/check-brewfile.sh --tap</code>), and a gitleaks scan of the full history. Known false positives are fingerprinted in <code>.gitleaksignore</code>. Every lint/generator/secrets step is one <code>scripts/ci.sh &lt;step&gt;</code> call, shared with Tekton and <code>verify.nu</code>.</li>
+<li><strong>CI on Tekton, locally</strong>: <code>just ci-tekton</code> (<code>scripts/nu/ci-tekton.nu</code>) runs the lint, generator and secrets jobs as three parallel Tasks (<code>manifests/tekton/ci.yaml</code>) in the devkit Kind cluster. It builds <code>manifests/dockers/ci.Dockerfile</code> (ci.yml's pinned, sha256-verified tools + the working tree — tracked and untracked, never ignored files), tags it by image ID, <code>kind load</code>s it (no registry), starts a PipelineRun, streams <code>tkn</code> logs and exits with the run's verdict. One-time setup: <code>devkit cluster create</code> then <code>devkit cluster deps</code> (Tekton Pipelines LTS comes from <code>devkit.toml</code> <code>[[deps]]</code>). The Brewfile job stays on GitHub Actions (needs Homebrew on macOS).</li>
+<li><strong>Machine</strong>: <code>just doctor</code>, <code>just outdated</code>. <code>./install.sh</code> is idempotent — re-running is the simplest end-to-end test.</li>
+<li><strong>Hooks + CI generator job, locally</strong>: <code>nu .claude/skills/dotconfig/scripts/verify.nu</code> runs lefthook's pre-commit jobs on every tracked file plus CI's generator job in a temp dir (<code>--brewfile</code> adds the Brewfile check, <code>--machine</code> adds doctor). <code>nu .claude/skills/dotconfig/scripts/platform-audit.nu</code> lists code tied to one OS (<code>--events</code> prints one NDJSON event per hit; <code>--watch</code> keeps streaming NDJSON — current hits, then <code>new</code>/<code>resolved</code> events as tracked files are saved or <code>git add</code>/<code>rm</code>'d; <code>--diff</code> reports new/resolved hits vs <code>platform-baseline.json</code> and exits 1 on new ones).</li>
+<li><strong>Sandboxes</strong> (<code>scripts/nu/sandbox.nu</code>, Lima from the Brewfile): <code>just sandbox-linux</code> / <code>just sandbox-mac</code> clone a pristine Ubuntu 24.04 / macOS VM, copy the working tree in (tracked + untracked, never ignored files like <code>.env</code>; no host mounts), run <code>./install.sh</code>, open a shell, and delete the VM on exit. <code>--keep</code> stops instead of deleting the VM and the next run reuses it (idempotency test); one session per OS at a time, <code>--fresh</code> drops it, <code>--shell</code> skips install, <code>--template &lt;lima template&gt;</code> picks another distro; <code>just sandbox-clean</code> removes all sandbox VMs including the cached bases. The first macOS run restores an IPSW (~20 GB). Windows has no automated sandbox (Lima has no Windows guests): use the <code>utm</code> cask with Windows 11 ARM.</li>
+</ul>
+<h3 id="dotconfig--file-structure" class="doc-h">File Structure<a class="hash" href="#dotconfig--file-structure" aria-label="Permalink">#</a></h3><figure class="code" data-lang="text"><figcaption><button class="copy" type="button">copy</button></figcaption><pre><code>dotconfig/
+├── install.sh                          # Fresh machine bootstrap
+├── bootstrap.sh                        # Clone + install (for curl piping)
+├── justfile                            # Task runner (wraps the scripts below)
+├── .editorconfig                       # Cross-editor formatting
+├── .claude/skills/                     # Agent skills: dotconfig (manage, verify, port), add-shell-command
+├── config/                             # Source of truth (hand-edited)
+│   ├── brew/Brewfile                   # Homebrew packages
+│   ├── cargo/liner.toml                # Global cargo tools
+│   ├── node/package.json               # Global npm/bun packages
+│   ├── uv/tools.txt                    # Global Python CLI tools (uv tool install)
+│   ├── shell/
+│   │   ├── config.toml                 # Aliases / env / sequence-of-command functions
+│   │   └── README.md                   # When to use [functions.X]
+│   └── scripts/                        # Hand-written scripts (any language)
+│       ├── ghfleet.nu                  # → ~/.local/bin/ghfleet (GitHub repos: CI/CD/Kyverno/KEDA audit + add)
+│       ├── kgov.nu                     # → ~/.local/bin/kgov (toolbelt govern findings in explore)
+│       ├── mcp.nu                      # → ~/.local/bin/mcp
+│       ├── nx-run.nu                   # → ~/.local/bin/nx-run
+│       ├── toolbelt.nu                 # → ~/.local/bin/toolbelt (tool inventory + usage/value dashboard)
+│       ├── upkg.nu                     # → ~/.local/bin/upkg
+│       └── README.md                   # When to write a script; bash vs nu
+├── manifests/
+│   ├── dockers/ci.Dockerfile           # Tekton CI image: ci.yml&#39;s toolchain + working tree
+│   └── tekton/ci.yaml                  # Tekton Tasks + Pipeline mirroring ci.yml (just ci-tekton)
+├── scripts/
+│   ├── brew-preflight.sh               # Tap-trust check + brew bundle (bash 3.2-safe)
+│   ├── check-brewfile.sh               # Every Brewfile entry exists (CI + local)
+│   ├── ci.sh                           # CI steps, shared by ci.yml, Tekton and verify.nu
+│   ├── doctor.sh                       # Health check (commands, symlinks, freshness, drift)
+│   ├── outdated.sh                     # Preview pending updates (brew/rust/node/uv)
+│   └── nu/
+│       ├── ci-tekton.nu                # Build CI image, kind load, run the Tekton pipeline (just ci-tekton)
+│       ├── sandbox.nu                  # Disposable Lima VMs running install.sh (just sandbox-*)
+│       ├── worktree.nu                 # Working-tree tarball (no ignored files) for sandbox + CI image
+│       └── setup-local-machine/
+│           └── shells.nu               # Generator + stow driver
+├── devkit.toml                         # This repo&#39;s devkit config (Kind cluster, [[deps]] incl. Tekton)
+├── output/                             # Generated; NOT committed to git
+│   ├── bin/.local/bin/                 # Functions from TOML + scripts from config/scripts/
+│   ├── zsh/.config/zsh/generated.zsh   # Generated zsh aliases + env
+│   └── nu/.config/nushell/generated.nu # Generated nu aliases + env
+├── zsh/                                # Hand-written zsh source
+│   ├── .zshenv
+│   └── .config/zsh/.zshrc
+├── nushell/.config/nushell/            # Hand-written nu source
+│   ├── config.nu
+│   └── env.nu
+├── starship/.config/starship/          # Hand-written starship prompt
+├── zed/.config/zed/                    # Hand-written Zed config
+├── nvim/.config/nvim/                  # Hand-written Neovim config (Neovim ≥ 0.12)
+│   ├── init.lua                        # Entry point; leader, trainer mode, module order
+│   ├── lua/config/                     # options, keymaps, autocmds, lazy bootstrap, LSP
+│   ├── lua/plugins/                    # One file per concern (ui, editor, lsp deps, git, …)
+│   ├── lsp/&lt;server&gt;.lua                # Native vim.lsp.config server definitions (no mason)
+│   ├── lazy-lock.json                  # Committed plugin lockfile — reproducible on a new box
+│   └── docs/learning-plan.md           # 4-week plan + keymap reference (&lt;leader&gt;L in nvim)
+├── mise/.config/mise/config.toml       # Global mise config: empty; runtimes come from project mise.toml
+├── lefthook.yml                        # Git hooks (lefthook install)
+├── .github/workflows/ci.yml            # CI checks
+├── pnpm/.config/pnpm/config.yaml       # pnpm supply-chain hardening (min release age, no exotic subdeps, trust policy)
+└── bun/.bunfig.toml                    # bun supply-chain hardening (min release age, ignore lifecycle scripts)
+</code></pre></figure><h3 id="dotconfig--command-runners" class="doc-h">Command Runners<a class="hash" href="#dotconfig--command-runners" aria-label="Permalink">#</a></h3>
+<ul>
+<li><strong><code>./install.sh</code>, <code>./bootstrap.sh</code></strong> — pure bash, run before nu exists</li>
+<li><strong><code>u</code>/<code>update</code></strong> — daily refresh of installed packages (defined in <code>config.toml</code>, lives on <code>PATH</code>)</li>
+<li><strong><code>./scripts/doctor.sh</code>, <code>./scripts/outdated.sh</code></strong> — health check + update preview</li>
+<li><strong><code>just &lt;recipe&gt;</code></strong> — short aliases for daily commands; requires <code>brew install just</code></li>
+</ul>
+<p>There is no Makefile — the bash scripts are the canonical entry points; <code>just</code> is just for ergonomics.</p>
+<h3 id="dotconfig--supported-platforms" class="doc-h">Supported Platforms<a class="hash" href="#dotconfig--supported-platforms" aria-label="Permalink">#</a></h3>
+<ul>
+<li>macOS (Apple Silicon and Intel)</li>
+</ul>
+</article></section>
+<section class="project" data-slug="dotconfig-global-packages" data-lang="javascript" data-name="dotconfig-global-packages config/node package JavaScript Global npm/bun packages for development (incl. language servers used by nvim/)"><div class="chips"><span class="chip lang" style="color:var(--javascript)">JavaScript</span><span class="chip">package</span><span class="chip">v1.0.0</span><a class="chip" href="../../config/node">config/node</a></div><article class="doc"><h3 id="dotconfig-global-packages--file-here" class="doc-h">file here<a class="hash" href="#dotconfig-global-packages--file-here" aria-label="Permalink">#</a></h3></article></section>
+<section class="project" data-slug="scripts" data-lang="nushell" data-name="scripts config/scripts module Nushell "><div class="chips"><span class="chip lang" style="color:var(--nushell)">Nushell</span><span class="chip">module</span><a class="chip" href="../../config/scripts">config/scripts</a></div><article class="doc"><h2 id="proj-scripts" class="doc-h"><code>config/scripts/</code><a class="hash" href="#proj-scripts" aria-label="Permalink">#</a></h2>
+<p>Hand-written scripts — any language. Each file here is copied to <code>output/bin/.local/bin/&lt;name-without-extension&gt;</code> by <code>shells.nu generate</code> and ends up on <code>PATH</code> via stow.</p>
+<h3 id="scripts--when-to-put-a-script-here" class="doc-h">When to put a script here<a class="hash" href="#scripts--when-to-put-a-script-here" aria-label="Permalink">#</a></h3>
+<p>When TOML <code>[functions.X]</code> isn't enough. Concretely: when any of these are true:</p>
+<ul>
+<li>You want command-line flags / argument parsing</li>
+<li>You need an <code>if</code> / <code>case</code> / loop</li>
+<li>You're reading structured data (JSON, TOML, YAML)</li>
+<li>You want a nu pipeline with tables / records</li>
+<li>It's longer than ~15 lines of real logic</li>
+</ul>
+<p>If none of these apply, prefer <a href="../../config/shell/README.md"><code>config/shell/config.toml</code></a> — declarative is simpler.</p>
+<h3 id="scripts--file-naming" class="doc-h">File naming<a class="hash" href="#scripts--file-naming" aria-label="Permalink">#</a></h3><table><thead><tr><th>On disk</th><th>Installed as</th></tr></thead><tbody>
+<tr><td><code>mcp.nu</code></td><td><code>~/.local/bin/mcp</code></td></tr>
+<tr><td><code>deploy.sh</code></td><td><code>~/.local/bin/deploy</code></td></tr>
+<tr><td><code>cleanup.py</code></td><td><code>~/.local/bin/cleanup</code></td></tr>
+<tr><td><code>lint</code> (no extension)</td><td><code>~/.local/bin/lint</code></td></tr>
+</tbody></table>
+<p>The extension is for <strong>editor support</strong> (syntax highlighting, language server) and is stripped on install. The shebang inside the file determines the actual interpreter — every shell calls the file by its stripped name and the kernel handles the rest.</p>
+<p>Dotfiles and <code>README.md</code> are skipped.</p>
+<h3 id="scripts--bash-vs-nu-when-to-pick-which" class="doc-h">Bash vs nu — when to pick which<a class="hash" href="#scripts--bash-vs-nu-when-to-pick-which" aria-label="Permalink">#</a></h3><table><thead><tr><th></th><th>Bash</th><th>Nu</th></tr></thead><tbody>
+<tr><td><strong>Strengths</strong></td><td>Ubiquitous; runs before nu is installed; well-known idioms (<code>find -exec</code>, <code>xargs</code>); fast process startup</td><td>Structured data first-class (JSON/TOML/CSV/tables); typed CLI flags; pipelines that transform records; far more readable for non-trivial logic</td></tr>
+<tr><td><strong>Weaknesses</strong></td><td>Quoting hell; clumsy with arrays and structured data; error handling is bolted on</td><td>Requires nu installed; smaller community / fewer Stack Overflow answers; version churn (<code>r#"…"#</code> vs <code>r#'…'#</code>, deprecated config keys)</td></tr>
+<tr><td><strong>Pick when</strong></td><td>Bootstrap (must run before nu exists), single-purpose sequences, reaching for a well-known bash idiom</td><td>Anything touching JSON/TOML, anything you want to re-read in 6 months, anything with real logic</td></tr>
+</tbody></table>
+<p>Default rule: <strong>nu for new logic-heavy scripts.</strong> Reserve bash for bootstrap (<code>install.sh</code>, <code>bootstrap.sh</code>, <code>doctor.sh</code>) and for the trivial sequence-of-commands case (which <code>[functions.X]</code> already emits).</p>
+<h3 id="scripts--example" class="doc-h">Example<a class="hash" href="#scripts--example" aria-label="Permalink">#</a></h3>
+<p><code>mcp.nu</code> lives here because it reads server definitions, substitutes env vars, and writes JSON files for multiple AI agents — none of which fits in a TOML array of strings.</p>
+<figure class="code" data-lang="nushell"><figcaption><span class="lang">nushell</span><button class="copy" type="button">copy</button></figcaption><pre><code><span class="tok-com">#!/usr/bin/env nu</span>
+
+<span class="tok-kw">use</span> std<span class="tok-punct">/</span>log
+
+<span class="tok-kw">export</span> <span class="tok-kw">def</span> <span class="tok-flag">--env</span> <span class="tok-str">&quot;main&quot;</span> <span class="tok-punct">[</span>
+    <span class="tok-flag">--location</span><span class="tok-punct">:</span> <span class="tok-ty">list</span><span class="tok-punct">&lt;</span><span class="tok-ty">string</span><span class="tok-punct">&gt;</span> <span class="tok-punct">=</span> <span class="tok-punct">[</span><span class="tok-str">&quot;.mcp.json&quot;</span><span class="tok-punct">]</span>
+    <span class="tok-com"># …</span>
+<span class="tok-punct">]</span> <span class="tok-punct">{</span>
+    <span class="tok-com"># logic here</span>
+<span class="tok-punct">}</span>
+</code></pre></figure>
+<p>After editing, run <code>just regen</code> to copy the updated source to <code>output/bin/</code> (live via the stow symlink).</p>
+<h3 id="scripts--after-editing" class="doc-h">After editing<a class="hash" href="#scripts--after-editing" aria-label="Permalink">#</a></h3><figure class="code" data-lang="bash"><figcaption><span class="lang">bash</span><button class="copy" type="button">copy</button></figcaption><pre><code>just regen        <span class="tok-com"># copy updated scripts to output/bin/.local/bin/</span>
+</code></pre></figure>
+<p>Or <code>u</code> (the daily refresher, <code>~/.local/bin/update</code>) which calls <code>shells.nu generate</code> and <code>stow</code> at the end.</p>
+<h3 id="scripts--name-collisions" class="doc-h">Name collisions<a class="hash" href="#scripts--name-collisions" aria-label="Permalink">#</a></h3>
+<p>A few bare names — <code>update</code>, <code>sort</code>, <code>generate</code> — shadow <strong>nushell builtins</strong>. Once a script lives on <code>PATH</code>, typing the name in nu still resolves to the builtin, not your script — you must call it as <code>^name</code> or via an alias the generator emits with a <code>^</code> prefix (that's how the daily <code>update</code> refresher works). Prefer names that don't collide (use <code>help commands</code> in nu to check).</p>
+</article></section>
+<section class="project" data-slug="nu" data-lang="nushell" data-name="nu scripts/nu module Nushell "><div class="chips"><span class="chip lang" style="color:var(--nushell)">Nushell</span><span class="chip">module</span><a class="chip" href="../../scripts/nu">scripts/nu</a></div><article class="doc"><h2 id="proj-nu" class="doc-h">Some Nu scripts<a class="hash" href="#proj-nu" aria-label="Permalink">#</a></h2></article></section>
+<section class="project" data-slug="setup-local-machine" data-lang="nushell" data-name="setup-local-machine scripts/nu/setup-local-machine module Nushell "><div class="chips"><span class="chip lang" style="color:var(--nushell)">Nushell</span><span class="chip">module</span><a class="chip" href="../../scripts/nu/setup-local-machine">scripts/nu/setup-local-machine</a></div><article class="doc"><h3 id="setup-local-machine--setup-local-machine" class="doc-h">Setup local machine<a class="hash" href="#setup-local-machine--setup-local-machine" aria-label="Permalink">#</a></h3></article></section>
+<footer class="page-foot">Generated by <code>monodocs</code> from the <code>README.md</code> of every project in the workspace. Regenerate with <code>just docs-html</code>; the output is deterministic, so it diffs cleanly.</footer>
+</main>
+<script>
+(() => {
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+  /* theme ------------------------------------------------------------- */
+  const root = document.documentElement;
+  const stored = localStorage.getItem('monodocs-theme');
+  if (stored) root.dataset.theme = stored;
+  const themeButton = $('#theme');
+  const paintTheme = () => {
+    themeButton.textContent =
+      root.dataset.theme === 'light' ? 'Dark theme' : 'Light theme';
+  };
+  paintTheme();
+  themeButton.addEventListener('click', () => {
+    root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light';
+    localStorage.setItem('monodocs-theme', root.dataset.theme);
+    paintTheme();
+  });
+
+  /* expand / collapse supplementary docs and API modules ---------------- */
+  const expandButton = $('#expand');
+  const details = $$('details.extra, details.api-mod');
+  const paintExpand = () => {
+    const allOpen = details.length > 0 && details.every((d) => d.open);
+    expandButton.textContent = allOpen
+      ? 'Collapse all docs'
+      : 'Expand all docs';
+    expandButton.dataset.state = allOpen ? 'open' : 'closed';
+  };
+  if (details.length === 0) {
+    expandButton.remove();
+  } else {
+    paintExpand();
+    expandButton.addEventListener('click', () => {
+      const open = expandButton.dataset.state !== 'open';
+      details.forEach((d) => {
+        d.open = open;
+      });
+      paintExpand();
+    });
+    details.forEach((d) => {
+      d.addEventListener('toggle', paintExpand);
+    });
+  }
+
+  /* copy buttons -------------------------------------------------------- */
+  $$('figure.code .copy').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const code = $('code', button.closest('figure.code')).innerText;
+      try {
+        await navigator.clipboard.writeText(code);
+        button.textContent = 'copied';
+      } catch {
+        button.textContent = 'failed';
+      }
+      setTimeout(() => {
+        button.textContent = 'copy';
+      }, 1200);
+    });
+  });
+
+  /* filter -------------------------------------------------------------- */
+  const filter = $('#filter');
+  const empty = $('#empty');
+  const sections = $$('section.project').map((el) => ({
+    el,
+    nav: $(`.nav-item[data-slug="${el.dataset.slug}"]`),
+    // textContent, not innerText: a name inside a collapsed <details> is still searchable.
+    haystack: `${el.dataset.name} ${el.textContent}`.toLowerCase(),
+  }));
+
+  const applyFilter = () => {
+    const query = filter.value.trim().toLowerCase();
+    let shown = 0;
+    sections.forEach(({ el, nav, haystack }) => {
+      const hit = query === '' || haystack.includes(query);
+      el.classList.toggle('hidden', !hit);
+      if (nav) nav.classList.toggle('hidden', !hit);
+      if (hit) shown += 1;
+    });
+    $$('.nav-group').forEach((group) => {
+      const any = $$('.nav-item', group).some(
+        (item) => !item.classList.contains('hidden'),
+      );
+      group.classList.toggle('hidden', !any);
+    });
+    empty.hidden = shown > 0;
+  };
+
+  filter.addEventListener('input', applyFilter);
+  filter.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      filter.value = '';
+      applyFilter();
+      filter.blur();
+    }
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === '/' && document.activeElement !== filter) {
+      event.preventDefault();
+      filter.focus();
+      filter.select();
+    }
+  });
+
+  /* open collapsed docs when a link targets something inside them --------- */
+  const revealHash = () => {
+    const id = decodeURIComponent(location.hash.slice(1));
+    if (!id) return;
+    const target = document.getElementById(id);
+    if (!target) return;
+    let parent = target.closest('details');
+    while (parent) {
+      parent.open = true;
+      parent = parent.parentElement
+        ? parent.parentElement.closest('details')
+        : null;
+    }
+    target.scrollIntoView();
+  };
+  window.addEventListener('hashchange', revealHash);
+  revealHash();
+
+  /* scroll spy ------------------------------------------------------------ */
+  const navLinks = new Map();
+  $$('.nav-sub a, .nav-item > a').forEach((link) => {
+    navLinks.set(link.getAttribute('href').slice(1), link);
+  });
+  const headings = $$('.doc-h').filter((h) => navLinks.has(h.id));
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries
+        .filter((entry) => entry.isIntersecting)
+        .forEach((entry) => {
+          navLinks.forEach((link) => {
+            link.classList.remove('active');
+          });
+          $$('.nav-item').forEach((item) => {
+            item.classList.remove('active');
+          });
+          const link = navLinks.get(entry.target.id);
+          if (!link) return;
+          link.classList.add('active');
+          const item = link.closest('.nav-item');
+          if (item) item.classList.add('active');
+        });
+    },
+    { rootMargin: '0px 0px -75% 0px', threshold: 0 },
+  );
+  headings.forEach((heading) => {
+    observer.observe(heading);
+  });
+})();
+</script>
+</body>
+</html>

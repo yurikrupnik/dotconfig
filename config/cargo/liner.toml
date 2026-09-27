@@ -40,6 +40,8 @@ cargo-expand = "*"
 cargo-modules = "*"
 cargo-readme = "*"
 
+#buildah-rs = "*"
+
 # Code quality & testing
 cargo-tarpaulin = "*"
 cargo-sort = "*"

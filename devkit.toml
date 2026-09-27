@@ -35,26 +35,41 @@ ingress = true              # expose ports 80/443
 # Deps in the same wave (default 0) install in parallel; waves run in
 # ascending order — bump wave when a dep needs another's CRDs/controllers.
 #
+#[[deps]]
+#name = "crossplane"
+#repo = "https://charts.crossplane.io/stable"
+#version = "2.*"
+#namespace = "crossplane-system"
+#values = "manifests/values/crossplane.yaml"
+
 # [[deps]]
-# name = "crossplane"
-# repo = "https://charts.crossplane.io/stable"
-# version = "2.3.4"
-# namespace = "crossplane-system"
-# values = "manifests/values/crossplane.yaml"
+# name = "external-secrets"
+# repo = "https://charts.external-secrets.io"
+# version = "2.*"
+# namespace = "external-secrets"
+# values = "manifests/values/external-secrets.yaml"
+
+
 #
 # [[deps]]
 # name = "cert-manager-crds"
 # manifest = "https://github.com/cert-manager/cert-manager/releases/download/v1.16.2/cert-manager.crds.yaml"
 
-[namespaces]
-dbs = "dbs"
-monitoring = "monitoring"
-external_secrets = "external-secrets"
+# Tekton Pipelines (LTS) — runs this repo's CI in the Kind cluster
+# (manifests/tekton/ci.yaml, `just ci-tekton`). Release images are digest-pinned.
+#[[deps]]
+#name = "tekton-pipelines"
+#manifest = "https://infra.tekton.dev/tekton-releases/pipeline/previous/v1.15.3/release.yaml"
 
-[paths]
-apps_dir = "apps"
-compose_file = "manifests/dockers/compose.yaml"
-default_target = "dev"      # default --target for overlay commands
+#[namespaces]
+#dbs = "dbs"
+#monitoring = "monitoring"
+#external_secrets = "external-secrets"
+
+#[paths]
+#apps_dir = "apps"
+#compose_file = "manifests/dockers/compose.yaml"
+#default_target = "dev"      # default --target for overlay commands
 
 #[paths.overlays]
 ## `{target}` is replaced by the --target flag (dev/staging/prod).
@@ -62,13 +77,13 @@ default_target = "dev"      # default --target for overlay commands
 #gitops = "manifests/k8s/overlays/{target}"
 #observability = "manifests/k8s/overlays/{target}"
 
-[database]
-port = 5433
-user = "myuser"
-password = "mypassword"
-name = "mydatabase"
-migration_cmd = ["cargo", "run", "-p", "migration", "--", "up"]
-wait_timeout = "120s"
+#[database]
+#port = 5433
+#user = "myuser"
+#password = "mypassword"
+#name = "mydatabase"
+#migration_cmd = ["cargo", "run", "-p", "migration", "--", "up"]
+#wait_timeout = "120s"
 
 [secrets]
 config = "manifests/secrets/.vals.yaml"       # vals config file
@@ -102,6 +117,8 @@ ui_port = 9080              # local port for `devkit cluster flux-ui`
 [tilt]
 enabled = true
 
+# WTF is this manager?
+# TODO devkit manager - it fails
 [manager]
 namespace = "devkit-manager" # dashboard namespace
 image = "devkit-manager"     # local image name (side-loaded via kind)

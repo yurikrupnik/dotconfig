@@ -1,12 +1,14 @@
 tap "restatedev/tap"
 brew "restatedev/tap/restate-server"     # Restate — durable execution server
 brew "restatedev/tap/restate"            # restate — Restate CLI
-cask "httpie-desktop"
-tap "kcl-lang/tap"
+cask "httpie-desktop" if OS.mac?
+# No `tap` lines for kcl-lang / KusionStack: `brew tap` verifies every trusted
+# formula in the tap and both ship broken ones (kcl@0.9.rb, URL-less kusion
+# variants), so an explicit tap fails on a fresh machine. The implied tap from
+# the `brew` line is cloned without that verification.
 brew "kcl-lang/tap/kcl"                  # KCL — configuration language for cloud-native
 brew "kcl-lang/tap/kcl-lsp"              # kcl-lsp — KCL language server
-tap "KusionStack/tap"
-brew "KusionStack/tap/kusion"            # Kusion — app delivery engine for k8s/cloud
+brew "KusionStack/tap/kusion" if OS.mac? || Hardware::CPU.intel? # Kusion — app delivery engine (no Linux arm64 build)
 tap "ariga/tap"
 brew "ariga/tap/atlas"                   # Atlas — database schema-as-code & migrations
 tap "siderolabs/tap"
@@ -87,6 +89,7 @@ brew "vals"                              # vals — secrets/config value loader 
 brew "kubescape"                         # kubescape — Kubernetes security & compliance scanner
 brew "bacon"                             # bacon — background Rust code checker
 brew "cargo-binstall"                    # cargo-binstall — prebuilt-binary installer used by cargo-liner
+brew "cargo-hack"                        # cargo-hack — feature-powerset / MSRV checks across crates
 brew "nushell"                           # nushell — structured-data shell
 brew "fzf"                               # fzf — general-purpose fuzzy finder
 brew "bat"                               # bat — `cat` with syntax highlighting & git integration
@@ -136,28 +139,28 @@ brew "shellcheck"                        # ShellCheck — shell linter (bash-lan
 brew "taplo"                             # taplo — TOML language server & formatter
 brew "ruff"                              # ruff — Python linter/formatter + LSP
 
-cask "raycast"                           # Raycast — macOS launcher & productivity app
-cask "visual-studio-code"                # VS Code — editor
+cask "raycast" if OS.mac?                # Raycast — macOS launcher & productivity app
+cask "visual-studio-code" if OS.mac?     # VS Code — editor
 cask "warp"                              # Warp — modern terminal
-cask "discord"                           # Discord — chat
-cask "mongodb-compass"                   # MongoDB Compass — MongoDB GUI
-cask "microsoft-teams"                   # Microsoft Teams — chat / meetings
-cask "zoom"                              # Zoom — video conferencing
+cask "discord" if OS.mac?                # Discord — chat
+cask "mongodb-compass" if OS.mac?        # MongoDB Compass — MongoDB GUI
+cask "microsoft-teams" if OS.mac?        # Microsoft Teams — chat / meetings
+cask "zoom" if OS.mac? || Hardware::CPU.intel? # Zoom — video conferencing (Linux build is x86_64 only)
 cask "obsidian"                          # Obsidian — local-first markdown notes
-cask "pgadmin4"                          # pgAdmin 4 — PostgreSQL GUI
-cask "medis"                             # Medis — Redis GUI
-cask "redis-insight"                     # RedisInsight — official Redis GUI
+cask "pgadmin4" if OS.mac?               # pgAdmin 4 — PostgreSQL GUI
+cask "medis" if OS.mac?                  # Medis — Redis GUI
+cask "redis-insight" if OS.mac?          # RedisInsight — official Redis GUI
 cask "lm-studio"                         # LM Studio — desktop GUI for local LLMs
-cask "zed"                               # Zed — fast collaborative editor
-cask "google-chrome"                     # Google Chrome — browser
-cask "slack"                             # Slack — chat
-cask "chatgpt"                           # ChatGPT — desktop app
-cask "claude"                            # Claude — desktop app
-cask "tg-pro"                            # TG Pro — Mac fan & temperature monitor
-cask "1password"                         # 1Password — password manager
-cask "lens"                              # Lens — Kubernetes desktop IDE
+cask "zed" if OS.mac?                    # Zed — fast collaborative editor
+cask "google-chrome" if OS.mac?          # Google Chrome — browser
+cask "slack" if OS.mac?                  # Slack — chat
+cask "chatgpt" if OS.mac?                # ChatGPT — desktop app
+cask "claude" if OS.mac?                 # Claude — desktop app
+cask "tg-pro" if OS.mac?                 # TG Pro — Mac fan & temperature monitor
+cask "1password" if OS.mac?              # 1Password — password manager
+cask "lens" if OS.mac?                   # Lens — Kubernetes desktop IDE
 cask "coderabbit"                        # CodeRabbit — AI code review
-cask "postman"                           # Postman — API client
+cask "postman" if OS.mac?                # Postman — API client
 # cask "gcloud-cli"
 # cask "docker"
 # cask "jetbrains-toolbox"

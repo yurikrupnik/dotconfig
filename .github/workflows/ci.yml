@@ -12,6 +12,8 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Tool pins (here and install-action `tool:`) are mirrored by the Tekton CI
+# image, manifests/dockers/ci.Dockerfile — bump both together.
 env:
   NU_VERSION: "0.115.1"
   GITLEAKS_VERSION: "8.30.1"
@@ -33,36 +35,23 @@ jobs:
         with:
           version: ${{ env.NU_VERSION }}
 
+      # Step logic lives in scripts/ci.sh, shared with the Tekton pipeline
+      # (manifests/tekton/ci.yaml) so both run the same checks.
       - name: shellcheck
-        run: shellcheck install.sh bootstrap.sh scripts/*.sh
+        run: scripts/ci.sh shellcheck
 
       - name: taplo check
-        run: taplo check "config/**/*.toml" devkit.toml
+        run: scripts/ci.sh taplo
 
       - name: nu-check
-        run: |
-          # config.nu/env.nu `use`/`source` files under ~ at parse time (tool
-          # init scripts, generated.nu); on a real machine setup writes them.
-          # Empty stubs are enough to parse.
-          sed -nE 's|^[[:space:]]*(use\|source)[[:space:]]+~/([^[:space:]]+).*|\2|p' \
-            nushell/.config/nushell/*.nu | sort -u | while IFS= read -r p; do
-            mkdir -p "$(dirname "$HOME/$p")" && touch "$HOME/$p"
-          done
-          # shellcheck disable=SC2016  # $env.NU_FILE is nushell, not bash
-          nucheck() { NU_FILE="$1" nu -n -c 'nu-check --debug $env.NU_FILE' >/dev/null; }
-          rc=0
-          while IFS= read -r f; do
-            if nucheck "$f"; then
-              echo "ok  $f"
-            else
-              echo "::error file=$f::nu-check failed"
-              rc=1
-            fi
-          done < <(find config/scripts -maxdepth 1 -name '*.nu'; find scripts/nu -name '*.nu'; find nushell/.config/nushell -maxdepth 1 -name '*.nu')
-          exit "$rc"
+        run: scripts/ci.sh nu-check
 
   generator:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -75,53 +64,21 @@ jobs:
       - uses: hustcer/setup-nu@9215c80adb545a85c419d5085b76eb6d082f49e7 # v3.27
         with:
           version: ${{ env.NU_VERSION }}
+      - name: install zsh
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends zsh
 
       - name: validate config.toml
-        run: nu scripts/nu/setup-local-machine/shells.nu validate
+        run: scripts/ci.sh validate
 
       - name: generate
-        run: |
-          nu scripts/nu/setup-local-machine/shells.nu generate \
-            --zsh-dir "$RUNNER_TEMP/gen/zsh" \
-            --nu-dir "$RUNNER_TEMP/gen/nu" \
-            --bin-dir "$RUNNER_TEMP/gen/bin"
+        run: scripts/ci.sh generate
 
       - name: check generated output
-        run: |
-          # shellcheck disable=SC2016  # $env.NU_FILE is nushell, not bash
-          nucheck() { NU_FILE="$1" nu -n -c 'nu-check --debug $env.NU_FILE' >/dev/null; }
-          gen="$RUNNER_TEMP/gen"
-          rc=0
-          zsh -n "$gen/zsh/generated.zsh" || { echo "::error::zsh -n generated.zsh failed"; rc=1; }
-          nucheck "$gen/nu/generated.nu" || { echo "::error::nu-check generated.nu failed"; rc=1; }
-          for f in "$gen"/bin/*; do
-            name="$(basename "$f")"
-            case "$(head -n1 "$f")" in
-              *bash*|*/sh)
-                # /bin/bash is macOS stock bash 3.2 — the scripts must parse there.
-                if /bin/bash -n "$f" && shellcheck "$f"; then echo "ok  $name (bash)"
-                else echo "::error::bin/$name failed bash -n/shellcheck"; rc=1; fi
-                ;;
-              *nu)
-                if nucheck "$f"; then echo "ok  $name (nu)"
-                else echo "::error::bin/$name failed nu-check"; rc=1; fi
-                ;;
-              *)
-                echo "::error::bin/$name has an unrecognised shebang: $(head -n1 "$f")"
-                rc=1
-                ;;
-            esac
-          done
-          exit "$rc"
+        run: scripts/ci.sh check-generated
 
       - name: nu-check config.nu with generated.nu sourced
-        run: |
-          sed -nE 's|^[[:space:]]*(use\|source)[[:space:]]+~/([^[:space:]]+).*|\2|p' \
-            nushell/.config/nushell/*.nu | sort -u | while IFS= read -r p; do
-            mkdir -p "$(dirname "$HOME/$p")" && touch "$HOME/$p"
-          done
-          cp "$RUNNER_TEMP/gen/nu/generated.nu" ~/.config/nushell/generated.nu
-          nu -n -c 'nu-check --debug nushell/.config/nushell/config.nu'
+        run: scripts/ci.sh nu-check-config
 
   brewfile:
     runs-on: macos-latest
@@ -147,6 +104,8 @@ jobs:
           curl -fsSLo "$RUNNER_TEMP/$tarball" \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$tarball"
           echo "$GITLEAKS_SHA256  $RUNNER_TEMP/$tarball" | sha256sum -c -
-          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP" gitleaks
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP/bin" gitleaks
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: gitleaks (full history)
-        run: '"$RUNNER_TEMP/gitleaks" git --redact --verbose --exit-code 1 .'
+        run: scripts/ci.sh gitleaks

@@ -17,9 +17,10 @@
 #
 # Usage evidence, per shell
 #   zsh   .zsh_history holds DISTINCT lines only (hist_ignore_all_dups), so the
-#         run log written by the preexec hook in zsh/.config/zsh/.zshrc counts
-#         real runs. zsh uses = max(distinct history lines, logged runs).
-#   nu    history.sqlite3 (every run) + legacy history.txt
+#         run log written by the preexec/precmd hooks in zsh/.config/zsh/.zshrc
+#         counts real runs, with exit status and duration (older lines have
+#         neither). zsh uses = max(distinct history lines, logged runs).
+#   nu    history.sqlite3 (every run, with exit status and duration) + legacy history.txt
 #   bash  ~/.bash_history
 #   Custom code invoked by other custom code is credited transitively:
 #   `u` → update → just regen → shells.nu.
@@ -33,6 +34,15 @@
 #                dead (0 uses) | marginal (<1 use per 10 lines) | pays off
 #   gaps         command prefixes typed by hand ≥5 times with no wrapper:
 #                where writing an alias/function would pay.
+#
+# Cost (`toolbelt cost`, read-only)
+#   Per command over a window (--since): runs, failures, total and average time,
+#   last run, from the zsh run log and nu history.sqlite3. A line counts for
+#   every command it runs (pipeline segments, alias targets), as in the
+#   dashboard. Runs logged without exit status/duration count as runs; their
+#   failures and time are unknown (null), not 0. With calltrace on PATH,
+#   `calltrace stats` adds every process its traced runs spawned, and the
+#   caller → callee edges between them.
 #
 # Governance (`toolbelt govern`, read-only)
 #   shells    history/rc/PATH permissions, tokens in history, committed secrets, sfw
@@ -60,6 +70,8 @@ const RUNNERS = [nu bash sh zsh]
 const JUST_VALUE_FLAGS = [-f --justfile -d --working-directory --set --shell --dotenv-path]
 const GAP_IGNORE = [cd z exit clear echo man which history source export open]
 const EDITOR_BIN = '(language-server|langserver|^pyright|^rust-analyzer$)'
+# invocation source → shell: zsh history / run log, nu sqlite / txt, bash history
+const SHELL_OF = {zh: zsh, zl: zsh, nd: nu, nt: nu, bh: bash}
 
 def repo-dir []: nothing -> string {
     $env.DOTCONFIG_DIR? | default ($env.HOME | path join dotconfig)
@@ -377,16 +389,23 @@ def nu-db-path []: nothing -> string { $env.HOME | path join .config nushell his
 def nu-txt-path []: nothing -> string { $env.HOME | path join .config nushell history.txt }
 def bash-history-path []: nothing -> string { $env.HOME | path join .bash_history }
 
+# zl and nd rows also carry exit and ms (duration); null = not recorded
+# (run-log lines from before the precmd hook, old nu rows), never 0.
 def invocations []: nothing -> list<record> {
     let zh = zsh-history-paths | each {|p| read-zsh-history $p } | flatten
     let zl = if (zsh-log-path | path exists) {
         open --raw (zsh-log-path) | decode utf-8 | lines
-        | parse -r '^(?<ts>\d+)\t(?<line>.*)$'
-        | each {|r| {src: zl, ts: (epoch ($r.ts | into int) s), line: $r.line} }
+        # <start>\t<exit>\t<ms>\t<command>, or legacy <start>\t<command>
+        | parse -r '^(?<ts>\d+)\t(?:(?<exit>-?\d+)\t(?<ms>-?\d+)\t)?(?<line>.*)$'
+        | each {|r| {
+            src: zl, ts: (epoch ($r.ts | into int) s), line: $r.line
+            exit: (if $r.exit == null { null } else { $r.exit | into int })
+            ms: (if $r.ms == null { null } else { $r.ms | into int })
+        } }
     } else { [] }
     let nd = if (nu-db-path | path exists) {
-        open (nu-db-path) | query db "SELECT command_line AS line, start_timestamp AS ts FROM history"
-        | each {|r| {src: nd, ts: (if $r.ts == null { null } else { epoch $r.ts ms }), line: $r.line} }
+        open (nu-db-path) | query db "SELECT command_line AS line, start_timestamp AS ts, exit_status AS exit, duration_ms AS ms FROM history"
+        | each {|r| {src: nd, ts: (if $r.ts == null { null } else { epoch $r.ts ms }), line: $r.line, exit: $r.exit, ms: $r.ms} }
     } else { [] }
     let nt = if (nu-txt-path | path exists) {
         open --raw (nu-txt-path) | lines | where $it != "" | each {|l| {src: nt, ts: null, line: $l} }
@@ -806,7 +825,7 @@ def main [] {
 
     header $"GAPS — typed by hand ≥($GAP_MIN)×, no wrapper"
     print ($d.gaps | first 10 | table -i false)
-    print $"(ansi dark_gray)drill down: toolbelt tools | shells | value | gaps | ui | govern | manage   \(--json for data\)(ansi reset)"
+    print $"(ansi dark_gray)drill down: toolbelt tools | shells | value | gaps | cost | ui | govern | manage   \(--json for data\)(ansi reset)"
 }
 
 # Every inventoried tool with status and per-shell usage.
@@ -844,6 +863,133 @@ def "main gaps" [--limit (-n): int = 25, --json] {
 # Interactive browser over all tools (nu `explore`; `:q` or Esc to leave).
 def "main ui" [] {
     tools-view (load | get tools) | explore
+}
+
+# ── cost ─────────────────────────────────────────────────────────────────────
+# `toolbelt cost`: where interactive time goes. Only sources that log every run
+# with its start time count: the zsh run log and nu's sqlite history.
+
+const COST_SOURCES = [zl nd]
+
+# rows {ts exit ms} → runs; failures and time only over `timed` runs (exit and
+# ms recorded), null when none were — unknown is not 0.
+def cost-of [rows: list<record>]: nothing -> record {
+    let timed = $rows | where {|r| $r.exit != null and $r.ms != null }
+    let n = $timed | length
+    let total = if $n == 0 { null } else { $timed | get ms | math sum }
+    {
+        runs: ($rows | length)
+        timed: $n
+        failures: (if $n == 0 { null } else { $timed | where {|r| $r.exit != 0 } | length })
+        total_ms: $total
+        avg_ms: (if $n == 0 { null } else { $total / $n | math round })
+        last: (if ($rows | is-empty) { null } else { $rows | get ts | sort | last })
+    }
+}
+
+# Keyed like the dashboard: a line counts for every command it runs.
+def cost-rows [runs: list<record>, aliases: record]: nothing -> list<record> {
+    let keyed = $runs | par-each {|r|
+        line-parse $r.line $aliases | get tokens | each {|k| {key: $k, ts: $r.ts, exit: $r.exit, ms: $r.ms} }
+    } | flatten
+    if ($keyed | is-empty) { return [] }
+    $keyed | group-by key | transpose command rows | each {|g| {command: $g.command} | merge (cost-of $g.rows) }
+}
+
+# Compact, so the tables fit a terminal: 445ms · 12.3s · 26m52s · 3h05m.
+def dur [ms: int]: nothing -> string {
+    if $ms < 1000 { return $"($ms)ms" }
+    if $ms < 60_000 { return $"($ms / 1000 | math round -p 1)s" }
+    let s = $ms // 1000
+    if $s < 3600 { return $"($s // 60)m($s mod 60 | fill -a r -c 0 -w 2)s" }
+    $"($s // 3600)h($s mod 3600 // 60 | fill -a r -c 0 -w 2)m"
+}
+
+def cost-view []: list<record> -> list<record> {
+    each {|r| $r
+        | update failures ($r.failures | default "?")
+        | update total_ms (if $r.total_ms == null { "?" } else { dur $r.total_ms })
+        | update avg_ms (if $r.avg_ms == null { "?" } else { dur $r.avg_ms })
+        | update last (fmt-date $r.last)
+        | rename -c {total_ms: total, avg_ms: avg}
+    }
+}
+
+# `calltrace stats --json` over the same window: {stats, note}; stats is null
+# (note says why) when calltrace is absent, fails or prints something else.
+def calltrace-stats [since: duration, top: int]: nothing -> record {
+    if not (has-cmd calltrace) {
+        return {stats: null, note: "calltrace not on PATH — install from toolkit: bun nx run calltrace:install"}
+    }
+    let secs = [($since / 1sec | math floor) 0] | math max
+    let r = ^calltrace stats --json --top $top --since $"($secs)s" | complete
+    if $r.exit_code != 0 {
+        let why = $r.stderr | str trim | lines | get -o 0 | default $"exit ($r.exit_code)"
+        return {stats: null, note: $"calltrace stats failed: ($why)"}
+    }
+    let j = try { $r.stdout | from json } catch { null }
+    if ($j | describe) !~ '^record' { return {stats: null, note: "calltrace stats printed no JSON record"} }
+    {stats: $j, note: ""}
+}
+
+def traced-view [cmds: list<record>]: nothing -> list<record> {
+    $cmds | each {|c|
+        let n = $c.count? | default 0
+        let wall_ms = ($c.wall_us? | default 0) / 1000 | math round
+        {
+            command: ($c.label? | default "?")
+            procs: $n
+            failures: ($c.failures? | default 0)
+            total: (dur $wall_ms)
+            avg: (if $n == 0 { "?" } else { dur ($wall_ms / $n | math round) })
+            cpu: (dur (($c.cpu_us? | default 0) / 1000 | math round))
+            max_rss: (($c.max_rss_kb? | default 0) * 1KiB)
+        }
+    }
+}
+
+# Where interactive time goes, per command: runs, failures, total and average
+# time, last run (zsh run log + nu history); with calltrace installed, also the
+# processes its traced runs spawned and the caller → callee edges between them.
+def "main cost" [
+    --since: duration = 30day   # only runs started within this window
+    --top (-n): int = 25        # rows per table
+    --shell: string = "all"     # zsh|nu|all
+    --json                      # {since, shells, commands, traced} as JSON
+] {
+    let known = $COST_SOURCES | each {|s| $SHELL_OF | get $s }
+    if $shell != "all" and $shell not-in $known {
+        error make {msg: $"unknown shell: ($shell) \(known: ($known | append all | str join ', ')\)"}
+    }
+    let srcs = $COST_SOURCES | where {|s| $shell == "all" or ($SHELL_OF | get $s) == $shell }
+    let cutoff = (date now) - $since
+    let runs = invocations | where {|i| $i.src in $srcs and $i.ts != null and $i.ts >= $cutoff }
+    let aliases = try { open (repo-dir | path join config shell config.toml) | get -o aliases | default {} } catch { {} }
+    let shells = $srcs | each {|s| {shell: ($SHELL_OF | get $s)} | merge (cost-of ($runs | where src == $s)) }
+    let commands = cost-rows $runs $aliases
+        | insert k {|r| $r.total_ms | default (-1) } | sort-by -r k runs | reject k
+        | first $top
+    let traced = calltrace-stats $since $top
+    if $json { return ({since: $cutoff, shells: $shells, commands: $commands, traced: $traced.stats} | to json) }
+
+    print $"(ansi white_bold)toolbelt cost(ansi reset) (ansi dark_gray)· ($shells | get shell | str join ' + ') since (fmt-date $cutoff) · (date now | format date '%Y-%m-%d %H:%M')(ansi reset)"
+    header "SHELLS"
+    print ($shells | cost-view | table -i false)
+    header $"COMMANDS — top ($top) by total time; a line counts for every command it runs"
+    print ($commands | cost-view | table -i false)
+    if ($shells | any {|s| $s.timed < $s.runs }) {
+        print $"(ansi dark_gray)timed = runs with a recorded exit status and duration \(older history has none\); failures/total/avg cover only those, ? = none did(ansi reset)"
+    }
+    header "TRACED (calltrace) — every process its traced runs spawned"
+    if $traced.stats == null {
+        print $"(ansi dark_gray)($traced.note)(ansi reset)"
+    } else {
+        let st = $traced.stats
+        print $"(ansi dark_gray)($st.runs? | default 0) runs · ($st.procs? | default 0) processes(ansi reset)"
+        print (traced-view ($st.commands? | default []) | table -i false)
+        header "CALL EDGES — caller → callee"
+        print ($st.edges? | default [] | first $top | each {|e| {caller: $e.caller?, callee: $e.callee?, count: $e.count?} } | table -i false)
+    }
 }
 
 # ── manage ───────────────────────────────────────────────────────────────────
@@ -1229,9 +1375,8 @@ def govern-shells [repo: string, inv: list<record>]: nothing -> list<record> {
             finding shells $h.shell "history private" med $"(tilde $h.path) is ($m): chmod 600"
         } else { finding shells $h.shell "history private" ok (tilde $h.path) }
     }
-    let shell_of = {zh: zsh, zl: zsh, nd: nu, nt: nu, bh: bash}
     let leak_f = [zsh nu bash] | each {|sh|
-        let lines = $inv | where {|i| ($shell_of | get $i.src) == $sh } | each {|i| $i.line } | uniq
+        let lines = $inv | where {|i| ($SHELL_OF | get $i.src) == $sh } | each {|i| $i.line } | uniq
         let strong = $lines | where {|l| $l =~ $SECRET_VALUE_RE }
         let weak = $lines | where {|l| ($l =~ $SECRET_FLAG_RE) and not ($l =~ $SECRET_VALUE_RE) }
         [

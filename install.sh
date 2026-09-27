@@ -11,6 +11,7 @@ Usage: ./install.sh [-h|--help]
 Fresh-machine bootstrap. Idempotent — safe to re-run.
 
 Steps:
+  0. Linux: install Homebrew's system prerequisites (compiler, curl, file, git, unzip) via apt/dnf/pacman if missing
   1. Install Homebrew (if missing) and load 'brew shellenv' for this session
   2. scripts/brew-preflight.sh --apply — trust Brewfile taps, then 'brew bundle' (fails hard)
   3. Rust: install rustup via sh.rustup.rs (if missing), 'rustup update', add rust-analyzer
@@ -85,6 +86,33 @@ find_brew() {
     done
     return 1
 }
+
+# Step 0 (Linux): Homebrew's system prerequisites. Linuxbrew refuses every
+# install without a system compiler ("No developer tools installed"), and
+# unpacking zip casks needs a system unzip before brew pours its own.
+install_linux_prereqs() {
+    local missing="" cmd
+    for cmd in gcc make curl file git unzip ps; do
+        command -v "$cmd" &> /dev/null || missing="$missing $cmd"
+    done
+    [[ -z "$missing" ]] && return 0
+    log_info "Installing Homebrew prerequisites (missing:$missing)..."
+    if command -v apt-get &> /dev/null; then
+        sudo apt-get update
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential procps curl file git unzip
+    elif command -v dnf &> /dev/null; then
+        sudo dnf group install -y development-tools
+        sudo dnf install -y procps-ng curl file git unzip
+    elif command -v pacman &> /dev/null; then
+        sudo pacman -S --needed --noconfirm base-devel procps-ng curl file git unzip
+    else
+        log_error "No apt-get/dnf/pacman found; install a C compiler, make, curl, file, git, unzip and procps, then re-run ./install.sh"
+        exit 1
+    fi
+}
+if [[ "$OS" == "Linux" ]]; then
+    install_linux_prereqs
+fi
 
 # Step 1: Install Homebrew (macOS/Linux) and load its environment
 if BREW_BIN="$(find_brew)"; then

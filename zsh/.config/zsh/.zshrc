@@ -53,19 +53,38 @@ setopt hist_save_no_dups
 setopt hist_find_no_dups
 
 # Run log for `toolbelt` (config/scripts/toolbelt.nu): the settings above keep
-# one copy of each command line, so history can't say how OFTEN a tool runs.
-# One line per command: <epoch-seconds>\t<command>. Space-prefixed commands are
-# skipped, same as hist_ignore_space. Builtins only — no fork per command.
-zmodload -F zsh/datetime p:EPOCHSECONDS
+# one copy of each command line, so history can't say how OFTEN a tool runs,
+# how long it takes or how often it fails. One line per finished command:
+# <start-epoch-seconds>\t<exit-status>\t<duration-ms>\t<command>. preexec only
+# stashes the command and its start; precmd writes the line once $? is known,
+# so an empty Enter (no preexec) writes nothing. The command goes last with
+# newlines/tabs flattened: a line is always four fields. Lines from before the
+# precmd hook are <epoch-seconds>\t<command>; toolbelt reads both.
+# Space-prefixed commands are skipped, same as hist_ignore_space.
+# Builtins only — no fork per command.
+zmodload -F zsh/datetime p:EPOCHREALTIME
 _toolbelt_log_file="${XDG_STATE_HOME:-$HOME/.local/state}/toolbelt/zsh.tsv"
 [[ -f $_toolbelt_log_file ]] || { mkdir -p "${_toolbelt_log_file:h}" && : >> "$_toolbelt_log_file" && chmod 600 "$_toolbelt_log_file"; }
 _toolbelt_log() {
     [[ $1 == ' '* ]] && return
     local cmd=${1//$'\n'/ }
-    print -r -- "$EPOCHSECONDS"$'\t'"${cmd//$'\t'/ }" >> "$_toolbelt_log_file"
+    _toolbelt_cmd=${cmd//$'\t'/ }
+    _toolbelt_start=$EPOCHREALTIME
+}
+_toolbelt_log_flush() {
+    local st=$?
+    [[ -n $_toolbelt_cmd ]] || return 0
+    local -i ms=$(( (EPOCHREALTIME - _toolbelt_start) * 1000 ))
+    print -r -- "${_toolbelt_start%.*}"$'\t'"$st"$'\t'"$ms"$'\t'"$_toolbelt_cmd" >> "$_toolbelt_log_file"
+    _toolbelt_cmd=
 }
 autoload -Uz add-zsh-hook
 add-zsh-hook preexec _toolbelt_log
+# First in line, so the duration leaves out the other precmd hooks (starship,
+# direnv, mise); rebuilt rather than appended so re-sourcing doesn't double it.
+precmd_functions=(_toolbelt_log_flush ${precmd_functions:#_toolbelt_log_flush})
+# `exit` (and a hangup) never reaches precmd; zshexit still has its status.
+add-zsh-hook zshexit _toolbelt_log_flush
 
 autoload -Uz compinit && compinit
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'

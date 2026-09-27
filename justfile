@@ -16,6 +16,12 @@ devkit:
 dev-up:
     devkit up --istio --core --gitops --observability --flux
 
+# Run CI (lint/generator/secrets from ci.yml) as a Tekton PipelineRun in the
+# devkit Kind cluster, against the working tree. Needs `devkit cluster create`
+# and `devkit cluster deps` (Tekton comes from devkit.toml [[deps]]).
+ci-tekton *args:
+    nu scripts/nu/ci-tekton.nu {{ args }}
+
 # Package-manager network traffic goes through Socket Firewall. Interactive
 # shells get it from the sfw aliases in config.toml; scripts don't expand
 # aliases, so recipes call `sfw` explicitly. install.sh bootstraps sfw first.
@@ -94,3 +100,20 @@ doctor:
 # Preview what `u` would refresh (read-only)
 outdated:
     ./scripts/outdated.sh
+
+# Disposable Ubuntu VM (Lima): ./install.sh on the working tree, then a shell.
+# Flags: --keep (reuse next run) --fresh --shell --template <lima template>
+sandbox-linux *args:
+    nu scripts/nu/sandbox.nu linux {{ args }}
+
+# Disposable macOS VM (Lima, Apple Silicon); same flags as sandbox-linux
+sandbox-mac *args:
+    nu scripts/nu/sandbox.nu mac {{ args }}
+
+# Delete every sandbox VM, including the cached pristine bases
+sandbox-clean:
+    nu scripts/nu/sandbox.nu clean
+
+runs:
+    just doctor # fails
+

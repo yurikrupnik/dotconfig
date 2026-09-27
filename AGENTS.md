@@ -1,7 +1,9 @@
 # Agent notes — dotconfig
 
 Dotfiles managed by a generate→stow pipeline. Read `README.md` for the full
-architecture; the rules below are what agents get wrong.
+architecture; the rules below are what agents get wrong. Skills:
+`.claude/skills/dotconfig` (any repo change, review, checks, macOS/Linux/Windows
+portability) and `.claude/skills/add-shell-command` (one alias/function/script).
 
 ## Cardinal rule
 
@@ -40,6 +42,13 @@ in liner.toml (cargo-liner's check ignores the requirement), or `u` reinstalls t
   `scripts/check-brewfile.sh --tap` and a full-history gitleaks scan. New
   gitleaks false positives go in `.gitleaksignore` by fingerprint, only after
   checking the value is not a real secret.
+- CI step logic lives in `scripts/ci.sh <step>`, called by ci.yml, the Tekton
+  pipeline and `verify.nu` — change a check there, not in YAML. `just ci-tekton`
+  runs lint/generator/secrets as a Tekton PipelineRun in the devkit Kind cluster
+  (`manifests/tekton/ci.yaml`; image `manifests/dockers/ci.Dockerfile`, built
+  from the working tree and side-loaded with `kind load`). Tool versions in
+  ci.yml and the Dockerfile ARGs must be bumped together. Tekton itself is a
+  `devkit.toml` `[[deps]]` row (`devkit cluster deps`).
 - Bash scripts must run on macOS stock bash 3.2 (no `mapfile`, no assoc arrays).
 
 ## Naming constraints
@@ -65,9 +74,15 @@ in liner.toml (cargo-liner's check ignores the requirement), or `u` reinstalls t
 - `toolbelt` — read-only dashboard of every tool dotconfig installs (brew, cask,
   mise, cargo, node, uv, ~/.local/bin, aliases, functions, scripts, just
   recipes): per-shell usage, status, custom-code ROI, alias gaps. Source:
-  `config/scripts/toolbelt.nu`. zsh run counts come from the preexec logger in
-  `zsh/.config/zsh/.zshrc` (`~/.local/state/toolbelt/zsh.tsv`) because
-  `.zsh_history` is deduped; keep that path in sync with `zsh-log-path`.
+  `config/scripts/toolbelt.nu`. zsh run counts come from the preexec/precmd
+  logger in `zsh/.config/zsh/.zshrc` (`~/.local/state/toolbelt/zsh.tsv`)
+  because `.zsh_history` is deduped; keep that path in sync with
+  `zsh-log-path`. Log lines are `<start>\t<exit>\t<ms>\t<command>`; older
+  `<start>\t<command>` lines stay in the file, so parsers must accept both.
+  `toolbelt cost` (read-only) turns that log + nu's `history.sqlite3` into
+  per-command runs, failures, total/avg time and last run (unknown, not 0, for
+  runs logged without exit/duration), plus `calltrace stats --json` when
+  calltrace is on PATH.
   `toolbelt govern` is the read-only security/governance audit (shells, gcp,
   mcp, agents, clusters: management clusters + children via CAPI, Crossplane,
   vcluster, Flux, Argo CD). It reads MCP client paths from `mcp.nu`'s exported
@@ -83,7 +98,31 @@ in liner.toml (cargo-liner's check ignores the requirement), or `u` reinstalls t
   `~/.local/bin/devkit`, `~/.local/lib/devkit` and
   `~/.config/nushell/scripts/devkit`. `devkit.toml` here is only this repo's
   per-repo config for it.
+- `calltrace` — runs a command and records every process it spawns (caller →
+  callee tree, per-command counts, flame graphs); alias `ctrun` =
+  `calltrace run --`. **Not in this repo**: it lives in toolkit
+  (`~/shluviza.com/toolkit/crates/calltrace`) and is installed by
+  `bun nx run calltrace:install` from there into `~/.cargo/bin` (a path
+  install — not doctor cargo drift, not a liner.toml entry).
+- `ghfleet` — every GitHub repo you + your orgs own (via `gh`): metadata,
+  settings, config files, CI workflows + last run, CD (Argo CD / Flux), Kyverno
+  validations, KEDA scalers and unscaled Deployments/StatefulSets. Source:
+  `config/scripts/ghfleet.nu`. Repos are cached as blob-less shallow clones
+  with a yaml-only sparse checkout in `$XDG_CACHE_HOME/ghfleet`; manifests are
+  plain YAML (Helm/kustomize not rendered). `ghfleet add` generates Kyverno
+  `ValidatingPolicy` (CEL, apiVersion `kyverno.api_version`) and KEDA
+  `ScaledObject`s from `DEFAULTS` < `-f` values file < flags (per-target
+  `keda.targets` entries win over all); plan-only unless `--apply` (PR, or
+  `--context` server-side apply). `open-pr` must restore the cached clone to
+  the scanned commit. CEL gotcha: autogen rewrites the literal
+  `object.metadata`/`object.spec` prefix, so never write `object.?metadata`
+  in a pod policy. kyverno's CLI panics on duplicate objects (validate
+  layers them) and glues mutate output onto its JSON report.
 - `just doctor` — health check (incl. dangling links + drift); `just outdated` — preview refresh
+- `just sandbox-linux` / `just sandbox-mac` — disposable Lima VM (Ubuntu / macOS)
+  that runs `./install.sh` on the working tree, then a shell; deleted on exit
+  unless `--keep`. Source: `scripts/nu/sandbox.nu`. Unattended runs need
+  `BREW_TRUST_NEW_TAPS=1`. Windows: manual UTM VM (no Lima guest).
 
 ## Environment notes
 

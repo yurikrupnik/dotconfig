@@ -26,6 +26,8 @@ gs = "git status"
 ga = "git add"
 g = "gcloud"
 gal = "gcloud auth login"
+# calltrace (toolkit crates/calltrace): record every process a command spawns.
+ctrun = "calltrace run --"
 
 # Neovim. Config lives in the `nvim/` stow package; `vt` is the drill runner
 # referenced by nvim/.config/nvim/docs/learning-plan.md.
