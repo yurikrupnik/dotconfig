@@ -91,6 +91,7 @@ brew "bacon"                             # bacon — background Rust code checke
 brew "cargo-binstall"                    # cargo-binstall — prebuilt-binary installer used by cargo-liner
 brew "cargo-hack"                        # cargo-hack — feature-powerset / MSRV checks across crates
 brew "nushell"                           # nushell — structured-data shell
+brew "tuios"                           # tuios - TODO TEST
 brew "fzf"                               # fzf — general-purpose fuzzy finder
 brew "bat"                               # bat — `cat` with syntax highlighting & git integration
 brew "go-task"                           # task — task runner (Taskfile.yml)

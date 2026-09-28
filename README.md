@@ -68,6 +68,11 @@ ghfleet add <o/r> [-f params.yaml] [--keda-max 20 …] [--apply] [--context <ctx
                             #   generate missing Kyverno ValidatingPolicies / KEDA ScaledObjects from params;
                             #   plan only, --apply opens a PR (or applies to <ctx>, server dry-run when planning)
 
+aicommit [-a omp] [-t KEY-1] [-y]  # `git add .` + AI Conventional Commit from the staged diff, the Jira ticket
+                            #   in the branch name (+ its linked Confluence pages) and repo-root README.md/AGENTS.md;
+                            #   shows the message, then [y]es/[e]dit/[n]o. Jira/Confluence need JIRA_URL,
+                            #   JIRA_EMAIL, JIRA_API_TOKEN (CONFLUENCE_URL defaults to $JIRA_URL/wiki)
+
 just regen                  # Validate config, regenerate output/ from config/ + restow
 just stow / unstow          # Re-apply or remove stowed symlinks
 just stow-dry               # Preview stow operations
