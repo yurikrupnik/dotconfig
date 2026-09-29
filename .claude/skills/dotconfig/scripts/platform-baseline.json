@@ -326,7 +326,7 @@
   {
     "rule": "posix-only",
     "file": "justfile",
-    "text": "regen: generate stow",
+    "text": "regen: generate stow bat-cache",
     "count": 1
   },
   {
@@ -482,7 +482,7 @@
   {
     "rule": "posix-only",
     "file": "scripts/nu/setup-local-machine/shells.nu",
-    "text": "const HAND_WRITTEN_PACKAGES = [\"zed\", \"starship\", \"zsh\", \"nushell\", \"pnpm\", \"bun\", \"nvim\", \"mise\"]",
+    "text": "const HAND_WRITTEN_PACKAGES = [\"zed\", \"starship\", \"zsh\", \"nushell\", \"pnpm\", \"bun\", \"nvim\", \"mise\", \"bat\"]",
     "count": 1
   },
   {

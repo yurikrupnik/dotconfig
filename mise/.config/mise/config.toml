@@ -5,3 +5,4 @@
 # config/cargo/liner.toml, config/node/package.json, config/uv/tools.txt.
 # Keep [tools] empty here; `mise prune` removes versions no tracked project needs.
 [tools]
+"aqua:openshift-pipelines/pipelines-as-code" = "0.51.0"

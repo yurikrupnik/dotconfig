@@ -104,6 +104,7 @@ just ci-tekton              # ci.yml's checks as a Tekton PipelineRun in the dev
 | zed editor | `zed/` | `~/.config/zed/` |
 | neovim editor | `nvim/` | `~/.config/nvim/` (see [the learning plan](nvim/.config/nvim/docs/learning-plan.md)) |
 | mise global config (empty on purpose) | `mise/` | `~/.config/mise/config.toml` |
+| bat syntaxes (Nushell; bat ships none) | `bat/` | `~/.config/bat/syntaxes/` (compiled by `just bat-cache`, part of `just regen`) |
 
 ### One owner per tool
 
@@ -115,12 +116,12 @@ The repo is organized into three roles:
 
 1. **`config/`** — source for things that get *generated*: shell aliases, env vars, sequence-of-command functions (`config/shell/config.toml`), and hand-written scripts in any language (`config/scripts/`).
 2. **`output/`** — generator output. **Do not edit by hand. Not committed to git** — rebuilt from `config/` by `shells.nu generate`.
-3. **Top-level hand-written stow packages** — `zsh/`, `nushell/`, `zed/`, `nvim/`, `starship/`, `pnpm/`, `bun/`, `mise/`. These hold config files that are pure source (no generation step). They're committed to git and stowed as-is.
+3. **Top-level hand-written stow packages** — `zsh/`, `nushell/`, `zed/`, `nvim/`, `starship/`, `pnpm/`, `bun/`, `mise/`, `bat/`. These hold config files that are pure source (no generation step). They're committed to git and stowed as-is.
 
 The pipeline:
 
 1. `shells.nu generate` validates `config/shell/config.toml` and `config/scripts/*` (unknown keys, alias/function/script name collisions, shell syntax in aliases, bad env references — every problem is listed, nothing is written), then writes everything to `output/`. `output/bin/` is rebuilt from scratch and any `output/` package it no longer generates is deleted. Aliases named like a nushell builtin (`ls`) are emitted for zsh only.
-2. `shells.nu stow` uses GNU stow with `--no-folding` to symlink the generated packages (`zsh`, `nu`, `bin`) and each entry of `HAND_WRITTEN_PACKAGES` (`zed`, `starship`, `zsh`, `nushell`, `pnpm`, `bun`, `nvim`, `mise`) into `$HOME`, then deletes symlinks under `$HOME` that point into the repo but no longer resolve (a removed function, script, or package file). A missing package dir or any stow conflict fails the run. Hand-written and generated packages share target directories (e.g. `~/.config/zsh/` gets `.zshrc` from `zsh/` and `generated.zsh` from `output/zsh/`).
+2. `shells.nu stow` uses GNU stow with `--no-folding` to symlink the generated packages (`zsh`, `nu`, `bin`) and each entry of `HAND_WRITTEN_PACKAGES` (`zed`, `starship`, `zsh`, `nushell`, `pnpm`, `bun`, `nvim`, `mise`, `bat`) into `$HOME`, then deletes symlinks under `$HOME` that point into the repo but no longer resolve (a removed function, script, or package file). A missing package dir or any stow conflict fails the run. Hand-written and generated packages share target directories (e.g. `~/.config/zsh/` gets `.zshrc` from `zsh/` and `generated.zsh` from `output/zsh/`). `just regen` then runs `just bat-cache` (`bat cache --build`): bat only reads compiled syntaxes, and the cache must match the installed bat version.
 3. `config/brew/Brewfile`, `config/cargo/liner.toml`, `config/node/package.json`, and `config/uv/tools.txt` declare packages installed by `./install.sh` and refreshed by `u`/`update`.
 
 **On a fresh clone**, `output/` does not exist. `./install.sh` runs `generate` before `stow`, so it bootstraps correctly. If you ever run `just stow` directly on a fresh clone, you'll see an error pointing at `just generate`.
@@ -236,6 +237,7 @@ dotconfig/
 │   ├── lazy-lock.json                  # Committed plugin lockfile — reproducible on a new box
 │   └── docs/learning-plan.md           # 4-week plan + keymap reference (<leader>L in nvim)
 ├── mise/.config/mise/config.toml       # Global mise config: empty; runtimes come from project mise.toml
+├── bat/.config/bat/syntaxes/           # Extra bat syntaxes (vendored Nushell .sublime-syntax)
 ├── lefthook.yml                        # Git hooks (lefthook install)
 ├── .github/workflows/ci.yml            # CI checks
 ├── pnpm/.config/pnpm/config.yaml       # pnpm supply-chain hardening (min release age, no exotic subdeps, trust policy)

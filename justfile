@@ -45,8 +45,13 @@ stow:
 unstow:
     {{ shells }} unstow
 
-# Generate + stow in one step
-regen: generate stow
+# Generate + stow in one step, then rebuild bat's syntax cache (stowed
+# bat/ syntaxes; also rebuilt here because `update` upgrades bat before regen)
+regen: generate stow bat-cache
+
+# Compile ~/.config/bat/syntaxes into bat's cache (bat can't read .sublime-syntax directly)
+bat-cache:
+    @if command -v bat >/dev/null; then bat cache --build; else echo "bat not installed; skipping bat cache" >&2; fi
 
 # Show what stow would do without making changes
 stow-dry:

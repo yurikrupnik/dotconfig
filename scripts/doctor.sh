@@ -115,6 +115,7 @@ check_stow "$HOME/.config/starship"
 check_stow "$HOME/.config/zed"
 check_stow "$HOME/.config/nvim"
 check_stow "$HOME/.config/mise"
+check_stow "$HOME/.config/bat/syntaxes"
 check_stow "$HOME/.local/bin/update"
 check_stow "$HOME/.local/bin/csort"
 

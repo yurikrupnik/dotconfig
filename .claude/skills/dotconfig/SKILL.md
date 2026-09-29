@@ -29,7 +29,7 @@ memorized values.
 Pipeline:
 
 1. `shells.nu generate`: `config/shell/config.toml` + `config/scripts/*` → validated → `output/{zsh,nu,bin}` (gitignored).
-2. `shells.nu stow`: `output/{zsh,nu,bin}` + hand-written packages (`zsh/ nushell/ zed/ nvim/ starship/ pnpm/ bun/ mise/`) → symlinks in `$HOME`; dangling repo links swept.
+2. `shells.nu stow`: `output/{zsh,nu,bin}` + hand-written packages (`zsh/ nushell/ zed/ nvim/ starship/ pnpm/ bun/ mise/ bat/`) → symlinks in `$HOME`; dangling repo links swept. `just regen` then runs `bat cache --build` (bat only reads compiled syntaxes).
 3. Package manifests (`config/brew`, `cargo`, `node`, `uv`) → `./install.sh` (fresh machine) / `update` = `u` (daily, ends with `just regen`).
 
 ## 2. Where a change goes
