@@ -1332,6 +1332,18 @@ const AGENT_YOLO_RE = '--dangerously-skip-permissions|--dangerously-bypass-appro
 const PKG_RUNNERS = [npx bunx pnpx uvx]
 const SYSTEM_NS = [kube-system kube-public kube-node-lease]
 const MAX_DEPTH = 3
+# Lists every scanned cluster is asked for; CRD_LISTS only when the cluster serves them.
+const CORE_LISTS = [namespaces pods clusterrolebindings networkpolicies validatingadmissionpolicybindings]
+const CRD_LISTS = [
+    clusters.cluster.x-k8s.io
+    clusterpolicies.kyverno.io policies.kyverno.io
+    ciliumnetworkpolicies.cilium.io
+    kustomizations.kustomize.toolkit.fluxcd.io helmreleases.helm.toolkit.fluxcd.io
+    gitrepositories.source.toolkit.fluxcd.io ocirepositories.source.toolkit.fluxcd.io
+    providers.pkg.crossplane.io functions.pkg.crossplane.io configurations.pkg.crossplane.io
+]
+# Concurrent kubectl lists per cluster: fast, without flooding a small kind API server.
+const KUBE_THREADS = 8
 
 def finding [scope: string, target: string, check: string, sev: string, detail: string = ""]: nothing -> record {
     {scope: $scope, target: $target, check: $check, sev: $sev, detail: $detail}
@@ -1762,8 +1774,11 @@ def --wrapped kube [k: list<string>, ...args: string]: nothing -> any {
     try { $r.stdout | from json } catch { null }
 }
 
-def kube-items [k: list<string>, resource: string]: nothing -> list<any> {
-    kube $k get $resource -A | get -o items | default []
+# A list fetched by cluster-objects; errors on a key it doesn't fetch, so a new
+# check can't silently read nothing.
+def items-of [o: record, key: string]: nothing -> list<any> {
+    if $key not-in $o.items { error make {msg: $"cluster-objects doesn't fetch ($key)"} }
+    $o.items | get $key
 }
 
 def label-of [meta: any, key: string]: nothing -> any {
@@ -1776,37 +1791,63 @@ def floating-ref [ref: string]: nothing -> bool {
     not ($ref | str contains "@sha256:") and (($ref | str ends-with ":latest") or not ($ref | split row "/" | last | str contains ":"))
 }
 
-# name / kind / group / categories of every CRD, without shipping schemas through nu.
-def crd-index [k: list<string>]: nothing -> list<record> {
-    let r = ^kubectl ...$k --request-timeout=20s get crd --no-headers -o "custom-columns=N:.metadata.name,K:.spec.names.kind,C:.spec.names.categories" | complete
-    if $r.exit_code != 0 { return [] }
-    $r.stdout | lines | parse -r '^(?<name>\S+)\s+(?<kind>\S+)\s*(?<cat>.*)$' | each {|c| {
-        name: $c.name
-        kind: $c.kind
-        group: ($c.name | str replace -r '^[^.]+\.' '')
-        cats: ($c.cat | str replace -a -r '[\[\]"]' '' | split row -r '[,\s]+' | where {|x| $x not-in ["" "<none>"] })
+# name / kind / group / categories of every served API resource (CRDs and
+# built-ins), from API discovery: kubectl caches it under ~/.kube/cache and it
+# carries no OpenAPI schemas (listing CRDs ships every schema: seconds on
+# Crossplane clusters). A partial discovery failure (a broken APIService) exits
+# non-zero but still prints the rest.
+def api-index [k: list<string>]: nothing -> list<record> {
+    let r = ^kubectl ...$k --request-timeout=20s api-resources -o json | complete
+    let res = try { $r.stdout | from json | get -o resources | default [] } catch { [] }
+    $res | where {|a| ($a.group? | is-not-empty) and ("list" in ($a.verbs? | default [])) } | each {|a| {
+        name: $"($a.name).($a.group)"
+        kind: $a.kind
+        group: $a.group
+        cats: ($a.categories? | default [])
     } }
 }
 
-# Clusters this one created or deploys into: {name ns via secret server state spec}.
-def discover-children [k: list<string>, crds: list<record>]: nothing -> list<record> {
-    let names = $crds | each {|c| $c.name }
-    let capi = if "clusters.cluster.x-k8s.io" in $names {
-        kube-items $k clusters.cluster.x-k8s.io | each {|c|
-            let ep = $c.spec?.controlPlaneEndpoint?
-            {
-                name: $c.metadata.name, ns: $c.metadata.namespace, via: "capi"
-                secret: {ns: $c.metadata.namespace, name: $"($c.metadata.name)-kubeconfig", key: "value"}
-                server: (if ($ep.host? | is-empty) { null } else { $"https://($ep.host):($ep.port? | default 6443)" })
-                state: ($c.status?.phase? | default "?"), spec: null
-            }
-        }
-    } else { [] }
-    let xp_kinds = $crds | where {|c|
-        ("managed" in $c.cats) and (($c.kind in [KubernetesCluster ManagedCluster CivoKubernetes]) or (($c.kind == "Cluster") and ($c.group =~ '^(container\.gcp|eks\.aws|containerservice\.azure|kubernetes\.)')))
+# Crossplane managed resources that are a whole cluster (GKE, EKS, AKS, …).
+def xp-cluster-kind [c: record]: nothing -> bool {
+    ("managed" in $c.cats) and (($c.kind in [KubernetesCluster ManagedCluster CivoKubernetes]) or (($c.kind == "Cluster") and ($c.group =~ '^(container\.gcp|eks\.aws|containerservice\.azure|kubernetes\.)')))
+}
+
+# Every list discover-children and cluster-checks read, fetched once and in
+# parallel: {items: {key: items}, failed: [key]}. Keys are resource names plus the
+# labeled queries; a CRD_LISTS entry the cluster doesn't serve is [] without a
+# request. A failed list (timeout, forbidden) is [] too, and named in `failed`
+# so its checks are reported blind instead of passing.
+def cluster-objects [k: list<string>, apis: list<record>]: nothing -> record {
+    let names = $apis | each {|a| $a.name }
+    let dynamic = $apis | where {|a| (xp-cluster-kind $a) or ($a.name | str starts-with "providerconfigs.") } | each {|a| $a.name }
+    let lists = $CORE_LISTS ++ ($CRD_LISTS | where {|r| $r in $names }) ++ $dynamic | uniq | each {|r| {key: $r, args: [get $r -A]} }
+    let queries = $lists ++ ([
+        {key: vcluster, args: [get "statefulsets,deployments" -A -l app=vcluster]}
+        {key: argocd-clusters, args: [get secrets -A -l argocd.argoproj.io/secret-type=cluster]}
+        {key: flux-controllers, args: [get deployments -A -l app.kubernetes.io/part-of=flux]}
+        (if "constrainttemplates.templates.gatekeeper.sh" in $names { {key: constraints, args: [get constraints]} })
+    ] | compact)
+    let fetched = $queries | par-each -t $KUBE_THREADS {|q| {k: $q.key, v: (kube $k ...$q.args | get -o items)} }
+    let absent = $CRD_LISTS | append constraints | each {|r| {k: $r, v: []} }
+    {
+        items: ($absent | transpose -r -d | merge ($fetched | each {|f| {k: $f.k, v: ($f.v | default [])} } | transpose -r -d))
+        failed: ($fetched | where v == null | each {|f| $f.k } | sort)
     }
-    let crossplane = $xp_kinds | each {|c|
-        kube-items $k $c.name | each {|m|
+}
+
+# Clusters this one created or deploys into: {name ns via secret server state spec}.
+def discover-children [o: record, apis: list<record>]: nothing -> list<record> {
+    let capi = items-of $o clusters.cluster.x-k8s.io | each {|c|
+        let ep = $c.spec?.controlPlaneEndpoint?
+        {
+            name: $c.metadata.name, ns: $c.metadata.namespace, via: "capi"
+            secret: {ns: $c.metadata.namespace, name: $"($c.metadata.name)-kubeconfig", key: "value"}
+            server: (if ($ep.host? | is-empty) { null } else { $"https://($ep.host):($ep.port? | default 6443)" })
+            state: ($c.status?.phase? | default "?"), spec: null
+        }
+    }
+    let crossplane = $apis | where {|c| xp-cluster-kind $c } | each {|c|
+        items-of $o $c.name | each {|m|
             let ref = $m.spec?.writeConnectionSecretToRef?
             let ep = $m.status?.atProvider?.endpoint?
             let ns = $m.metadata.namespace? | default ""
@@ -1819,9 +1860,9 @@ def discover-children [k: list<string>, crds: list<record>]: nothing -> list<rec
             }
         }
     } | flatten
-    let provider_configs = $crds | where {|c| ($c.name | str starts-with "providerconfigs.") and ($c.group =~ '^(kubernetes|helm)\.(m\.)?crossplane\.io$') }
+    let provider_configs = $apis | where {|c| ($c.name | str starts-with "providerconfigs.") and ($c.group =~ '^(kubernetes|helm)\.(m\.)?crossplane\.io$') }
         | each {|c|
-            kube-items $k $c.name | where {|p| $p.spec?.credentials?.source? == "Secret" } | each {|p|
+            items-of $o $c.name | where {|p| $p.spec?.credentials?.source? == "Secret" } | each {|p|
                 let r = $p.spec.credentials.secretRef
                 {
                     name: $p.metadata.name, ns: ($p.metadata.namespace? | default ""), via: $"crossplane ($c.group | str replace -r '\.crossplane\.io$' '')/ProviderConfig"
@@ -1830,7 +1871,7 @@ def discover-children [k: list<string>, crds: list<record>]: nothing -> list<rec
                 }
             }
         } | flatten
-    let vclusters = kube $k get statefulsets,deployments -A -l app=vcluster | get -o items | default [] | each {|w|
+    let vclusters = items-of $o vcluster | each {|w|
         let n = label-of $w.metadata release | default $w.metadata.name
         {
             name: $n, ns: $w.metadata.namespace, via: "vcluster"
@@ -1838,8 +1879,8 @@ def discover-children [k: list<string>, crds: list<record>]: nothing -> list<rec
             server: null, state: $"($w.status?.readyReplicas? | default 0)/($w.spec?.replicas? | default 1) ready", spec: null
         }
     }
-    let flux = [kustomizations.kustomize.toolkit.fluxcd.io helmreleases.helm.toolkit.fluxcd.io] | where {|r| $r in $names } | each {|r|
-        kube-items $k $r | where {|x| $x.spec?.kubeConfig? != null } | each {|x|
+    let flux = [kustomizations.kustomize.toolkit.fluxcd.io helmreleases.helm.toolkit.fluxcd.io] | each {|r|
+        items-of $o $r | where {|x| $x.spec?.kubeConfig? != null } | each {|x|
             let s = $x.spec.kubeConfig.secretRef?
             let cm = $x.spec.kubeConfig.configMapRef?
             {
@@ -1849,7 +1890,7 @@ def discover-children [k: list<string>, crds: list<record>]: nothing -> list<rec
             }
         }
     } | flatten
-    let argo = kube $k get secrets -A -l argocd.argoproj.io/secret-type=cluster | get -o items | default [] | each {|s|
+    let argo = items-of $o argocd-clusters | each {|s|
         let d = $s.data? | default {}
         {
             name: (if ($d.name? | is-empty) { $s.metadata.name } else { $d.name | decode base64 | decode utf-8 })
@@ -1905,18 +1946,17 @@ def gke-findings [target: string, g: record]: nothing -> list<record> {
     if ($out | is-empty) { [(finding clusters $target $c ok "hardened")] } else { $out }
 }
 
-def cluster-checks [k: list<string>, t: string, crds: list<record>]: nothing -> list<record> {
-    let names = $crds | each {|c| $c.name }
-    let nss = kube-items $k namespaces | where {|n| $n.metadata.name not-in $SYSTEM_NS }
-    let pods = kube-items $k pods | where {|p| $p.metadata.namespace not-in $SYSTEM_NS }
+def cluster-checks [o: record, t: string, apis: list<record>]: nothing -> list<record> {
+    let nss = items-of $o namespaces | where {|n| $n.metadata.name not-in $SYSTEM_NS }
+    let pods = items-of $o pods | where {|p| $p.metadata.namespace not-in $SYSTEM_NS }
 
-    let kyverno = if "clusterpolicies.kyverno.io" in $names { (kube-items $k clusterpolicies.kyverno.io) ++ (kube-items $k policies.kyverno.io) } else { [] }
+    let kyverno = (items-of $o clusterpolicies.kyverno.io) ++ (items-of $o policies.kyverno.io)
     let kyverno_on = $kyverno | where {|p|
         (($p.spec?.validationFailureAction? | default "" | str lowercase) == "enforce") or ($p.spec?.rules? | default [] | any {|r| ($r.validate?.failureAction? | default "" | str lowercase) == "enforce" })
     }
-    let gatekeeper = if "constrainttemplates.templates.gatekeeper.sh" in $names { kube $k get constraints | get -o items | default [] } else { [] }
+    let gatekeeper = items-of $o constraints
     let gatekeeper_on = $gatekeeper | where {|c| ($c.spec?.enforcementAction? | default "deny") == "deny" }
-    let vap = kube-items $k validatingadmissionpolicybindings
+    let vap = items-of $o validatingadmissionpolicybindings
     let vap_on = $vap | where {|b| "Deny" in ($b.spec?.validationActions? | default []) }
     let enforcing = ($kyverno_on | length) + ($gatekeeper_on | length) + ($vap_on | length)
     let audit_only = ($kyverno | length) + ($gatekeeper | length) + ($vap | length) - $enforcing
@@ -1928,7 +1968,7 @@ def cluster-checks [k: list<string>, t: string, crds: list<record>]: nothing -> 
         finding clusters $t "admission policy" high "no Kyverno / Gatekeeper / ValidatingAdmissionPolicy enforcing anything"
     }
 
-    let admins = kube-items $k clusterrolebindings | where {|b| $b.roleRef?.name? == "cluster-admin" }
+    let admins = items-of $o clusterrolebindings | where {|b| $b.roleRef?.name? == "cluster-admin" }
         | each {|b| $b.subjects? | default [] } | flatten
         | where {|s| not (($s.kind == "Group") and ($s.name in [system:masters kubeadm:cluster-admins])) }
     let public = $admins | where {|s| $s.name in [system:anonymous system:unauthenticated system:authenticated system:serviceaccounts] }
@@ -1945,8 +1985,8 @@ def cluster-checks [k: list<string>, t: string, crds: list<record>]: nothing -> 
         finding clusters $t "pod security admission" ok "every namespace enforces baseline/restricted"
     } else { finding clusters $t "pod security admission" med $"($psa_gap | length) namespaces enforce nothing: ($psa_gap | short-list)" }
 
-    let cilium = if "ciliumnetworkpolicies.cilium.io" in $names { kube-items $k ciliumnetworkpolicies.cilium.io } else { [] }
-    let segmented = (kube-items $k networkpolicies) ++ $cilium | each {|p| $p.metadata.namespace? } | compact | uniq
+    let cilium = items-of $o ciliumnetworkpolicies.cilium.io
+    let segmented = (items-of $o networkpolicies) ++ $cilium | each {|p| $p.metadata.namespace? } | compact | uniq
     let open_ns = $pods | each {|p| $p.metadata.namespace } | uniq | where {|n| $n not-in $segmented }
     let np_f = if ($open_ns | is-empty) {
         finding clusters $t "network segmentation" ok "every namespace with pods has a NetworkPolicy"
@@ -1967,12 +2007,12 @@ def cluster-checks [k: list<string>, t: string, crds: list<record>]: nothing -> 
     ] | compact
 
     # In-cluster agents: GitOps and infrastructure controllers act with standing credentials.
-    let flux_ctrl = kube $k get deployments -A -l app.kubernetes.io/part-of=flux | get -o items | default []
+    let flux_ctrl = items-of $o flux-controllers
     let flux_f = if ($flux_ctrl | is-empty) { [] } else {
         let default_sa = $flux_ctrl | any {|d| $d.spec.template.spec.containers | any {|c| $c.args? | default [] | any {|a| $a | str starts-with "--default-service-account" } } }
-        let objs = [kustomizations.kustomize.toolkit.fluxcd.io helmreleases.helm.toolkit.fluxcd.io] | where {|r| $r in $names } | each {|r| kube-items $k $r } | flatten
+        let objs = [kustomizations.kustomize.toolkit.fluxcd.io helmreleases.helm.toolkit.fluxcd.io] | each {|r| items-of $o $r } | flatten
         let unscoped = $objs | where {|x| ($x.spec?.serviceAccountName? | is-empty) and ($x.spec?.kubeConfig? == null) }
-        let sources = [gitrepositories.source.toolkit.fluxcd.io ocirepositories.source.toolkit.fluxcd.io] | where {|r| $r in $names } | each {|r| kube-items $k $r } | flatten
+        let sources = [gitrepositories.source.toolkit.fluxcd.io ocirepositories.source.toolkit.fluxcd.io] | each {|r| items-of $o $r } | flatten
         let unverified = $sources | where {|s| $s.spec?.verify? == null }
         [
             (finding clusters $t "agent inventory" info $"flux: ($flux_ctrl | each {|d| $d.metadata.name } | str join ' ')")
@@ -1980,12 +2020,12 @@ def cluster-checks [k: list<string>, t: string, crds: list<record>]: nothing -> 
             (if ($unverified | is-not-empty) { finding clusters $t "signed sources" low $"($unverified | length) Flux sources pull without signature verification \(spec.verify\)" })
         ] | compact
     }
-    let packages = [providers.pkg.crossplane.io functions.pkg.crossplane.io configurations.pkg.crossplane.io] | where {|r| $r in $names } | each {|r|
-        kube-items $k $r | each {|p| {kind: ($r | split row "." | first), name: $p.metadata.name, ref: ($p.spec?.package? | default "")} }
+    let packages = [providers.pkg.crossplane.io functions.pkg.crossplane.io configurations.pkg.crossplane.io] | each {|r|
+        items-of $o $r | each {|p| {kind: ($r | split row "." | first), name: $p.metadata.name, ref: ($p.spec?.package? | default "")} }
     } | flatten
     let unpinned = $packages | where {|p| floating-ref $p.ref }
-    let pcs = $crds | where {|c| $c.name | str starts-with "providerconfigs." } | each {|c|
-        kube-items $k $c.name | each {|p| {group: $c.group, name: $p.metadata.name, source: ($p.spec?.credentials?.source? | default "none")} }
+    let pcs = $apis | where {|c| $c.name | str starts-with "providerconfigs." } | each {|c|
+        items-of $o $c.name | each {|p| {group: $c.group, name: $p.metadata.name, source: ($p.spec?.credentials?.source? | default "none")} }
     } | flatten
     let static = $pcs | where {|p| ($p.source == "Secret") and not ($p.group =~ '^(kubernetes|helm)\.') }
     let xp_f = if ($packages | is-empty) and ($pcs | is-empty) { [] } else {
@@ -1997,24 +2037,39 @@ def cluster-checks [k: list<string>, t: string, crds: list<record>]: nothing -> 
             } else if ($pcs | is-not-empty) { finding clusters $t "agent credentials" ok "cloud ProviderConfigs use injected identity" })
         ] | compact
     }
-    [$policy_f] ++ $rbac_f ++ [$psa_f $np_f] ++ $pod_f ++ $flux_f ++ $xp_f
+    let cov_f = if ($o.failed | is-empty) { [] } else {
+        [(finding clusters $t "list coverage" med $"couldn't list ($o.failed | short-list) \(timeout or forbidden\): checks reading them are blind")]
+    }
+    [$policy_f] ++ $rbac_f ++ [$psa_f $np_f] ++ $pod_f ++ $flux_f ++ $xp_f ++ $cov_f
+}
+
+# GKE control-plane posture from gcloud, for gke_<project>_<location>_<name> contexts.
+def gke-context-findings [label: string]: nothing -> list<record> {
+    let gke = $label | parse -r '^gke_(?<project>[^_]+)_(?<location>[^_]+)_(?<name>.+)$' | get -o 0
+    if ($gke == null) or not (has-cmd gcloud) { return [] }
+    let d = gcloud-json container clusters describe $gke.name --location $gke.location --project $gke.project
+    if $d == null {
+        [(finding clusters $label "gke control plane" info "gcloud describe failed: no access, or the cluster is gone")]
+    } else { gke-findings $label (gke-from-gcloud $d) }
 }
 
 # Reachability, controllers, children and checks for one cluster.
 def scan-cluster [k: list<string>, label: string, server: any]: nothing -> record {
-    let gke = $label | parse -r '^gke_(?<project>[^_]+)_(?<location>[^_]+)_(?<name>.+)$' | get -o 0
-    let gke_f = if ($gke != null) and (has-cmd gcloud) {
-        let d = gcloud-json container clusters describe $gke.name --location $gke.location --project $gke.project
-        if $d == null {
-            [(finding clusters $label "gke control plane" info "gcloud describe failed: no access, or the cluster is gone")]
-        } else { gke-findings $label (gke-from-gcloud $d) }
-    } else { [] }
-    let version = kube $k version | get -o serverVersion.gitVersion
-    if $version == null {
+    # gcloud and the API server are independent: query them side by side.
+    # Results are wrapped: par-each drops a bare null (an unreachable API server).
+    let parts = [gke api] | par-each --keep-order {|j|
+        if $j == "gke" { return {v: (gke-context-findings $label)} }
+        let version = kube $k version | get -o serverVersion.gitVersion
+        if $version == null { return {v: null} }
+        let apis = api-index $k
+        {v: {version: $version, apis: $apis, o: (cluster-objects $k $apis)}}
+    }
+    let gke_f = $parts.0.v
+    let api = $parts.1.v
+    if $api == null {
         return {label: $label, k: $k, server: $server, version: null, controllers: [], children: [], findings: ([(finding clusters $label "reachable" info "API server unreachable: in-cluster checks skipped")] ++ $gke_f)}
     }
-    let crds = crd-index $k
-    let names = $crds | each {|c| $c.name }
+    let names = $api.apis | each {|c| $c.name }
     let controllers = [
         [crossplane compositions.apiextensions.crossplane.io]
         [capi clusters.cluster.x-k8s.io]
@@ -2024,9 +2079,9 @@ def scan-cluster [k: list<string>, label: string, server: any]: nothing -> recor
         [gatekeeper constrainttemplates.templates.gatekeeper.sh]
     ] | where {|p| $p.1 in $names } | each {|p| $p.0 }
     {
-        label: $label, k: $k, server: $server, version: $version, controllers: $controllers
-        children: (discover-children $k $crds)
-        findings: ((cluster-checks $k $label $crds) ++ $gke_f)
+        label: $label, k: $k, server: $server, version: $api.version, controllers: $controllers
+        children: (discover-children $api.o $api.apis)
+        findings: ((cluster-checks $api.o $label $api.apis) ++ $gke_f)
     }
 }
 
