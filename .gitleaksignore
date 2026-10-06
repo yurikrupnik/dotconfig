@@ -1,7 +1,10 @@
 # gitleaks false positives in pushed history (verified by hand 2026-09-26):
 # external-secrets webhook --for=condition=…, compose flag placeholders, sha256 lock
 # digests, an s3 key-prefix literal, a base64 demo value in a kcl example.
-# .cargo/config.toml SERVICE_*_KEY (4d6200f) is deliberately NOT listed: real-looking keys.
+# .cargo/config.toml SERVICE_PWD_KEY/SERVICE_TOKEN_KEY (4d6200f, commented out): byte-identical
+# to the public localhost-dev keys in rust10x/rust-web-app .cargo/config.toml (verified 2026-10-06).
+4d6200f0455da41eac05fc34c0c4ff46069e2998:.cargo/config.toml:generic-api-key:15
+4d6200f0455da41eac05fc34c0c4ff46069e2998:.cargo/config.toml:generic-api-key:17
 466fb806c9ad1d7563280a260ecdd865de8305dc:scripts/kcl/manager/be/cluster_example.k:generic-api-key:38
 466fb806c9ad1d7563280a260ecdd865de8305dc:scripts/nu/index.nu:generic-api-key:165
 7ada2c933b143f26eb4bb7a924e29573062ff3fc:docker-compose.yml:generic-api-key:105

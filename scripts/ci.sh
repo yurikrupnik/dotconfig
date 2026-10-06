@@ -88,6 +88,9 @@ cmd_check_generated() {
 
 cmd_nu_check_config() {
     stub_nu_imports
+    # config.nu sources generated.nu through a const path, which stub_nu_imports'
+    # literal `source ~/…` match does not see, so its dir may not exist yet.
+    mkdir -p "$HOME/.config/nushell"
     cp "$gen_dir/nu/generated.nu" "$HOME/.config/nushell/generated.nu"
     nu -n -c 'nu-check --debug nushell/.config/nushell/config.nu'
 }
