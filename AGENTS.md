@@ -73,7 +73,8 @@ in liner.toml (cargo-liner's check ignores the requirement), or `u` reinstalls t
   OSV scans, cooldown; `--fast`/`--paranoid`); source: `config/scripts/upkg.nu`
 - `toolbelt` — read-only dashboard of every tool dotconfig installs (brew, cask,
   mise, cargo, node, uv, ~/.local/bin, aliases, functions, scripts, just
-  recipes): per-shell usage, status, custom-code ROI, alias gaps. Source:
+  recipes, nu built-ins/modules/plugins): per-shell usage, status, custom-code
+  ROI, alias gaps. Source:
   `config/scripts/toolbelt.nu`. zsh run counts come from the preexec/precmd
   logger in `zsh/.config/zsh/.zshrc` (`~/.local/state/toolbelt/zsh.tsv`)
   because `.zsh_history` is deduped; keep that path in sync with
@@ -83,6 +84,11 @@ in liner.toml (cargo-liner's check ignores the requirement), or `u` reinstalls t
   per-command runs, failures, total/avg time and last run (unknown, not 0, for
   runs logged without exit/duration), plus `calltrace stats --json` when
   calltrace is on PATH.
+  `toolbelt nu` (read-only) is the nu panel: binaries, config wiring,
+  NU_LIB_DIRS, plugins, history stats, nu commands/modules and every .nu
+  script with runs/failures/time. nu scope (commands, aliases, plugins) comes
+  from one `nu --config … --env-config …` spawn; its `--json` is the
+  toolbelt-dashboard / platform-dashboard contract — keep field names stable.
   `toolbelt govern` is the read-only security/governance audit (shells, gcp,
   mcp, agents, clusters: management clusters + children via CAPI, Crossplane,
   vcluster, Flux, Argo CD). It reads MCP client paths from `mcp.nu`'s exported
@@ -91,7 +97,10 @@ in liner.toml (cargo-liner's check ignores the requirement), or `u` reinstalls t
   with `--json-schema`, or `-a omp`) picks install/uninstall/declare/undeclare
   for rows with `also`/shadowed, missing/unused/rare status or drift; toolbelt
   validates picks against `allowed-actions` and builds the commands/declaration
-  edits itself. Plan-only unless `--apply` (confirms each action).
+  edits itself. Plan-only unless `--apply` (confirms each action). With claude
+  it prints tokens/API-list cost (`usage` in `--json`) and sets
+  `OTEL_RESOURCE_ATTRIBUTES` `caller=toolbelt-manage` (`aicommit`: `caller=aicommit`)
+  so the Claude Code OTel export (`~/.claude/settings.json` `env`) is attributable.
 - `devkit` — kind/compose local-env engine. **Not in this repo**: it lives in
   toolkit (`~/shluviza.com/toolkit/apps/devkit`) and is installed by
   `bun nx run devkit:link` (or `devkit:install`) from there, which owns

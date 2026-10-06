@@ -165,3 +165,11 @@ cask "postman" if OS.mac?                # Postman — API client
 # cask "gcloud-cli"
 # cask "docker"
 # cask "jetbrains-toolbox"
+
+# TO check
+# dnsglobe
+# gitlogue
+# visidata
+# croc
+# Worktrunk
+# https://medium.com/@sandunlakshan213/10-modern-cli-tools-you-should-try-in-2026-18ce4e16c28e

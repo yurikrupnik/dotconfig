@@ -14,6 +14,15 @@
 #   script       config/scripts/*          (installed to ~/.local/bin)
 #   repo-script  scripts/**/*.{nu,sh}, install.sh, bootstrap.sh
 #   just         justfile recipes          (`just <recipe>`)
+#   nu-command   nu built-ins / keywords / plugin commands run in nu history
+#   nu-module    $env.NU_LIB_DIRS modules, init modules config.nu loads
+#                (starship/zoxide/mise/direnv caches), defs in config/env/generated.nu
+#   nu-plugin    registered plugins (`plugin list`)
+#   The nu rows read the user's nu scope from one `nu --config … --env-config …`
+#   spawn. A nu history head resolves as nu does: alias → custom → built-in →
+#   external, with nu's own scope aliases (generated.nu skips config.toml
+#   aliases that would shadow a built-in, so nu `ls` is the built-in, not eza);
+#   a built-in head is the nu-command's and no external bin's.
 #
 # Usage evidence, per shell
 #   zsh   .zsh_history holds DISTINCT lines only (hist_ignore_all_dups), so the
@@ -25,13 +34,21 @@
 #   Custom code invoked by other custom code is credited transitively:
 #   `u` → update → just regen → shells.nu.
 #
+# nu (`toolbelt nu`, read-only)
+#   nu binaries on PATH, config wiring, NU_LIB_DIRS, plugins, history stats;
+#   nu-native commands run in nu history; modules; every .nu script
+#   (config/scripts, scripts/**, any `nu x.nu` / `./x.nu` in history, paths
+#   resolved via the sqlite `cwd`) with runs, failures and time over --since.
+#
 # Value model
 #   third-party  you wrote 0 lines; every use is a task done without code.
 #                missing | unused | rare (<3 uses) | active (<20) | core
 #                gui / editor / lib: not launched from a shell, usage n/a
+#                (nu-command / nu-plugin too: nu's own code, not yours)
 #   custom       cost = lines you maintain (alias = 1, function = commands).
 #                saved = keystrokes saved per use vs typing the expansion.
 #                dead (0 uses) | marginal (<1 use per 10 lines) | pays off
+#                (nu-module too; init: a generated init module, usage n/a)
 #   gaps         command prefixes typed by hand ≥5 times with no wrapper:
 #                where writing an alias/function would pay.
 #
@@ -58,13 +75,19 @@
 #   `also`/shadowed overlap, missing/unused/rare status or drift, and picks
 #   install | uninstall | declare | undeclare. toolbelt validates each pick and
 #   builds the commands and declaration edits (Brewfile, liner.toml, package.json, tools.txt).
+#   With claude it prints the call's tokens and API-list cost (`usage` in --json) and tags
+#   the Claude Code OTel exports caller=toolbelt-manage (dashboard: shluviza apps/ai-usage).
 
 const RARE = 3
 const CORE = 20
 const PAYOFF = 0.1
 const GAP_MIN = 5
 const THIRD_PARTY = [brew cask mise cargo node uv local]
-const SOURCE_ORDER = [brew cask mise cargo node uv local alias function script repo-script just]
+const SOURCE_ORDER = [brew cask mise cargo node uv local alias function script repo-script just nu-command nu-module nu-plugin]
+# Not code you wrote: scored with the third-party tiers. nu-command/nu-plugin
+# own no PATH bins, so they stay out of THIRD_PARTY (owners, shadowing).
+const OFF_THE_SHELF = $THIRD_PARTY ++ [nu-command nu-plugin]
+const NU_SOURCES = [nu-command nu-module nu-plugin]
 const WRAPPERS = [sudo time nohup exec command builtin noglob env caffeinate sfw]
 const RUNNERS = [nu bash sh zsh]
 const JUST_VALUE_FLAGS = [-f --justfile -d --working-directory --set --shell --dotenv-path]
@@ -404,8 +427,8 @@ def invocations []: nothing -> list<record> {
         } }
     } else { [] }
     let nd = if (nu-db-path | path exists) {
-        open (nu-db-path) | query db "SELECT command_line AS line, start_timestamp AS ts, exit_status AS exit, duration_ms AS ms FROM history"
-        | each {|r| {src: nd, ts: (if $r.ts == null { null } else { epoch $r.ts ms }), line: $r.line, exit: $r.exit, ms: $r.ms} }
+        open (nu-db-path) | query db "SELECT command_line AS line, start_timestamp AS ts, exit_status AS exit, duration_ms AS ms, cwd FROM history"
+        | each {|r| {src: nd, ts: (if $r.ts == null { null } else { epoch $r.ts ms }), line: $r.line, exit: $r.exit, ms: $r.ms, cwd: $r.cwd} }
     } else { [] }
     let nt = if (nu-txt-path | path exists) {
         open --raw (nu-txt-path) | lines | where $it != "" | each {|l| {src: nt, ts: null, line: $l} }
@@ -420,16 +443,22 @@ def invocations []: nothing -> list<record> {
 # One pipeline segment → usage tokens + the first plain words as typed.
 # tokens: head (basename if a path), `just <recipe>`, script run via
 #         `nu x.nu`/`bash x.sh`, command behind `sfw`, alias expansion head.
+# native: the plain words again, unless a wrapper ran them (`sudo ls` is
+#         external): what nu would resolve as a command name.
+# script: the .nu/.sh path as typed (`nu x.nu`, `./x.nu`), else null.
 def seg-parse [seg: string, aliases: record]: nothing -> record {
     mut words = $seg | str trim | str trim -l -c "(" | str trim -l -c "{" | split row -r '\s+' | where $it != ""
     mut tokens = []
+    mut wrapped = false
     while ($words | is-not-empty) and (($words.0 =~ '^[A-Za-z_][A-Za-z0-9_]*=') or ($words.0 in $WRAPPERS)) {
         if $words.0 == "sfw" { $tokens = $tokens | append "sfw" }
+        if $words.0 in $WRAPPERS { $wrapped = true }
         $words = $words | skip 1
     }
-    if ($words | is-empty) { return {tokens: $tokens, words: []} }
+    if ($words | is-empty) { return {tokens: $tokens, words: [], native: [], script: null} }
     let head = $words.0 | str trim -l -c "^"
     let args = $words | skip 1
+    mut script = if ($head =~ '\.(nu|sh)$') { $head } else { null }
     $tokens = $tokens | append (if ($head | str contains "/") { $head | path basename } else { $head })
     if $head == "just" {
         mut skip_next = false
@@ -440,8 +469,8 @@ def seg-parse [seg: string, aliases: record]: nothing -> record {
             break
         }
     } else if $head in $RUNNERS {
-        let script = $args | where {|a| not ($a | str starts-with "-") } | get -o 0
-        if ($script != null) and ($script =~ '\.(nu|sh)$') { $tokens = $tokens | append ($script | path basename) }
+        let s = $args | where {|a| not ($a | str starts-with "-") } | get -o 0 | default "" | str trim -c "'" | str trim -c '"'
+        if ($s =~ '\.(nu|sh)$') { $tokens = $tokens | append ($s | path basename); $script = $s }
     } else if $head == "cargo" {
         # `cargo nextest` runs the cargo-nextest binary
         let sub = $args | where {|a| not ($a | str starts-with "-") and not ($a | str starts-with "+") } | get -o 0
@@ -452,13 +481,15 @@ def seg-parse [seg: string, aliases: record]: nothing -> record {
         $tokens = $tokens | append (seg-parse $expanded {} | get tokens)
     }
     let plain = $words | take while {|w| $w =~ '^[A-Za-z][A-Za-z0-9._:@-]*$' } | first 3
-    {tokens: $tokens, words: $plain}
+    {tokens: $tokens, words: $plain, native: (if $wrapped { [] } else { $plain }), script: $script}
 }
 
 def line-parse [line: string, aliases: record]: nothing -> record {
     let segs = $line | split row -r '\|\||&&|;|\||\$\(|`' | each {|s| seg-parse $s $aliases }
     {
         tokens: ($segs | get tokens | flatten | uniq)
+        heads: ($segs | get native | where {|w| $w | is-not-empty })
+        scripts: ($segs | get script | compact)
         prefixes: ($segs | get words | where {|w| ($w | length) >= 2 and ($w.0 not-in $GAP_IGNORE) }
             | each {|w| [($w | first 2 | str join " ")] ++ (if ($w | length) == 3 { [($w | str join " ")] } else { [] }) }
             | flatten | uniq)
@@ -502,7 +533,8 @@ def sum-stats [stats: list<record>]: nothing -> record {
 # ── scoring ──────────────────────────────────────────────────────────────────
 
 def status-of [it: record]: nothing -> string {
-    if $it.source in $THIRD_PARTY {
+    if $it.source == "nu-module" and $it.kind == "init" { return "init" }
+    if $it.source in $OFF_THE_SHELF {
         if not $it.installed { return "missing" }
         if $it.shadowed { return "shadowed" }
         if $it.uses == 0 and $it.kind != "shell" { return $it.kind }
@@ -614,8 +646,8 @@ def config-refs [repo: string]: nothing -> record {
 
 def load []: nothing -> record {
     let repo = repo-dir
-    let jobs = [inv hist] | par-each --keep-order {|j|
-        if $j == "inv" { inventory $repo } else { invocations }
+    let jobs = [inv hist nu] | par-each --keep-order {|j|
+        match $j { "inv" => (inventory $repo), "hist" => (invocations), _ => (nu-scope) }
     }
     let refs = config-refs $repo
     let items = $jobs.0 | each {|it|
@@ -625,9 +657,12 @@ def load []: nothing -> record {
         $it
     }
     let inv = $jobs.1
+    let scope = $jobs.2
+    let native = nu-native $scope
     let aliases = $items | where source == alias | select name desc | transpose -r -d
-    let parsed = $inv | par-each {|i| $i | merge (line-parse $i.line $aliases) }
+    let parsed = parse-history $inv $aliases $scope $native
     let counts = aggregate ($parsed | each {|p| $p.tokens | each {|t| {src: $p.src, ts: $p.ts, key: $t} } } | flatten)
+    let items = $items ++ (nu-items $repo $scope $native $counts)
     let prefix_rows = $parsed | each {|p| $p.prefixes | each {|k| {src: $p.src, ts: $p.ts, key: $k} } } | flatten
 
     # A bin shipped by several managers is credited to the one that wins on PATH
@@ -651,7 +686,9 @@ def load []: nothing -> record {
         let shadowed_by = $others | where {|o| $o.bin not-in $mine } | each {|o| $o.source } | uniq
         let also = $others | where {|o| $o.bin in $mine } | each {|o| $o.source } | uniq
         let lost = if ($shadowed_by | is-empty) { [] } else if ($mine | is-empty) { [$"shadowed by ($shadowed_by | str join ',')"] } else { [$"partly shadowed by ($shadowed_by | str join ',')"] }
-        let s = sum-stats ($mine | each {|b| $counts | get -o $b } | compact)
+        let s = if $it.source in $NU_SOURCES { nu-stats $mine $counts } else {
+            sum-stats ($mine | each {|b| $counts | get -o $b } | compact)
+        }
         let u = shell-uses $s
         let overlap = (if ($also | is-empty) { [] } else { [$"also ($also | str join ',')"] }) ++ $lost
         $it | merge $u | insert direct ($u.zsh + $u.nu + $u.bash) | insert last $s.last
@@ -695,7 +732,7 @@ def tools-view [tools: list<record>]: nothing -> list<record> {
 }
 
 def value-rows [tools: list<record>]: nothing -> list<record> {
-    $tools | where source not-in $THIRD_PARTY | each {|t| {
+    $tools | where source not-in $OFF_THE_SHELF | each {|t| {
         source: $t.source name: $t.name status: $t.status uses: $t.uses
         direct: $t.direct via: $t.via code: $t.code
         saved_per_use: $t.saved
@@ -716,7 +753,8 @@ def shells-rows [data: record]: nothing -> list<record> {
     | where {|s| has-cmd $s.shell }
     | each {|s|
         let col = $s.shell
-        let used = $data.tools | where {|t| ($t | get $col) > 0 }
+        # nu's own commands and modules aren't tools on PATH: the card stays about those.
+        let used = $data.tools | where {|t| $t.source not-in $NU_SOURCES and ($t | get $col) > 0 }
         let version = if $col == "nu" { ^nu --version | str trim } else {
             ^$col --version | lines | first | parse -r '(?<v>\d+\.\d+(\.\d+)?)' | get -o 0.v | default "?"
         }
@@ -782,9 +820,9 @@ def main [] {
     header "SOURCES"
     print (sources-rows $t | table -i false)
 
-    let third = $t | where {|r| $r.source in $THIRD_PARTY and $r.installed }
+    let third = $t | where {|r| $r.source in $OFF_THE_SHELF and $r.installed }
     let shell3 = $third | where kind == shell
-    let custom = $t | where source not-in $THIRD_PARTY
+    let custom = $t | where source not-in $OFF_THE_SHELF
     let saved = $custom | where saved != null | each {|c| $c.saved * $c.uses } | append 0 | math sum
     let loc = $custom | get code | append 0 | math sum
     header "VALUE — off-the-shelf vs code you wrote"
@@ -825,13 +863,13 @@ def main [] {
 
     header $"GAPS — typed by hand ≥($GAP_MIN)×, no wrapper"
     print ($d.gaps | first 10 | table -i false)
-    print $"(ansi dark_gray)drill down: toolbelt tools | shells | value | gaps | cost | ui | govern | manage   \(--json for data\)(ansi reset)"
+    print $"(ansi dark_gray)drill down: toolbelt tools | shells | nu | value | gaps | cost | ui | govern | manage   \(--json for data\)(ansi reset)"
 }
 
 # Every inventoried tool with status and per-shell usage.
 def "main tools" [
-    --source (-s): string   # brew|cask|mise|cargo|node|uv|local|alias|function|script|repo-script|just
-    --status: string        # core|active|rare|unused|missing|gui|editor|lib|pays off|marginal|dead
+    --source (-s): string   # brew|cask|mise|cargo|node|uv|local|alias|function|script|repo-script|just|nu-command|nu-module|nu-plugin
+    --status: string        # core|active|rare|unused|missing|gui|editor|lib|init|pays off|marginal|dead
     --shell: string         # only tools used in this shell: zsh|nu|bash
     --json                  # machine-readable output
 ] {
@@ -992,6 +1030,466 @@ def "main cost" [
     }
 }
 
+# ── nu ───────────────────────────────────────────────────────────────────────
+# `toolbelt nu` and the nu-* inventory rows. What nu resolves (commands,
+# aliases, plugins, NU_LIB_DIRS, history config) comes from one spawn of the
+# user's nu with its config (nu-scope); modules, scripts and history are files.
+
+const NU_CONFIG_FILES = [config.nu env.nu login.nu generated.nu]
+const NU_SCOPE = r#'{
+    commands: (scope commands | where type in [built-in keyword plugin custom] | select name type category description)
+    aliases: (scope aliases | select name expansion)
+    modules: (scope modules | select name file)
+    plugins: (plugin list | each {|p| {
+        name: $p.name
+        version: ($p.version? | default "")
+        status: ($p.status? | default "")
+        filename: ($p.filename? | default "")
+        commands: ($p.commands? | default [] | each {|c| if ($c | describe) =~ '^record' { $c.name } else { $c } })
+    } })
+    lib_dirs: ($env.NU_LIB_DIRS? | default [] | append $NU_LIB_DIRS | uniq)
+    plugin_path: $nu.plugin-path
+    history: ($env.config.history? | default {})
+} | to json -r'#
+
+def nu-config-dir []: nothing -> string { $env.HOME | path join .config nushell }
+
+# The user's nu as an interactive shell sees it: the nu on PATH with
+# config.nu/env.nu, run from the temp dir so no project hook fires. {} when it
+# fails: nu heads then stay unresolved (external), never guessed.
+def nu-scope []: nothing -> record {
+    if not (has-cmd nu) { return {} }
+    let dir = nu-config-dir
+    let flags = [[--config config.nu] [--env-config env.nu]]
+        | where {|f| $dir | path join $f.1 | path exists }
+        | each {|f| [$f.0 ($dir | path join $f.1)] } | flatten
+    let r = do { cd $nu.temp-dir; ^nu ...$flags -c $NU_SCOPE | complete }
+    if $r.exit_code != 0 { return {} }
+    try { $r.stdout | from json } catch { {} }
+}
+
+# command name → its scope row (type, category, description).
+def nu-native [scope: record]: nothing -> record {
+    let cmds = $scope.commands? | default []
+    if ($cmds | is-empty) { return {} }
+    $cmds | each {|c| {k: $c.name, v: $c} } | transpose -r -d
+}
+
+# Commands nu runs for one line's heads: the longest scope match of the first
+# 3/2/1 plain words (`str replace`, `sys cpu`). Alias heads are the caller's.
+def nu-heads [heads: list, native: record, aliases: list<string>]: nothing -> list<string> {
+    $heads | where {|w| $w.0 not-in $aliases } | each {|w|
+        [3 2 1] | each {|n| $w | first $n | str join " " } | where {|c| $c in $native } | get -o 0
+    } | compact | uniq
+}
+
+# nu history rows (nd, nt): a native head (custom or built-in, which win over
+# PATH) is keyed `nu:<command>` and no longer credited to an external bin.
+def nu-retoken [native: record, aliases: list<string>]: record -> record {
+    let p = $in
+    if $p.src not-in [nd nt] { return $p }
+    let cmds = nu-heads $p.heads $native $aliases
+    if ($cmds | is-empty) { return $p }
+    let firsts = $cmds | each {|c| $c | split row " " | first }
+    $p | update tokens ($p.tokens | where {|t| $t not-in $firsts } | append ($cmds | each {|c| $"nu:($c)" }))
+}
+
+# History rows → line-parse + nu resolution. nu rows (nd, nt) expand nu's scope
+# aliases, zsh/bash rows config.toml's; if the scope spawn failed, nu rows fall
+# back to config.toml's.
+def parse-history [inv: list<record>, aliases: record, scope: record, native: record]: nothing -> list<record> {
+    let nu_aliases = if ($scope | is-empty) { $aliases } else {
+        let a = $scope.aliases? | default []
+        if ($a | is-empty) { {} } else { $a | select name expansion | transpose -r -d }
+    }
+    let nu_names = $nu_aliases | columns
+    $inv | par-each {|i|
+        if $i.src in [nd nt] {
+            $i | merge (line-parse $i.line $nu_aliases) | nu-retoken $native $nu_names
+        } else { $i | merge (line-parse $i.line $aliases) }
+    }
+}
+
+# dotconfig (under the repo), generated (dotconfig output/, ~/.cache init
+# scripts) or external (installed by something else, e.g. ~/.local/lib/devkit).
+def nu-owner [p: string, repo: string]: nothing -> string {
+    let real = $p | path expand
+    let repo = $repo | path expand
+    let cache = $env.XDG_CACHE_HOME? | default ($env.HOME | path join .cache) | path expand
+    if ($real | str starts-with ($repo | path join output)) or ($real | str starts-with $cache) { return "generated" }
+    if ($real | str starts-with $repo) { "dotconfig" } else { "external" }
+}
+
+# What each module adds, as nu names it (`devkit devkit up`, `init __zoxide_z`):
+# one `nu -n` spawn loads every module in its own block and diffs scope
+# commands/aliases against the bare scope. A module that breaks the batch is
+# retried alone; one that fails alone adds [] (path → names).
+def nu-module-commands [loads: list<record>]: nothing -> record {
+    if ($loads | is-empty) or not (has-cmd nu) { return {} }
+    let run = {|ls|
+        let entries = $ls | each {|l|
+            let p = $l.path | to nuon
+            $p + ': (do { ' + $l.verb + ' ' + $p + '; (scope commands | get name) ++ (scope aliases | get name) | where {|n| $n not-in $base } })'
+        }
+        let src = 'let base = (scope commands | get name) ++ (scope aliases | get name); {' + ($entries | str join ', ') + '} | to json -r'
+        let r = do { cd $nu.temp-dir; ^nu -n -c $src | complete }
+        if $r.exit_code == 0 { try { $r.stdout | from json } catch { null } } else { null }
+    }
+    let all = do $run $loads
+    if $all != null { return $all }
+    $loads | par-each {|l| do $run [$l] | default {($l.path): []} } | reduce -f {} {|r, acc| $acc | merge $r }
+}
+
+# Every nu module: NU_LIB_DIRS entries (a dir with mod.nu, or x.nu), the init
+# scripts config.nu/env.nu `use`/`source` by path (starship, zoxide, mise, direnv
+# caches: kind init) and the defs config/env/login/generated.nu add to the scope
+# (one row per def). A load only counts (loaded_by) when the module reached the
+# user's scope: a `use` inside an `if` block is scoped to that block, so it is
+# listed under ineffective_loads. bins = exports: runs are nu heads resolved to them.
+def nu-modules [repo: string, scope: record]: nothing -> list<record> {
+    let dir = nu-config-dir
+    let cfgs = $NU_CONFIG_FILES | each {|f| {name: $f, path: ($dir | path join $f)} } | where {|c| $c.path | path exists }
+        | insert text {|c| open --raw $c.path | lines | where {|l| not ($l | str trim | str starts-with "#") } | str join "\n" }
+    let loaders = {|name| $cfgs | where {|c| $c.text =~ ('(?m)^\s*(?:export\s+)?(?:overlay\s+)?(?:use|source)\s+\S*\b' + $name + '\b') } | get name }
+    let lib = $scope.lib_dirs? | default [] | where {|d| $d | path exists } | each {|d|
+        ls $d | get name | where {|p| ($p | str ends-with ".nu") or ($p | path join mod.nu | path exists) } | each {|p|
+            let is_dir = $p | path join mod.nu | path exists
+            let name = $p | path basename | str replace -r '\.nu$' ''
+            let entry = (if $is_dir { $p | path join mod.nu } else { $p }) | path expand
+            let files = if $is_dir { glob $"($p | path expand)/**/*.nu" } else { [$entry] }
+            {
+                name: $name path: $p origin: "lib-dir" managed: (nu-owner $p $repo) verb: "use" entry: $entry
+                loc: ($files | each {|f| loc $f } | append 0 | math sum) by: (do $loaders $name) kind: "shell"
+            }
+        }
+    } | flatten
+    let init = $cfgs | where name in [config.nu env.nu] | each {|c|
+        $c.text | parse -r '(?m)^\s*(?<verb>use|source)\s+(?<p>[~/]\S*\.nu)\b'
+        | each {|m| {by: $c.name, verb: $m.verb, path: ($m.p | path expand)} }
+    } | flatten | where {|r| $r.path | path exists } | group-by path | transpose path rs | each {|g|
+        let stem = $g.path | path basename | str replace -r '\.nu$' ''
+        {
+            name: (if $stem in [init mod] { $g.path | path dirname | path basename } else { $stem })
+            path: $g.path origin: "init" managed: (nu-owner $g.path $repo) verb: $g.rs.0.verb entry: $g.path
+            loc: (loc $g.path) by: ($g.rs.by | uniq) kind: "init"
+        }
+    }
+    let added = nu-module-commands ($lib ++ $init | select path verb)
+    let in_scope = ($scope.commands? | default [] | get name) ++ ($scope.aliases? | default [] | get name)
+    let scope_files = $scope.modules? | default [] | get file | compact | each {|f| $f | path expand }
+    let mods = $lib ++ $init | each {|m|
+        let exports = $added | get -o $m.path | default []
+        let live = ($exports | any {|e| $e in $in_scope }) or ($m.entry in $scope_files)
+        {
+            name: $m.name path: $m.path origin: $m.origin managed: $m.managed exports: $exports loc: $m.loc
+            loaded_by: (if $live { $m.by } else { [] }) ineffective_loads: (if $live { [] } else { $m.by })
+            kind: $m.kind bins: $exports
+        }
+    }
+    let customs = $scope.commands? | default [] | where type == custom | get name
+    let defs = $cfgs | each {|c|
+        let lines = open --raw $c.path | lines
+        let by = if $c.name in [config.nu env.nu login.nu] { [$c.name] } else { do $loaders ($c.name | str replace -r '\.nu$' '') }
+        $lines | enumerate | each {|l|
+            let m = $l.item | parse -r r#'^(?<ind>\s*)(?:export\s+)?def\s+(?:--?[\w-]+\s+)*(?:"(?<q>[^"]+)"|'(?<s>[^']+)'|(?<n>[^\s\[]+))'#
+            if ($m | is-empty) { null } else { {i: $l.index, ind: $m.0.ind, name: ([$m.0.q $m.0.s $m.0.n] | compact --empty | first)} }
+        } | compact | where name in $customs | each {|d|
+            # body: the def line up to its closing `}` at the def's indent
+            let body = if ($lines | get $d.i | str trim | str ends-with "}") { [($lines | get $d.i)] } else {
+                $lines | skip $d.i | take until {|x| $x == $"($d.ind)}" } | append "}"
+            }
+            {
+                name: $d.name path: $c.path origin: "config" managed: (nu-owner $c.path $repo) exports: [$d.name]
+                loc: ($body | where {|x| let t = $x | str trim; $t != "" and not ($t | str starts-with "#") } | length)
+                loaded_by: $by ineffective_loads: [] kind: "shell" bins: [$d.name]
+            }
+        }
+    } | flatten
+    $mods ++ $defs
+}
+
+# Runs of nu-native names: nu history heads nu resolved to them (`nu:<name>`).
+def nu-stats [names: list<string>, counts: record]: nothing -> record {
+    sum-stats ($names | each {|b| $counts | get -o $"nu:($b)" } | compact)
+}
+
+# nu-command rows exist only for commands run (counts' `nu:<command>` keys,
+# from nu-retoken): never nu's ~500 idle built-ins.
+def nu-items [repo: string, scope: record, native: record, counts: record]: nothing -> list<record> {
+    let plugins = $scope.plugins? | default []
+    let cmds = $counts | columns | where {|k| $k starts-with "nu:" }
+        | each {|k| $native | get -o ($k | str substring 3..) } | compact | where type != custom
+        | each {|c| mk {
+            source: nu-command name: $c.name bins: [$c.name] desc: ($c.description? | default "")
+            managed: (if $c.type == plugin { $plugins | where {|p| $c.name in $p.commands } | get -o 0.name | default plugin } else { "nu" })
+        } }
+    let mods = nu-modules $repo $scope | each {|m| mk {
+        source: nu-module name: $m.name bins: $m.bins managed: $m.managed kind: $m.kind
+        desc: (tilde $m.path) code: (if $m.managed == "generated" { 0 } else { $m.loc })
+    } }
+    let plugs = $plugins | each {|p| mk {
+        source: nu-plugin name: $p.name bins: $p.commands installed: ($p.filename | path exists)
+        managed: "registered" desc: $"($p.version) (tilde $p.filename)"
+    } }
+    $cmds ++ $mods ++ $plugs | insert id {|it| $"($it.source):($it.name)" }
+}
+
+# The manager a nu binary comes from, by the root it (or its target) lives under
+# (brew: HOMEBREW_PREFIX, which `brew shellenv` sets on macOS and Linux).
+def nu-bin-source [p: string]: nothing -> any {
+    let real = $p | path expand
+    [
+        [mise ($env.MISE_DATA_DIR? | default ($env.HOME | path join .local share mise))]
+        [brew ($env.HOMEBREW_PREFIX? | default "")]
+        [cargo ($env.CARGO_HOME? | default ($env.HOME | path join .cargo))]
+        [node ($env.BUN_INSTALL? | default ($env.HOME | path join .bun))]
+        [uv (uv-tools-dir)]
+        [local ($env.HOME | path join .local bin)]
+    ] | where {|r| $r.1 != "" and (($p | str starts-with $r.1) or ($real | str starts-with $r.1)) } | get -o 0.0
+}
+
+def in-window [ts: any, cutoff: any]: nothing -> bool {
+    $ts != null and ($cutoff == null or $ts >= $cutoff)
+}
+
+# cost-of over a row set's timed sources (zsh run log, nu sqlite) in the window.
+def window-cost [rows: list<record>, cutoff: any]: nothing -> record {
+    cost-of ($rows | where {|r| $r.src in $COST_SOURCES and (in-window $r.ts $cutoff) } | each {|r| {ts: $r.ts, exit: $r.exit?, ms: $r.ms?} })
+}
+
+def nu-history-stats [scope: record]: nothing -> record {
+    let db = nu-db-path
+    let txt = nu-txt-path
+    let h = $scope.history? | default {}
+    let size = {|p| if ($p | path exists) { ls $p | get 0.size | into int } else { 0 } }
+    let s = if ($db | path exists) {
+        open $db | query db "SELECT COUNT(*) AS rows, MIN(start_timestamp) AS first, MAX(start_timestamp) AS last, SUM(exit_status IS NOT NULL AND duration_ms IS NOT NULL) AS timed, SUM(exit_status IS NOT NULL AND duration_ms IS NOT NULL AND exit_status != 0) AS failures FROM history" | first
+    } else { {rows: 0, first: null, last: null, timed: null, failures: null} }
+    {
+        format: ($h.file_format? | default null)
+        max_size: ($h.max_size? | default null)
+        sqlite: {
+            path: $db exists: ($db | path exists) rows: $s.rows bytes: (do $size $db) wal_bytes: (do $size $"($db)-wal")
+            first: (if $s.first == null { null } else { epoch $s.first ms })
+            last: (if $s.last == null { null } else { epoch $s.last ms })
+            timed: ($s.timed | default 0) failures: ($s.failures | default 0)
+        }
+        txt: {
+            path: $txt exists: ($txt | path exists)
+            lines: (if ($txt | path exists) { open --raw $txt | lines | where $it != "" | length } else { 0 })
+        }
+    }
+}
+
+def nu-env [repo: string, scope: record, modules: list<record>]: nothing -> record {
+    let dir = nu-config-dir
+    let real_repo = $repo | path expand
+    let bins = which -a nu | where type == external | get path | uniq | enumerate | each {|b|
+        let r = ^$b.item --version | complete
+        {path: $b.item, version: (if $r.exit_code == 0 { $r.stdout | str trim } else { null }), source: (nu-bin-source $b.item), active: ($b.index == 0)}
+    }
+    let plugin_path = $scope.plugin_path? | default ($dir | path join plugin.msgpackz)
+    let config = $NU_CONFIG_FILES | each {|f| {name: $f, path: ($dir | path join $f)} }
+        | append {name: "plugin.msgpackz", path: $plugin_path}
+        | each {|c|
+            let link = try { (ls -l $c.path | get 0.type) == symlink } catch { false }
+            let target = if $link and ($c.path | path exists) { $c.path | path expand } else { null }
+            {
+                name: $c.name path: $c.path target: $target exists: ($c.path | path exists)
+                managed: ($target | default $c.path | path expand | str starts-with $real_repo)
+            }
+        }
+    let cmds = $scope.commands? | default []
+    {
+        version: ($bins | where active | get -o 0.version | default (version).version)
+        binaries: $bins
+        config: $config
+        lib_dirs: ($scope.lib_dirs? | default [] | each {|d| {
+            path: $d exists: ($d | path exists)
+            modules: ($modules | where {|m| $m.origin == "lib-dir" and ($m.path | path dirname) == $d } | get name)
+        } })
+        plugin_path: $plugin_path
+        plugins: ($scope.plugins? | default [])
+        history: (nu-history-stats $scope)
+        counts: (if ($scope | is-empty) { null } else { {
+            "built-in": ($cmds | where type == built-in | length)
+            keyword: ($cmds | where type == keyword | length)
+            plugin: ($cmds | where type == plugin | length)
+            custom: ($cmds | where type == custom | length)
+            alias: ($scope.aliases? | default [] | length)
+        } })
+    }
+}
+
+# nu-native heads and nu aliases in nu history, as nu resolves them (scope
+# aliases only: in nu, `ls` is the built-in).
+def nu-commands [parsed: list<record>, native: record, aliases: list<string>, cutoff: any]: nothing -> list<record> {
+    let rows = $parsed | where src in [nd nt] | each {|p|
+        let al = $p.heads | where {|w| $w.0 in $aliases } | each {|w| {name: $w.0, type: "alias", category: "alias"} }
+        let nat = nu-heads $p.heads $native $aliases | each {|n| let c = $native | get $n; {name: $n, type: $c.type, category: $c.category} }
+        $al ++ $nat | uniq-by name | each {|r| $r | merge {src: $p.src, ts: $p.ts, exit: $p.exit?, ms: $p.ms?} }
+    } | flatten
+    if ($rows | is-empty) { return [] }
+    $rows | group-by name | transpose name rs | each {|g|
+        {name: $g.name, type: $g.rs.0.type, category: $g.rs.0.category, uses: ($g.rs | length)} | merge (window-cost $g.rs $cutoff)
+    } | sort-by uses --reverse
+}
+
+def nu-script-path [raw: string, cwd: any]: nothing -> any {
+    let p = if ($raw | str starts-with "/") or ($raw | str starts-with "~") { $raw | path expand } else if $cwd != null { $cwd | path join $raw | path expand } else { null }
+    if $p != null and ($p | path exists) { $p } else { null }
+}
+
+def nu-script-row [s: record, rows: list<record>, cutoff: any]: nothing -> record {
+    let n = {|src| $rows | where src == $src | length }
+    let u = shell-uses {zh: (do $n zh), zl: (do $n zl), nd: (do $n nd), nt: (do $n nt), bh: (do $n bh)}
+    $s | merge $u | insert uses ($u.zsh + $u.nu + $u.bash) | merge (window-cost $rows $cutoff)
+}
+
+# Every .nu script: dotconfig config/scripts (run by bin name), dotconfig
+# scripts/**, and any other .nu run in history (`nu x.nu`, `./x.nu`). A line
+# runs a known script when it names its path (resolved against the nu sqlite
+# cwd; absolute paths in any shell), or its bin/basename unless every such path
+# resolved to another file. The rest group by basename.
+def nu-scripts [repo: string, parsed: list<record>, cutoff: any]: nothing -> list<record> {
+    let dot = glob $"($repo)/config/scripts/*.nu" | each {|f|
+        let bin = $f | path basename | str replace -r '\.nu$' ''
+        {name: $bin, path: ($f | path expand), origin: "dotconfig-script", keys: [$bin ($f | path basename)]}
+    }
+    let known = $dot ++ (glob $"($repo)/scripts/**/*.nu" | each {|f|
+        {name: ($f | path basename), path: ($f | path expand), origin: "repo-script", keys: [($f | path basename)]}
+    })
+    let keyset = $known | get keys | flatten | uniq
+    let runs = $parsed | enumerate | each {|e|
+        let p = $e.item
+        let refs = $p.scripts | where {|s| $s | str ends-with ".nu" }
+        if ($refs | is-empty) and not ($p.tokens | any {|t| $t in $keyset }) { return null }
+        {
+            i: $e.index src: $p.src ts: $p.ts exit: $p.exit? ms: $p.ms? tokens: $p.tokens
+            refs: ($refs | each {|s| {raw: $s, base: ($s | path basename), abs: (nu-script-path $s $p.cwd?)} })
+        }
+    } | compact
+    let hits = $known | each {|k|
+        let rows = $runs | each {|r|
+            let same = $r.refs | where {|x| $x.base in $k.keys }
+            let elsewhere = ($same | is-not-empty) and ($same | all {|x| $x.abs != null and $x.abs != $k.path })
+            let named = $r.refs | any {|x| $x.abs == $k.path }
+            if not ($named or (($r.tokens | any {|t| $t in $k.keys }) and not $elsewhere)) { return null }
+            let mine = $r.refs | where {|x| $x.abs == $k.path or ($x.base in $k.keys and $x.abs == null) }
+            $r | insert as (if ($mine | is-empty) { $r.tokens | where {|t| $t in $k.keys } } else { $mine | get raw })
+            | insert res ($mine | get abs | compact)
+            | insert claimed ($mine | each {|x| $"($r.i)\t($x.raw)" })
+        } | compact
+        {k: $k, rows: $rows}
+    }
+    let claimed = $hits | each {|h| $h.rows | each {|r| $r.claimed } } | flatten | flatten
+    let known_rows = $hits | each {|h|
+        let s = {
+            name: $h.k.name path: $h.k.path origin: $h.k.origin
+            invoked_as: ($h.rows | each {|r| $r.as } | flatten | uniq)
+            resolved: ($h.rows | each {|r| $r.res } | flatten | uniq)
+        }
+        nu-script-row $s $h.rows $cutoff
+    }
+    let free = $runs | each {|r|
+        $r.refs | where {|x| $"($r.i)\t($x.raw)" not-in $claimed } | each {|x| $x | merge {i: $r.i, src: $r.src, ts: $r.ts, exit: $r.exit, ms: $r.ms} }
+    } | flatten
+    let history = if ($free | is-empty) { [] } else {
+        $free | group-by base | transpose name refs | each {|g|
+            let resolved = $g.refs | get abs | compact | uniq
+            let s = {
+                name: $g.name path: (if ($resolved | length) == 1 { $resolved.0 } else { null }) origin: "history"
+                invoked_as: ($g.refs | get raw | uniq) resolved: $resolved
+            }
+            nu-script-row $s ($g.refs | uniq-by i) $cutoff
+        }
+    }
+    $known_rows ++ $history | sort-by uses --reverse
+}
+
+# The NuReport (apps/toolbelt-dashboard, platform-dashboard read it as JSON).
+def nu-report [since: any]: nothing -> record {
+    let repo = repo-dir
+    let cutoff = if $since == null { null } else { (date now) - $since }
+    let jobs = [hist nu] | par-each --keep-order {|j| if $j == "hist" { invocations } else { nu-scope } }
+    let scope = $jobs.1
+    let native = nu-native $scope
+    let aliases = try { open ($repo | path join config shell config.toml) | get -o aliases | default {} } catch { {} }
+    let scope_aliases = $scope.aliases? | default [] | get name
+    let parsed = parse-history $jobs.0 $aliases $scope $native
+    let counts = aggregate ($parsed | each {|p| $p.tokens | each {|t| {src: $p.src, ts: $p.ts, key: $t} } } | flatten)
+    let modules = nu-modules $repo $scope
+    {
+        generated_at: (date now)
+        since: $cutoff
+        env: (nu-env $repo $scope $modules)
+        commands: (nu-commands $parsed $native $scope_aliases $cutoff)
+        modules: ($modules | each {|m|
+            let s = nu-stats $m.bins $counts
+            let u = shell-uses $s
+            $m | reject kind bins | insert uses ($u.zsh + $u.nu + $u.bash) | insert last $s.last
+        })
+        scripts: (nu-scripts $repo $parsed $cutoff)
+    }
+}
+
+# nu itself: binaries on PATH, config wiring, NU_LIB_DIRS, plugins, history;
+# nu-native commands, modules and .nu scripts with runs, failures and time.
+def "main nu" [
+    --since: duration   # cost window (runs, failures, time); omitted = all history
+    --json              # one JSON object (the dashboards' NuReport)
+] {
+    let r = nu-report $since
+    if $json { return ($r | to json) }
+    let e = $r.env
+    let window = if $r.since == null { "all history" } else { $"runs since (fmt-date $r.since)" }
+    print $"(ansi white_bold)toolbelt nu(ansi reset) (ansi dark_gray)· nu ($e.version) · cost: ($window) · (date now | format date '%Y-%m-%d %H:%M')(ansi reset)"
+
+    header "BINARIES — every nu on PATH, first wins"
+    print ($e.binaries | each {|b| {active: (if $b.active { $"(ansi green)●(ansi reset)" } else { "" }), version: ($b.version | default "?"), source: ($b.source | default "?"), path: (tilde $b.path)} } | table -i false)
+
+    header "CONFIG"
+    print ($e.config | each {|c| {
+        name: $c.name exists: $c.exists
+        managed: (if $c.managed { $"(ansi green)dotconfig(ansi reset)" } else { "" })
+        path: (tilde $c.path) target: ($c.target | default "" | tilde $in)
+    } } | table -i false)
+    print ($e.lib_dirs | each {|d| {lib_dir: (tilde $d.path), exists: $d.exists, modules: ($d.modules | str join " ")} } | table -i false)
+    if ($e.plugins | is-empty) {
+        print $"(ansi dark_gray)no plugins registered \((tilde $e.plugin_path)\)(ansi reset)"
+    } else {
+        print ($e.plugins | each {|p| {plugin: $p.name, version: $p.version, status: $p.status, commands: ($p.commands | length), file: (tilde $p.filename)} } | table -i false)
+    }
+    let h = $e.history
+    print $"   (ansi dark_gray)history (ansi reset)  ($h.format | default '?') · max ($h.max_size | default '?') · sqlite ($h.sqlite.rows) rows \(($h.sqlite.bytes | into filesize) + wal ($h.sqlite.wal_bytes | into filesize)\) (fmt-date $h.sqlite.first) → (fmt-date $h.sqlite.last) · ($h.sqlite.timed) timed · ($h.sqlite.failures) failed · txt ($h.txt.lines) lines"
+    if $e.counts != null {
+        let c = $e.counts
+        print $"   (ansi dark_gray)scope   (ansi reset)  ($c.'built-in') built-in · ($c.keyword) keyword · ($c.plugin) plugin · ($c.custom) custom · ($c.alias) alias"
+    }
+
+    header "COMMANDS — nu-native heads and nu aliases in nu history"
+    print ($r.commands | cost-view | table -i false)
+
+    header "MODULES — NU_LIB_DIRS, init scripts, config defs"
+    print ($r.modules | each {|m| {
+        name: $m.name origin: $m.origin managed: $m.managed uses: $m.uses loc: $m.loc
+        exports: ($m.exports | length) loaded_by: ($m.loaded_by | str join " ")
+        "no effect": ($m.ineffective_loads | each {|c| $"(ansi yellow)($c)(ansi reset)" } | str join " ")
+        last: (fmt-date $m.last) path: (tilde $m.path)
+    } } | table -i false)
+    if ($r.modules | any {|m| $m.ineffective_loads | is-not-empty }) {
+        print $"(ansi dark_gray)no effect = loaded inside a block \(e.g. `if … { use … }`\): nu scopes `use`/`source` to that block, so nothing reaches the shell(ansi reset)"
+    }
+
+    header "SCRIPTS — every .nu script; runs/failures/time from the zsh run log + nu sqlite"
+    print ($r.scripts | where uses > 0 | each {|s| $s
+        | select name origin uses zsh nu bash runs timed failures total_ms avg_ms last
+        | insert path ($s.path | default "" | tilde $in)
+    } | cost-view | table -i false)
+    let idle = $r.scripts | where uses == 0
+    if ($idle | is-not-empty) { print $"(ansi dark_gray)never run: ($idle | get name | str join ' ')(ansi reset)" }
+}
+
 # ── manage ───────────────────────────────────────────────────────────────────
 # `toolbelt manage`: an AI agent reviews every third-party row with something to
 # fix: bins another manager also ships (`also`, shadowed), status (missing,
@@ -1094,22 +1592,59 @@ def json-in [text: string]: nothing -> any {
     $text | str substring -g $a..$b | from json
 }
 
+# OTEL_RESOURCE_ATTRIBUTES with caller=<name> appended: Claude Code copies these keys onto
+# every metric/event it exports (~/.claude/settings.json env), so AI usage is attributable.
+def otel-caller [name: string]: nothing -> string {
+    [($env.OTEL_RESOURCE_ATTRIBUTES? | default "") $"caller=($name)"] | where $it != "" | str join ","
+}
+
+# Tokens and cost of one `claude -p --output-format json` reply. cost_usd is Claude Code's
+# estimate at API list price (cost_basis "list"): on a claude.ai plan it is not what you pay.
+def claude-usage [out: record]: nothing -> record {
+    let u = $out.usage? | default {}
+    let models = $out.modelUsage? | default {}
+    {
+        models: ($models | columns)
+        input: ($u.input_tokens? | default 0)
+        cache_read: ($u.cache_read_input_tokens? | default 0)
+        cache_write: ($u.cache_creation_input_tokens? | default 0)
+        output: ($u.output_tokens? | default 0)
+        cost_usd: ($out.total_cost_usd? | default null)
+        cost_basis: ($models | values | get -o 0.costBasis | default null)
+        duration_ms: ($out.duration_ms? | default null)
+    }
+}
+
+def kilo [n: int]: nothing -> string {
+    if $n < 1000 { $"($n)" } else { $"($n / 1000 | math round -p 1)k" }
+}
+
+def usage-line [u: record]: nothing -> string {
+    let total_in = $u.input + $u.cache_read + $u.cache_write
+    let cost = if $u.cost_usd == null { "cost n/a" } else { $"≈$($u.cost_usd | math round -p 4) at API ($u.cost_basis | default 'list') price" }
+    let secs = if $u.duration_ms == null { "" } else { $" · ($u.duration_ms / 1000 | math round -p 1)s" }
+    $"($u.models | str join ',') · (kilo $total_in) in \((kilo $u.cache_read) cache read, (kilo $u.cache_write) cache write\) · (kilo $u.output) out · ($cost)($secs)"
+}
+
+# {plan, usage}: usage is null for omp, whose -p text reply carries none.
 def ask-agent [agent: string, model: any, prompt: string]: nothing -> record {
     let m = if $model == null { [] } else { ["--model" $model] }
     match $agent {
         "claude" => {
             if not (has-cmd claude) { error make {msg: "claude CLI not found: install it or pass --agent omp"} }
             # Read-only tools stay available; StructuredOutput enforces the schema.
-            let r = $prompt | ^claude -p --no-session-persistence --output-format json --json-schema ($PLAN_SCHEMA | to json -r) --disallowedTools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch,Task" ...$m | complete
+            let r = with-env {OTEL_RESOURCE_ATTRIBUTES: (otel-caller toolbelt-manage)} {
+                $prompt | ^claude -p --no-session-persistence --output-format json --json-schema ($PLAN_SCHEMA | to json -r) --disallowedTools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch,Task" ...$m | complete
+            }
             let out = try { $r.stdout | from json } catch { error make {msg: $"claude failed \(exit ($r.exit_code)\): ($r.stderr | str trim)"} }
             if ($out.is_error? | default false) { error make {msg: $"claude: ($out.result? | default 'error'). Run `claude /login`, or pass --agent omp"} }
-            $out.structured_output? | default (json-in ($out.result? | default ""))
+            {plan: ($out.structured_output? | default (json-in ($out.result? | default ""))), usage: (claude-usage $out)}
         }
         "omp" => {
             if not (has-cmd omp) { error make {msg: "omp CLI not found: install it or pass --agent claude"} }
             let r = $prompt | ^omp -p --no-tools --no-session ...$m | complete
             if $r.exit_code != 0 { error make {msg: $"omp failed \(exit ($r.exit_code)\): ($r.stderr | str trim)"} }
-            json-in $r.stdout
+            {plan: (json-in $r.stdout), usage: null}
         }
         _ => (error make {msg: $"unknown agent '($agent)': use claude or omp"})
     }
@@ -1256,7 +1791,9 @@ def "main manage" [
     let rows = manage-candidates $d.tools | where {|r| $source == null or $r.source == $source }
     if ($rows | is-empty) { print "nothing to manage"; return }
     print -e $"(ansi dark_gray)asking ($agent) about ($rows | length) rows…(ansi reset)"
-    let reply = ask-agent $agent $model (manage-prompt $rows)
+    let answer = ask-agent $agent $model (manage-prompt $rows)
+    let reply = $answer.plan
+    let usage = $answer.usage
     let checked = $reply.actions? | default [] | each {|p| {
         source: ($p.source? | default "") name: ($p.name? | default "")
         action: ($p.action? | default "") reason: ($p.reason? | default "")
@@ -1274,10 +1811,12 @@ def "main manage" [
             agent: $agent reviewed: ($rows | length) summary: $summary
             actions: ($plan | reject row rejected)
             rejected: $rejected
+            usage: $usage
         } | to json)
     }
 
     print $"(ansi white_bold)toolbelt manage(ansi reset) (ansi dark_gray)· ($agent) · ($rows | length) rows reviewed · (date now | format date '%Y-%m-%d %H:%M')(ansi reset)"
+    if $usage != null { print $"(ansi dark_gray)usage: (usage-line $usage)(ansi reset)" }
     if $summary != "" { print $summary }
     if ($rejected | is-not-empty) {
         print $"(ansi dark_gray)ignored agent picks: ($rejected | each {|r| $'($r.action) ($r.source)/($r.name): ($r.rejected)' } | str join '; ')(ansi reset)"

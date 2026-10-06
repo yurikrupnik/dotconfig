@@ -139,7 +139,11 @@ def ask-agent [agent: string, model: any, prompt: string]: nothing -> record {
     match $agent {
         "claude" => {
             if not (has-cmd claude) { error make {msg: "claude CLI not found: install it or pass --agent omp"} }
-            let r = $prompt | ^claude -p --no-session-persistence --output-format json --json-schema ($SCHEMA | to json -r) --disallowedTools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch,Task" ...$m | complete
+            # caller=aicommit on the OTel Claude Code exports (~/.claude/settings.json env).
+            let attrs = [($env.OTEL_RESOURCE_ATTRIBUTES? | default "") "caller=aicommit"] | where $it != "" | str join ","
+            let r = with-env {OTEL_RESOURCE_ATTRIBUTES: $attrs} {
+                $prompt | ^claude -p --no-session-persistence --output-format json --json-schema ($SCHEMA | to json -r) --disallowedTools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch,Task" ...$m | complete
+            }
             let out = try { $r.stdout | from json } catch { error make {msg: $"claude failed \(exit ($r.exit_code)\): ($r.stderr | str trim)"} }
             if ($out.is_error? | default false) { error make {msg: $"claude: ($out.result? | default 'error'). Run `claude /login`, or pass --agent omp"} }
             $out.structured_output? | default (json-in ($out.result? | default ""))

@@ -40,9 +40,12 @@ just doctor                 # Verify install health (symlinks, freshness, dangli
 just outdated               # Preview what `u` would refresh
 
 toolbelt                    # Dashboard: every brew/mise/cargo/node/uv tool + alias/function/script,
-                            #   per-shell usage, value vs code you maintain, unused tools, alias gaps
+                            #   nu built-ins/modules/plugins, per-shell usage, value vs code you maintain,
+                            #   unused tools, alias gaps
 toolbelt tools -s brew      # Table view (filters: --source --status --shell; --json on every view)
 toolbelt value|gaps|shells|ui  # custom-code ROI · hand-typed repeats · shell cards · interactive browser
+toolbelt nu --since 30day   # nu panel: binaries on PATH, config wiring, NU_LIB_DIRS, plugins, history;
+                            #   nu commands/modules used, every .nu script with runs, failures, time
 toolbelt govern             # Read-only security/governance audit: shells, gcp, mcp, agents, clusters —
                             #   management clusters + the children they created (CAPI/Crossplane/vcluster/Flux/Argo)
 toolbelt govern -s clusters -c <ctx>  # one management cluster and its children; --all adds passing checks
