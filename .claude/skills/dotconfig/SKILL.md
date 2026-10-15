@@ -54,14 +54,14 @@ Never edit `output/`: generator-owned, gitignored, wiped each run.
 ## 3. Invariants (each one broke something before)
 
 - **One manager per CLI.** `just doctor` fails on undeclared brew/cargo/uv/bun installs: declare or uninstall, never ignore.
-- **Prerelease crates** need `{ version = "<major>", skip-check = true }` in liner.toml or `u` reinstalls them every run.
+- **Prerelease crates** need `{ version = "<major>", skip-check = true }` in liner.toml or `u` reinstalls them every run; they are still attempted each run, so prefer a brew formula, else add `binstall = "never"` when no prebuilt release exists.
 - **Bash = macOS stock 3.2**: no `mapfile`, `declare -A`, `${x,,}`; expand arrays as `${a[@]+"${a[@]}"}` under `set -u`. CI runs `/bin/bash -n` on every generated script.
 - **Nushell**: bare `(word)` in `$"…"` executes — escape `\(…\)`; failing externals kill the script unless `try {}` / `| complete`; `math sum` on empty input errors (`append 0`). Scripts run as files export `FILE_PWD`/`CURRENT_FILE` to children.
 - **Names**: never `up` (Upbound CLI). Names that are nu builtins (`update`, `sort`, `generate`) need `^name` in nu; aliases named like a builtin (`ls`) are zsh-only. Alias/function/script names must be unique (validate enforces).
 - **Aliases are plain commands**: `'`, `$(`, backticks, `&&`, `||`, `;`, `|` → `[functions.*]`.
 - **Env values** may reference only `$HOME` and `$DOTCONFIG_DIR`.
 - **Supply chain**: scripts don't expand aliases, so every network package step in a script/recipe calls `sfw` explicitly (`require-sfw` in the justfile). `NO_PROXY` covers loopback + `.test`. bun/pnpm keep 7-day minimum release age; cargo-binstall stays on `BINSTALL_STRATEGIES="crate-meta-data,compile"`.
-- **Failure policy**: `[functions.update]` is `on_error = "continue"` (runs all steps, lists failures, exits 1); everything else aborts on first failure. `install.sh` must stay idempotent — re-running it is the end-to-end test.
+- **Failure policy**: `[functions.update]` is `on_error = "continue"` (runs all steps, lists failures, exits 1); everything else aborts on first failure. Its `{ parallel = [...] }` entry runs independent lanes concurrently after `brew bundle` (which relinks tools lanes call); lanes get stdin /dev/null and must not share binaries, files or locks. `install.sh` must stay idempotent — re-running it is the end-to-end test.
 - **Stow**: `--no-folding`; `shells.nu stow` sweeps dangling repo links under `LINK_ROOTS`. A new link root (e.g. a new `~/.foo` dir) must be added there and to doctor's dangling scan.
 - **Portable paths**: no `/Users/<name>` in tracked files (doctor fails); derive the repo root from the script location (`path self`, `BASH_SOURCE`) with `DOTCONFIG_DIR` override.
 - **CI hygiene**: actions pinned by full SHA with `# vX` comment, tool versions pinned in `env:`, downloads sha256-verified, `permissions: contents: read`, `persist-credentials: false`.

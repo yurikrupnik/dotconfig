@@ -66,24 +66,32 @@ commands = [
     # brew bundle upgrades every outdated Brewfile entry (formulae + casks), so
     # there is no separate `brew upgrade`: it would only touch undeclared drift.
     "just -f $DOTCONFIG_DIR/justfile brew-install",
-    "brew cleanup",
-    # Self-update is its own step: `rustup update` bundles it, and its
-    # exec-the-new-binary replace step fails intermittently on macOS — which
-    # must not cost us the toolchain refresh.
-    "rustup self update",
-    "rustup update --no-self-update",
-    # rust-analyzer is a rustup component (used by nvim's rustaceanvim), not a
-    # brew package; `rustup update` alone never installs it.
-    "rustup component add rust-analyzer",
-    "just -f $DOTCONFIG_DIR/justfile cargo-install",
-    # node-install writes config/node/package.json's ranges into bun's global
-    # manifest; `bun update` (no --latest) then upgrades within those ranges.
-    "just -f $DOTCONFIG_DIR/justfile node-install",
-    "sfw bun update --global",
-    "just -f $DOTCONFIG_DIR/justfile uv-install",
-    "sfw uv tool upgrade --all",
-    "gcloud components update --quiet",
-    "just -f $DOTCONFIG_DIR/justfile regen"
+    # bundle relinks tools the lanes below call (bun, uv, jq, just,
+    # cargo-binstall), so it finishes first. The lanes share nothing else: they
+    # run concurrently, each lane's steps in order, output replayed in step order.
+    { parallel = [
+        ["brew cleanup"],
+        [
+            # Self-update is its own step: `rustup update` bundles it, and its
+            # exec-the-new-binary replace step fails intermittently on macOS —
+            # which must not cost us the toolchain refresh.
+            "rustup self update",
+            "rustup update --no-self-update",
+            # rust-analyzer is a rustup component (used by nvim's rustaceanvim),
+            # not a brew package; `rustup update` alone never installs it.
+            "rustup component add rust-analyzer",
+            "just -f $DOTCONFIG_DIR/justfile cargo-install",
+        ],
+        [
+            # node-install writes config/node/package.json's ranges into bun's global
+            # manifest; `bun update` (no --latest) then upgrades within those ranges.
+            "just -f $DOTCONFIG_DIR/justfile node-install",
+            "sfw bun update --global",
+        ],
+        ["just -f $DOTCONFIG_DIR/justfile uv-install", "sfw uv tool upgrade --all"],
+        ["gcloud components update --quiet"],
+    ] },
+    "just -f $DOTCONFIG_DIR/justfile regen",
 ]
 
 [functions.csort]

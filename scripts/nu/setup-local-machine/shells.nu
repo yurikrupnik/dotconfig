@@ -101,14 +101,19 @@ def config_errors [config: record, scripts_dir: string]: nothing -> list<string>
             $errors = $errors | append $"functions.($name): set `command` or `commands`, not both"
         } else if not ($has_command or $has_commands) {
             $errors = $errors | append $"functions.($name): needs `command` or `commands`"
-        } else if $has_commands and (($func.commands | describe) !~ '^list<string>' or ($func.commands | is-empty)) {
-            $errors = $errors | append $"functions.($name): `commands` must be a non-empty list of strings"
+        } else if $has_commands and (($func.commands | describe) !~ '^(list|table)' or ($func.commands | is-empty)) {
+            $errors = $errors | append $"functions.($name): `commands` must be a non-empty list"
         } else if $has_command and ($func.command | describe) != "string" {
             $errors = $errors | append $"functions.($name): `command` must be a string"
         }
         let on_error = $func | get -o on_error | default "abort"
         if $on_error not-in ["abort", "continue"] {
             $errors = $errors | append $"functions.($name): on_error = '($on_error)' is not supported; use \"abort\" \(the default) or \"continue\"."
+        }
+        if $has_commands and ($func.commands | describe) =~ '^(list|table)' {
+            for cmd in $func.commands {
+                $errors = $errors | append (command_entry_errors $name $cmd $on_error)
+            }
         }
         if $name in $scripts.stem {
             $errors = $errors | append $"functions.($name): same name as script config/scripts/($scripts | where stem == $name | first | get name | path basename), which would overwrite it in ~/.local/bin"
@@ -127,6 +132,26 @@ def config_errors [config: record, scripts_dir: string]: nothing -> list<string>
     $errors = $errors | append $env_errors
 
     $errors | uniq
+}
+
+# One `commands` entry: a command string, or `{ parallel = [[…], …] }` — two or
+# more lanes (non-empty command lists) run concurrently, which needs the
+# `continue` step runner to collect each lane's failures.
+def command_entry_errors [name: string, entry: any, on_error: string]: nothing -> list<string> {
+    let kind = $entry | describe
+    if $kind == "string" { return [] }
+    let shape = $"functions.($name): a `commands` entry is a string or `{ parallel = [[\"cmd\", …], [\"cmd\"]] }`"
+    if not ($kind | str starts-with "record") or ($entry | columns) != ["parallel"] {
+        return [$"($shape); got ($entry | to nuon)"]
+    }
+    let lanes = $entry.parallel
+    if ($lanes | describe) !~ '^list<list<string>>' or ($lanes | length) < 2 or ($lanes | any {|l| $l | is-empty }) {
+        return [$"($shape): `parallel` needs two or more non-empty lists of command strings"]
+    }
+    if $on_error != "continue" {
+        return [$"functions.($name): `parallel` needs on_error = \"continue\" \(lane failures are collected, not aborted on)"]
+    }
+    []
 }
 
 def assert_valid [config: record, scripts_dir: string] {
@@ -285,7 +310,8 @@ def generate_nushell [config: record, output_dir: string] {
 }
 
 # Preamble for `on_error = "continue"` scripts: a `step` runner that executes a
-# command, records it on failure, and keeps going.
+# command, records it on failure, and keeps going. Steps carry their number
+# (assigned by the generator) because parallel lanes finish out of order.
 # NOTE: a raw string may not open with `#` (`r#'#…` mis-lexes), hence the
 # leading newlines and the comment line built as a normal string.
 def step_runner [total: int]: nothing -> string {
@@ -293,25 +319,122 @@ def step_runner [total: int]: nothing -> string {
 STEP_BLUE='\033[1;34m'
 STEP_RED='\033[0;31m'
 STEP_NC='\033[0m'
-step_no=0
 failed_steps=()
 
+step_header() {
+    printf "\n${STEP_BLUE}==> [%d/%d]${STEP_NC} %s\n" "$1" "$total_steps" "$2"
+}
+
+step_result() {
+    if (($3 != 0)); then
+        printf "${STEP_RED}✗ step %d/%d failed (exit %d)${STEP_NC}: %s\n" "$1" "$total_steps" "$3" "$2" >&2
+        failed_steps+=("$2")
+    fi
+}
+
 step() {
-    step_no=$((step_no + 1))
-    printf "\n${STEP_BLUE}==> [%d/%d]${STEP_NC} %s\n" "$step_no" "$total_steps" "$1"
+    step_header "$1" "$2"
     # Capture on the || side: `fi` would reset $? to 0 before we could read it.
     local status=0
-    eval "$1" || status=$?
-    if ((status == 0)); then
-        return 0
-    fi
-    printf "${STEP_RED}✗ step %d/%d failed (exit %d)${STEP_NC}: %s\n" "$step_no" "$total_steps" "$status" "$1" >&2
-    failed_steps+=("$1")
+    eval "$2" || status=$?
+    step_result "$1" "$2" "$status"
 }
 
 '#
     let head = "# on_error = \"continue\": every command runs even if an earlier one fails.\n"
     $"($head)total_steps=($total)($body)"
+}
+
+# Appended to the step runner when a function has a `parallel` entry. Each lane
+# runs its steps in order in a background job, every step's output captured to
+# its own log (stdin is /dev/null, output is not a tty). The foreground replays
+# steps in number order: the earliest unfinished step streams live, finished
+# ones print at once, so the output reads like a sequential run.
+const LANE_RUNNER = r#'
+lane_dir=""
+lane_pids=""
+trap '[ -n "$lane_dir" ] && rm -rf "$lane_dir"' EXIT
+# Background jobs ignore SIGINT in a non-interactive shell: on Ctrl-C, TERM
+# each lane's whole process tree so nothing keeps running unseen.
+lane_kill() {
+    local pid child
+    for pid in "$@"; do
+        for child in $(pgrep -P "$pid"); do lane_kill "$child"; done
+        kill -TERM "$pid" 2>/dev/null
+    done
+}
+# shellcheck disable=SC2086  # lane_pids is a space-separated pid list
+trap 'lane_kill $lane_pids; exit 130' INT TERM
+
+lanes_start() {
+    printf "\n${STEP_BLUE}==> [%d-%d/%d]${STEP_NC} %d lanes in parallel\n" "$1" "$2" "$total_steps" "$3"
+    lane_dir=$(mktemp -d "${TMPDIR:-/tmp}/steps.XXXXXX") || exit 1
+}
+
+# lane <n> <cmd> [<n> <cmd> …]: runs in the background; the .rc file is
+# renamed into place so `replay` never reads it half-written.
+lane() {
+    local n cmd status
+    while (($# > 0)); do
+        n=$1 cmd=$2
+        shift 2
+        status=0
+        eval "$cmd" </dev/null >"$lane_dir/$n.log" 2>&1 || status=$?
+        echo "$status" >"$lane_dir/$n.rc.tmp" && mv "$lane_dir/$n.rc.tmp" "$lane_dir/$n.rc"
+    done
+}
+
+replay() {
+    local log="$lane_dir/$1.log" rc="$lane_dir/$1.rc" shown=0 size finished
+    step_header "$1" "$2"
+    while :; do
+        finished=0
+        [ -f "$rc" ] && finished=1
+        if [ -f "$log" ]; then
+            size=$(wc -c <"$log")
+            if ((size > shown)); then
+                tail -c +$((shown + 1)) "$log" | head -c $((size - shown))
+                shown=$((size))
+            fi
+        fi
+        ((finished)) && break
+        sleep 0.2
+    done
+    step_result "$1" "$2" "$(cat "$rc")"
+}
+
+lanes_end() {
+    wait
+    lane_pids=""
+    rm -rf "$lane_dir"
+    lane_dir=""
+}
+
+'#
+
+# Number `commands` entries as steps: a string is one step; a `parallel` entry
+# becomes a group whose lanes are numbered lane by lane, in declared order.
+def number_steps [commands: list]: nothing -> list<record> {
+    mut n = 0
+    mut items = []
+    for entry in $commands {
+        if ($entry | describe) == "string" {
+            $n += 1
+            $items = $items | append {n: $n, cmd: $entry, lanes: null}
+        } else {
+            mut lanes = []
+            for lane in $entry.parallel {
+                mut steps = []
+                for cmd in $lane {
+                    $n += 1
+                    $steps = $steps | append {n: $n, cmd: $cmd}
+                }
+                $lanes = $lanes | append [$steps]
+            }
+            $items = $items | append {n: null, cmd: null, lanes: $lanes}
+        }
+    }
+    $items
 }
 
 # Epilogue for `on_error = "continue"` scripts: re-report the failures so they
@@ -364,9 +487,27 @@ def generate_bin_scripts [config: record, output_dir: string] {
         $content = $content + "\n"
 
         if $on_error == "continue" {
-            $content = $content + (step_runner ($commands | length))
-            for cmd in $commands {
-                $content = $content + $"step (sh_q $cmd)\n"
+            let items = number_steps $commands
+            let steps = $items | each {|it| if $it.lanes == null { [$it] } else { $it.lanes | flatten } } | flatten
+            $content = $content + (step_runner ($steps | length))
+            if ($items | any {|it| $it.lanes != null }) {
+                $content = $content + $LANE_RUNNER
+            }
+            for it in $items {
+                if $it.lanes == null {
+                    $content = $content + $"step ($it.n) (sh_q $it.cmd)\n"
+                    continue
+                }
+                let group = $it.lanes | flatten
+                $content = $content + $"lanes_start ($group | first | get n) ($group | last | get n) ($it.lanes | length)\n"
+                for lane in $it.lanes {
+                    let args = $lane | each {|s| $"($s.n) (sh_q $s.cmd)" } | str join " "
+                    $content = $content + $"lane ($args) &\nlane_pids=\"$lane_pids $!\"\n"
+                }
+                for s in $group {
+                    $content = $content + $"replay ($s.n) (sh_q $s.cmd)\n"
+                }
+                $content = $content + "lanes_end\n"
             }
             $content = $content + $STEP_SUMMARY
         } else {

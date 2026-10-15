@@ -90,6 +90,7 @@ brew "kubescape"                         # kubescape — Kubernetes security & c
 brew "bacon"                             # bacon — background Rust code checker
 brew "cargo-binstall"                    # cargo-binstall — prebuilt-binary installer used by cargo-liner
 brew "cargo-hack"                        # cargo-hack — feature-powerset / MSRV checks across crates
+brew "trunk"                             # trunk — Rust WASM web app bundler (crates.io carries 0.22 betas; brew tracks stable)
 brew "nushell"                           # nushell — structured-data shell
 brew "tuios"                           # tuios - TODO TEST
 brew "fzf"                               # fzf — general-purpose fuzzy finder

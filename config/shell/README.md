@@ -41,7 +41,7 @@ docker system prune -af
 docker volume prune -af
 ```
 
-Allowed keys: `description`, `command` (one string) or `commands` (non-empty list), `on_error`. Anything else is rejected by `shells.nu validate`.
+Allowed keys: `description`, `command` (one string) or `commands` (non-empty list of strings; under `on_error = "continue"` an entry may also be `{ parallel = [...] }`, see below), `on_error`. Anything else is rejected by `shells.nu validate`.
 
 Commands that have a justfile recipe (`brew bundle`, `cargo liner ship`) are routed through `just -f …` to keep the source of truth single. See `config/shell/config.toml` for the full live pipeline.
 
@@ -54,7 +54,7 @@ Every shell finds it on `PATH`, regardless of which shell you're typing into.
 | `"abort"` (default) | `set -euo pipefail`, bare commands | Short sequences where a failed step makes the rest meaningless (`csort`) |
 | `"continue"` | `set -uo pipefail` + a `step` runner | Long best-effort pipelines where one flaky upstream must not skip the rest (`update`) |
 
-`"continue"` wraps every command in `step '<command>'`, which prints a `==> [n/total]`
+`"continue"` wraps every command in `step <n> '<command>'`, which prints a `==> [n/total]`
 banner, `eval`s the command, and on failure records it and moves on. At the end the
 script re-prints every failed step and exits 1:
 
@@ -69,6 +69,34 @@ script re-prints every failed step and exits 1:
 This exists because `update` is a machine refresher: before it, a transient
 `rustup self update` failure aborted the script and silently skipped the cargo,
 bun, node, uv, gcloud, and regen steps.
+
+### Parallel lanes (`parallel`)
+
+Under `on_error = "continue"`, a `commands` entry may be `{ parallel = [lane, lane, …] }`:
+two or more lanes, each a non-empty list of commands. Lanes run concurrently as
+background jobs, each lane's steps in order; the entry before it finishes first and
+the entry after it waits for every lane. `update` uses this after `brew bundle`
+(which relinks tools the lanes call) and before `regen`:
+
+```toml
+commands = [
+    "just -f $DOTCONFIG_DIR/justfile brew-install",
+    { parallel = [
+        ["brew cleanup"],
+        ["rustup update --no-self-update", "just -f $DOTCONFIG_DIR/justfile cargo-install"],
+        ["gcloud components update --quiet"],
+    ] },
+    "just -f $DOTCONFIG_DIR/justfile regen",
+]
+```
+
+Steps keep their `[n/total]` numbers. Each step's output goes to its own log and is
+replayed in step order: the earliest unfinished step streams live, finished ones
+print at once, so the output reads like a sequential run. Failures are collected
+into the same summary. Lane commands get stdin from `/dev/null` and a non-tty
+stdout, so nothing interactive (sudo, prompts) belongs in a lane. Ctrl-C kills
+every lane's process tree. Only put commands in separate lanes if they share no
+binaries, files or locks.
 
 ## When **not** to put a function here
 

@@ -8,18 +8,18 @@
 # version check takes "latest" from `cargo search` (prereleases included) and
 # ignores the requirement, while the install itself resolves the newest stable
 # match, so such crates were reinstalled at the same version on every `u`.
-# Those get a pinned line + `skip-check = true`: cargo-binstall then sees the
-# newest match is already installed and does nothing.
+# Those get a pinned line + `skip-check = true`, so cargo-liner attempts them on
+# every run; `binstall = "never"` on crates without a prebuilt release skips
+# binstall's ~3s probe and lets `cargo install` no-op on the installed match.
 
 [packages]
 # Project scaffolding & generators
 cargo-generate = "*"
 create-tauri-app = "*"
-tauri-cli = { version = "2", skip-check = true }   # 3.0.0-alpha.* on crates.io
+tauri-cli = { version = "2", skip-check = true, binstall = "never" }   # 3.0.0-alpha.* on crates.io
 
 # Build tools & task runners
 cargo-make = "*"
-trunk = { version = "0.21", skip-check = true }   # 0.22.0-beta.* on crates.io
 cargo-run-script = "*"
 cargo-watch = "*"
 cargo-component = "*"
@@ -31,7 +31,7 @@ salvo-cli = "*"
 wasm-pack = "*"
 
 # Development tools
-cargo-nextest = "*"
+cargo-nextest = { version = "*", locked = true }   # source builds refuse to compile without --locked
 du-dust = "*"
 
 # Code inspection & editing
@@ -65,7 +65,7 @@ sqlx-cli = "*"
 sea-orm-cli = "*"
 
 # Protocol buffers / codegen
-protobuf-codegen = { version = "3", skip-check = true }   # 4.x: `-release`-suffixed library versions
+protobuf-codegen = { version = "3", skip-check = true, binstall = "never" }   # 4.x: `-release`-suffixed library versions
 typeshare-cli = "*"
 
 # Cross-compilation
@@ -75,7 +75,10 @@ cross = "*"
 kopium = "*"
 
 [defaults.ship]
-# Use cargo-binstall when available (much faster than compiling from source)
-binstall = "auto"
+# Always use cargo-binstall (much faster than compiling from source). "auto"
+# only detects it via $CARGO_HOME/.crates.toml, which never lists the
+# Brewfile-installed binary, so every package was silently built from source.
+# `just cargo-install` already fails early when cargo-binstall is missing.
+binstall = "always"
 # Don't fail entire run if one package fails
 no-fail-fast = true

@@ -301,9 +301,11 @@ def script-desc [file: string]: nothing -> string {
 }
 
 # A [functions.*] table's command list: `commands` (list) or `command` (one string),
-# the two forms shells.nu accepts.
+# the two forms shells.nu accepts; a `{ parallel = [[…], …] }` entry contributes
+# every lane's commands.
 def fn-commands [f: record]: nothing -> list<string> {
-    if "commands" in $f { $f.commands } else { [($f.command? | default "")] | compact --empty }
+    let cmds = if "commands" in $f { $f.commands } else { [($f.command? | default "")] | compact --empty }
+    $cmds | each {|c| if ($c | describe) == "string" { [$c] } else { $c.parallel | flatten } } | flatten
 }
 
 def custom-items [repo: string]: nothing -> list<record> {

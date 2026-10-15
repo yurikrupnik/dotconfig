@@ -32,6 +32,8 @@ tools.txt. mise is for project-pinned runtimes only; its global config
 undeclared brew/cargo/uv/bun installs — declare or uninstall, never ignore.
 Crates that publish prerelease versions need `{ version = "<major>", skip-check = true }`
 in liner.toml (cargo-liner's check ignores the requirement), or `u` reinstalls them every run.
+skip-check crates are still attempted every run: prefer a brew formula, else add
+`binstall = "never"` when the crate has no prebuilt release (saves binstall's ~3s probe).
 
 ## Checks
 
@@ -69,6 +71,10 @@ in liner.toml (cargo-liner's check ignores the requirement), or `u` reinstalls t
   `on_error = "continue"`, so the generated script runs every step, lists the
   failures at the end, and exits 1 — a flaky upstream no longer skips the
   remaining steps. Other `[functions.*]` keep `set -e` (abort on first failure).
+  After `brew bundle`, the brew-cleanup/rust+cargo/bun/uv/gcloud steps run as a
+  `{ parallel = [...] }` entry (concurrent lanes, output replayed in step order,
+  stdin /dev/null); bundle stays first because it relinks bun/uv/jq/just/
+  cargo-binstall. A lane step must not share binaries, files or locks with another lane.
 - `upkg` — update *project* deps in $PWD (cargo/node/uv, workspace-aware,
   OSV scans, cooldown; `--fast`/`--paranoid`); source: `config/scripts/upkg.nu`
 - `toolbelt` — read-only dashboard of every tool dotconfig installs (brew, cask,
